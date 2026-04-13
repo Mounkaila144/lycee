@@ -1,0 +1,63 @@
+*.log
+.DS_Store
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.fleet
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/storage/app/*
+!/storage/app/.gitignore
+/storage/framework/cache/*
+!/storage/framework/cache/.gitignore
+!/storage/framework/cache/data
+/storage/framework/cache/data/*
+!/storage/framework/cache/data/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/logs/*
+!/storage/logs/.gitignore
+/vendor
+/bootstrap/cache/*.tmp
+Homestead.json
+Homestead.yaml
+Thumbs.db
+/imob-storage-backup-2025-12-29.tar.gz
+/hydrolink-storage-backup-2025-12-29.tar.gz
+/htacess.softis dist.htaccess
+/ecole-uploads-backup-2025-12-29.tar.gz
+/csf-storage-backup-2025-12-29.tar.gz
+/backup-config-20251229.tar.gz
+/Ayki-uploads-backup-2025-12-29.tar.gz
+/backup-config-20251229/
+
+# Backup files
+*.tar.gz
+
+# Debug/temporary scripts
+check-evaluation-data.php
+check-tenants.php
+debug-teachers.php
+test-migrations.php
+test-minimal.php
+
+# Temporary files
+nul
+tenant_test-tenant
+
+# Corrupted filename
+C*laragonwwwcrm-api*

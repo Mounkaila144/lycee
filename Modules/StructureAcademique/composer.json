@@ -1,0 +1,26 @@
+{
+    "name": "modules/structure-academique",
+    "description": "Module de gestion de la structure académique",
+    "authors": [
+        {
+            "name": "CRM Academic Team",
+            "email": "dev@crm-academic.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\StructureAcademique\\": ""
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\StructureAcademique\\Tests\\": "tests/"
+        }
+    }
+}

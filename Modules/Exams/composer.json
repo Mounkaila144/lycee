@@ -1,0 +1,20 @@
+{
+    "name": "nwidart/exams",
+    "description": "",
+    "authors": [],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Exams\\": "",
+            "Modules\\Exams\\Database\\Factories\\": "Database/Factories/",
+            "Modules\\Exams\\Database\\Seeders\\": "Database/Seeders/"
+        }
+    },
+    "require-dev": {},
+    "require": {}
+}

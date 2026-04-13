@@ -1,0 +1,11 @@
+{
+    "name": "nwidart/attendance",
+    "description": "Attendance Management Module",
+    "autoload": {
+        "psr-4": {
+            "Modules\\Attendance\\": "",
+            "Modules\\Attendance\\Database\\Factories\\": "Database/Factories/",
+            "Modules\\Attendance\\Database\\Seeders\\": "Database/Seeders/"
+        }
+    }
+}

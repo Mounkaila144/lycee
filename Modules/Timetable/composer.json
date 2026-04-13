@@ -1,0 +1,26 @@
+{
+    "name": "modules/timetable",
+    "description": "Module de gestion des emplois du temps",
+    "authors": [
+        {
+            "name": "CRM Academic Team",
+            "email": "dev@crm-academic.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Timetable\\": ""
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Timetable\\Tests\\": "tests/"
+        }
+    }
+}

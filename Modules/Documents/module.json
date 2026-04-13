@@ -1,0 +1,11 @@
+{
+    "name": "Documents",
+    "alias": "documents",
+    "description": "Official documents generation and management module",
+    "keywords": ["documents", "transcripts", "diplomas", "certificates"],
+    "priority": 0,
+    "providers": [
+        "Modules\\Documents\\Providers\\DocumentsServiceProvider"
+    ],
+    "files": []
+}

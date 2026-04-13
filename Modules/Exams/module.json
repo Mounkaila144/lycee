@@ -1,0 +1,12 @@
+{
+    "name": "Exams",
+    "alias": "exams",
+    "description": "Exam management module",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Exams\\Providers\\ExamsServiceProvider",
+        "Modules\\Exams\\Providers\\RouteServiceProvider"
+    ],
+    "files": []
+}

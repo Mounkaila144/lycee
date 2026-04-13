@@ -1,0 +1,11 @@
+{
+    "name": "Timetable",
+    "alias": "timetable",
+    "description": "Module de gestion des emplois du temps (planification, salles, créneaux)",
+    "keywords": ["timetable", "schedule", "rooms", "planning"],
+    "priority": 0,
+    "providers": [
+        "Modules\\Timetable\\Providers\\TimetableServiceProvider"
+    ],
+    "files": []
+}

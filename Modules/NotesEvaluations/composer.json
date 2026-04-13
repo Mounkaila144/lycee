@@ -1,0 +1,26 @@
+{
+    "name": "modules/notes-evaluations",
+    "description": "Module de gestion des notes et évaluations",
+    "authors": [
+        {
+            "name": "CRM Academic Team",
+            "email": "dev@crm-academic.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\NotesEvaluations\\": ""
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\NotesEvaluations\\Tests\\": "tests/"
+        }
+    }
+}

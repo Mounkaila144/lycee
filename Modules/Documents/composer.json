@@ -1,0 +1,11 @@
+{
+    "name": "nwidart/documents",
+    "description": "Official Documents Management Module",
+    "autoload": {
+        "psr-4": {
+            "Modules\\Documents\\": "",
+            "Modules\\Documents\\Database\\Factories\\": "Database/Factories/",
+            "Modules\\Documents\\Database\\Seeders\\": "Database/Seeders/"
+        }
+    }
+}

@@ -1,0 +1,26 @@
+{
+    "name": "modules/enrollment",
+    "description": "Module de gestion des inscriptions étudiants",
+    "authors": [
+        {
+            "name": "CRM Academic Team",
+            "email": "dev@crm-academic.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Enrollment\\": ""
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Enrollment\\Tests\\": "tests/"
+        }
+    }
+}

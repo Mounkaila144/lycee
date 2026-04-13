@@ -1,0 +1,17 @@
+{
+    "name": "Payroll",
+    "alias": "payroll",
+    "description": "Module de gestion de la paie du personnel",
+    "keywords": [
+        "payroll",
+        "paie",
+        "personnel",
+        "salaires",
+        "contrats"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\Payroll\\Providers\\PayrollServiceProvider"
+    ],
+    "files": []
+}

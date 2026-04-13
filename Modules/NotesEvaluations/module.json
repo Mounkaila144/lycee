@@ -1,0 +1,11 @@
+{
+    "name": "NotesEvaluations",
+    "alias": "notesevaluations",
+    "description": "Module de gestion des notes et évaluations",
+    "keywords": ["notes", "grades", "evaluations"],
+    "priority": 0,
+    "providers": [
+        "Modules\\NotesEvaluations\\Providers\\NotesEvaluationsServiceProvider"
+    ],
+    "files": []
+}

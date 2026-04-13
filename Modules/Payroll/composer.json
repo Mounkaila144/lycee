@@ -1,0 +1,26 @@
+{
+    "name": "modules/payroll",
+    "description": "Module de gestion de la paie du personnel",
+    "authors": [
+        {
+            "name": "CRM Academic Team",
+            "email": "dev@crm-academic.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Payroll\\": ""
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Payroll\\Tests\\": "tests/"
+        }
+    }
+}

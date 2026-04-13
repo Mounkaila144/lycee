@@ -1,0 +1,11 @@
+{
+    "name": "StructureAcademique",
+    "alias": "structureacademique",
+    "description": "Module de gestion de la structure académique pour le secondaire (années scolaires, semestres, cycles, niveaux, séries, classes, matières, coefficients)",
+    "keywords": ["academic", "structure", "years", "semesters", "classes", "subjects"],
+    "priority": 0,
+    "providers": [
+        "Modules\\StructureAcademique\\Providers\\StructureAcademiqueServiceProvider"
+    ],
+    "files": []
+}

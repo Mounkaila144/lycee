@@ -1,0 +1,13 @@
+{
+    "UsersGuard": true,
+    "Cms": true,
+    "StructureAcademique": true,
+    "Enrollment": true,
+    "NotesEvaluations": true,
+    "Timetable": true,
+    "Attendance": true,
+    "Exams": true,
+    "Finance": true,
+    "Payroll": true,
+    "Documents": true
+}

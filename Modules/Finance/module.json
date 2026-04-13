@@ -1,0 +1,18 @@
+{
+    "name": "Finance",
+    "alias": "finance",
+    "description": "Module de gestion de la comptabilité étudiants (facturation, encaissement, recouvrement, rapports)",
+    "keywords": [
+        "finance",
+        "billing",
+        "invoicing",
+        "payments",
+        "collections",
+        "treasury"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\Finance\\Providers\\FinanceServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,15 @@
+{
+    "name": "Enrollment",
+    "alias": "enrollment",
+    "description": "Module de gestion des inscriptions étudiants",
+    "keywords": [
+        "enrollment",
+        "students",
+        "inscriptions"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\Enrollment\\Providers\\EnrollmentServiceProvider"
+    ],
+    "files": []
+}

@@ -1,0 +1,20 @@
+{
+    "name": "modules/usersguard",
+    "description": "Multi-tenant User Management Module",
+    "keywords": [],
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Modules\\UsersGuard\\": "",
+            "Modules\\UsersGuard\\Database\\Factories\\": "Database/Factories/",
+            "Modules\\UsersGuard\\Database\\Seeders\\": "Database/Seeders/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\UsersGuard\\Providers\\UsersGuardServiceProvider"
+            ]
+        }
+    }
+}
