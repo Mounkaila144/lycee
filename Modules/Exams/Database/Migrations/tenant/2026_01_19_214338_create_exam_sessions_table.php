@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::connection('tenant')->create('exam_sessions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('module_id')->constrained('modules')->cascadeOnDelete();
-            $table->foreignId('evaluation_period_id')->constrained('evaluation_periods')->cascadeOnDelete();
+            $table->foreignId('evaluation_period_id')->nullable()->constrained('academic_periods')->cascadeOnDelete();
             $table->foreignId('academic_year_id')->constrained('academic_years')->cascadeOnDelete();
             $table->string('title');
             $table->text('description')->nullable();

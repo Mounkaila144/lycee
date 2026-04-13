@@ -81,13 +81,6 @@ return [
         '--force' => true,
         '--path' => collect(glob(base_path('Modules/*/Database/Migrations/tenant')))
             ->filter(fn ($path) => is_dir($path))
-            ->reject(fn ($path) => str_contains($path, 'Enrollment')
-                || str_contains($path, 'NotesEvaluations')
-                || str_contains($path, 'Timetable')
-                || str_contains($path, 'Exams')
-                || str_contains($path, 'Documents')
-                || str_contains($path, 'Attendance')
-            )
             ->values()
             ->toArray(),
         '--realpath' => true,

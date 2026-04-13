@@ -11,6 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::connection('tenant')->hasTable('absence_justifications')) {
+            return;
+        }
         Schema::connection('tenant')->create('absence_justifications', function (Blueprint $table) {
             $table->id();
             $table->foreignId('student_id')->constrained('users');

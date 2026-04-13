@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('exam_session_id')->constrained('exam_sessions')->cascadeOnDelete();
             $table->foreignId('exam_room_assignment_id')->nullable()->constrained('exam_room_assignments')->cascadeOnDelete();
-            $table->foreignId('teacher_id')->constrained('teachers')->cascadeOnDelete();
+            $table->foreignId('teacher_id')->constrained('users')->cascadeOnDelete();
             $table->enum('role', ['principal', 'assistant', 'reserve'])->default('principal');
             $table->time('actual_start_time')->nullable();
             $table->time('actual_end_time')->nullable();

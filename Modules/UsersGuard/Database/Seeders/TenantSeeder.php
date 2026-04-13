@@ -14,21 +14,9 @@ class TenantSeeder extends Seeder
     {
         $tenants = [
             [
-                'id' => 'company1',
+                'id' => 'lycee1',
                 'domains' => [
-                    ['domain' => 'tenant1.local'],
-                ],
-            ],
-            [
-                'id' => 'company2',
-                'domains' => [
-                    ['domain' => 'tenant2.local'],
-                ],
-            ],
-            [
-                'id' => 'demo',
-                'domains' => [
-                    ['domain' => 'demo.localhost'],
+                    ['domain' => 'jandoosecondaire.ptrniger.com'],
                 ],
             ],
         ];
