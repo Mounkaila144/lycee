@@ -34,7 +34,12 @@ Route::prefix('admin')
         // Semestres
         Route::prefix('semesters')->name('semesters.')->group(function () {
             Route::get('/current', [SemesterController::class, 'current'])->name('current');
+            Route::get('/', [SemesterController::class, 'index'])->name('index');
+            Route::post('/', [SemesterController::class, 'store'])->name('store');
+            Route::get('/{semester}', [SemesterController::class, 'show'])->name('show');
             Route::put('/{semester}', [SemesterController::class, 'update'])->name('update');
+            Route::delete('/{semester}', [SemesterController::class, 'destroy'])->name('destroy');
+            Route::post('/{semester}/close', [SemesterController::class, 'close'])->name('close');
         });
 
         // Cycles (pas de store/destroy - seeder uniquement)

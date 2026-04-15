@@ -22,6 +22,9 @@ class UpdateClasseRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'level_id' => ['sometimes', 'integer', Rule::exists('tenant.levels', 'id')],
+            'series_id' => ['sometimes', 'nullable', 'integer', Rule::exists('tenant.series', 'id')],
+            'academic_year_id' => ['sometimes', 'integer', Rule::exists('tenant.academic_years', 'id')],
             'section' => ['nullable', 'string', 'max:10'],
             'max_capacity' => ['sometimes', 'integer', 'min:1', 'max:200'],
             'classroom' => ['nullable', 'string', 'max:255'],

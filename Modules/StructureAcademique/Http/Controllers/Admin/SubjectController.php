@@ -103,28 +103,6 @@ class SubjectController extends Controller
             }
         }
 
-        if (\Schema::connection('tenant')->hasTable('grades')) {
-            $hasGrades = \DB::connection('tenant')
-                ->table('grades')
-                ->where('subject_id', $subject->id)
-                ->exists();
-
-            if ($hasGrades) {
-                return true;
-            }
-        }
-
-        if (\Schema::connection('tenant')->hasTable('teacher_subject_assignments')) {
-            $hasAssignments = \DB::connection('tenant')
-                ->table('teacher_subject_assignments')
-                ->where('subject_id', $subject->id)
-                ->exists();
-
-            if ($hasAssignments) {
-                return true;
-            }
-        }
-
         return false;
     }
 }
