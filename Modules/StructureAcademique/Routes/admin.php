@@ -9,6 +9,8 @@ use Modules\StructureAcademique\Http\Controllers\Admin\ClasseController;
 use Modules\StructureAcademique\Http\Controllers\Admin\SeriesController;
 use Modules\StructureAcademique\Http\Controllers\Admin\SubjectClassCoefficientController;
 use Modules\StructureAcademique\Http\Controllers\Admin\SubjectController;
+use Modules\StructureAcademique\Http\Controllers\Admin\AcademicPeriodController;
+use Modules\StructureAcademique\Http\Controllers\Admin\EvaluationPeriodController;
 
 /*
 |--------------------------------------------------------------------------
@@ -40,6 +42,22 @@ Route::prefix('admin')
             Route::put('/{semester}', [SemesterController::class, 'update'])->name('update');
             Route::delete('/{semester}', [SemesterController::class, 'destroy'])->name('destroy');
             Route::post('/{semester}/close', [SemesterController::class, 'close'])->name('close');
+
+            // Périodes d'évaluation par semestre
+            Route::prefix('{semester}/evaluation-periods')->name('evaluation-periods.')->group(function () {
+                Route::get('/', [EvaluationPeriodController::class, 'index'])->name('index');
+                Route::post('/', [EvaluationPeriodController::class, 'store'])->name('store');
+                Route::put('/{evaluationPeriod}', [EvaluationPeriodController::class, 'update'])->name('update');
+                Route::delete('/{evaluationPeriod}', [EvaluationPeriodController::class, 'destroy'])->name('destroy');
+            });
+        });
+
+        // Périodes académiques
+        Route::prefix('academic-periods')->name('academic-periods.')->group(function () {
+            Route::get('/', [AcademicPeriodController::class, 'index'])->name('index');
+            Route::post('/', [AcademicPeriodController::class, 'store'])->name('store');
+            Route::put('/{academicPeriod}', [AcademicPeriodController::class, 'update'])->name('update');
+            Route::delete('/{academicPeriod}', [AcademicPeriodController::class, 'destroy'])->name('destroy');
         });
 
         // Cycles (pas de store/destroy - seeder uniquement)

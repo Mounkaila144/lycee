@@ -88,7 +88,18 @@ class ClasseController extends Controller
     public function update(UpdateClasseRequest $request, int $classe): JsonResponse
     {
         $classe = Classe::on('tenant')->findOrFail($classe);
-        $classe->update($request->validated());
+
+        try {
+            $classe->update($request->validated());
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->errorInfo[1] == 1062) {
+                return response()->json([
+                    'message' => 'Une classe avec ce nom existe déjà pour cette année scolaire.',
+                    'errors' => ['name' => ['Doublon détecté.']],
+                ], 422);
+            }
+            throw $e;
+        }
 
         return response()->json([
             'message' => 'Classe modifiée avec succès.',
