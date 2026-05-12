@@ -1,0 +1,12 @@
+{
+    "name": "modules/settings",
+    "description": "Configuration de l'établissement (Story Admin 13)",
+    "authors": [{"name": "CRM Academic Team", "email": "dev@crm-academic.local"}],
+    "extra": {"laravel": {"providers": [], "aliases": {}}},
+    "autoload": {
+        "psr-4": {"Modules\\Settings\\": ""}
+    },
+    "autoload-dev": {
+        "psr-4": {"Modules\\Settings\\Tests\\": "tests/"}
+    }
+}

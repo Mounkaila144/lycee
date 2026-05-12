@@ -10,5 +10,7 @@
     "Finance": true,
     "Payroll": true,
     "Documents": true,
-    "PortailParent": true
+    "PortailParent": true,
+    "Settings": true,
+    "Messaging": true
 }

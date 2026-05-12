@@ -3,7 +3,7 @@
 **Module** : Finance
 **Rôle ciblé** : Comptable
 **Menu(s) concerné(s)** : `/admin/finance/payments/reconciliation`
-**Status** : Approved
+**Status** : Ready for Review
 
 ## User Story
 

@@ -143,6 +143,22 @@ trait InteractsWithTenancy
             '--force' => true,
         ]);
 
+        // STEP 9: Settings TENANT table (Story Admin 13)
+        Artisan::call('migrate', [
+            '--database' => 'mysql',
+            '--path' => $basePath.'/Modules/Settings/Database/Migrations/tenant',
+            '--realpath' => true,
+            '--force' => true,
+        ]);
+
+        // STEP 10: Messaging TENANT table (Story Parent 07)
+        Artisan::call('migrate', [
+            '--database' => 'mysql',
+            '--path' => $basePath.'/Modules/Messaging/Database/Migrations/tenant',
+            '--realpath' => true,
+            '--force' => true,
+        ]);
+
         self::$migrationsRan = true;
     }
 

@@ -3,7 +3,7 @@
 **Module** : PortailParent + Finance + Gateway (CinetPay recommandé)
 **Rôle ciblé** : Parent
 **Menu(s) concerné(s)** : `/admin/parent/children/{id}/invoices/{invoice}/pay`
-**Status** : Approved
+**Status** : Ready for Review
 
 > ⚠️ **DÉCISION PRODUIT REQUISE** avant impl : choix gateway (option A CinetPay Mobile Money / B Stripe / C génération bon hors ligne) — cf. [`parent/README.md#6`](./README.md). Story rédigée en supposant **option A CinetPay**.
 

@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\PortailParent\Http\Controllers\Admin\ChildDataController;
 use Modules\PortailParent\Http\Controllers\Admin\ParentChildrenController;
+use Modules\PortailParent\Http\Controllers\Admin\ParentPaymentController;
 
 /*
  * Routes Portail Parent (admin namespace).
@@ -48,4 +49,10 @@ Route::prefix('admin/parent')
         // Story Parent 08 — Annonces générales (pas d'ownership enfant-spécifique)
         Route::get('/announcements', [ChildDataController::class, 'announcements'])
             ->name('admin.parent.announcements');
+
+        // Story Parent 06 — Paiement en ligne (CinetPay, V2 scaffold)
+        Route::post('/children/{student}/invoices/{invoiceId}/pay', [ParentPaymentController::class, 'initiate'])
+            ->name('admin.parent.children.invoices.pay');
+        Route::get('/payments/{paymentId}/status', [ParentPaymentController::class, 'status'])
+            ->name('admin.parent.payments.status');
     });

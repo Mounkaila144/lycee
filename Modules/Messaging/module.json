@@ -1,0 +1,11 @@
+{
+    "name": "Messaging",
+    "alias": "messaging",
+    "description": "Messagerie interne Parent ↔ Enseignants (Story Parent 07)",
+    "keywords": ["messaging", "communication"],
+    "priority": 0,
+    "providers": [
+        "Modules\\Messaging\\Providers\\MessagingServiceProvider"
+    ],
+    "files": []
+}

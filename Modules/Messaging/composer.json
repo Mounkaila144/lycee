@@ -1,0 +1,12 @@
+{
+    "name": "modules/messaging",
+    "description": "Messagerie interne (Story Parent 07)",
+    "authors": [{"name": "CRM Academic Team", "email": "dev@crm-academic.local"}],
+    "extra": {"laravel": {"providers": [], "aliases": {}}},
+    "autoload": {
+        "psr-4": {"Modules\\Messaging\\": ""}
+    },
+    "autoload-dev": {
+        "psr-4": {"Modules\\Messaging\\Tests\\": "tests/"}
+    }
+}

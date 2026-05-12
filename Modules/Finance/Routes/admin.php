@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Finance\Http\Controllers\Admin\BankReconciliationController;
 use Modules\Finance\Http\Controllers\Admin\CashierCloseController;
 use Modules\Finance\Http\Controllers\Admin\CollectionController;
 use Modules\Finance\Http\Controllers\Admin\FinanceReportController;
@@ -126,6 +127,20 @@ Route::prefix('admin/finance')
             Route::post('/', [CashierCloseController::class, 'store'])
                 ->name('admin.finance.cashier-close.store');
         });
+
+        // Story Comptable 03 — Rapprochement bancaire (Administrator + Comptable seulement)
+        Route::prefix('bank-reconciliation')
+            ->middleware('role:Administrator|Comptable,tenant')
+            ->group(function () {
+                Route::get('/accounts', [BankReconciliationController::class, 'listAccounts'])
+                    ->name('admin.finance.bank.accounts');
+                Route::post('/accounts', [BankReconciliationController::class, 'createAccount'])
+                    ->name('admin.finance.bank.create-account');
+                Route::get('/transactions', [BankReconciliationController::class, 'listTransactions'])
+                    ->name('admin.finance.bank.transactions');
+                Route::get('/periods', [BankReconciliationController::class, 'listPeriods'])
+                    ->name('admin.finance.bank.periods');
+            });
 
         // Discounts/Scholarships (Story 06) — Caissier EXCLU (Story Caissier 04 actions interdites)
         // Création/approval réservé Admin/Comptable/Agent Comptable.

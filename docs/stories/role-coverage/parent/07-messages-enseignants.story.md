@@ -3,7 +3,7 @@
 **Module** : Messaging (À CRÉER) — ou dégradation push unidirectionnelle
 **Rôle ciblé** : Parent
 **Menu(s) concerné(s)** : `/admin/parent/messages`
-**Status** : Approved
+**Status** : Ready for Review
 
 > ⚠️ **DÉCISION PRODUIT** : aucun module `Modules/Messaging/` n'existe (vérifié `grep -r "messag" Modules/`). Deux options :
 > - **A. Mini-module Messaging** : conversations 1↔1 Parent ↔ Prof, thread persistant, lecture/non-lu, pièces jointes.

@@ -3,7 +3,7 @@
 **Module** : (transverse — Settings central)
 **Rôle ciblé** : Administrator
 **Menu(s) concerné(s)** : `/admin/settings/*`
-**Status** : Approved
+**Status** : Ready for Review
 
 > ⚠️ **À CRÉER** : aucun endpoint Settings centralisé identifié dans `Modules/*/Routes/*.php`. Cette story propose la création d'un module `Modules/Settings/` ou l'extension de `Modules/UsersGuard/` pour centraliser les paramètres tenant.
 
