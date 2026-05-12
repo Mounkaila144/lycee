@@ -159,6 +159,15 @@ trait InteractsWithTenancy
             '--force' => true,
         ]);
 
+        // STEP 11: Re-run Finance migrations to pick up parent_online_payments
+        // (idempotent — migrations déjà passées sont skip).
+        Artisan::call('migrate', [
+            '--database' => 'mysql',
+            '--path' => $basePath.'/Modules/Finance/Database/Migrations/tenant',
+            '--realpath' => true,
+            '--force' => true,
+        ]);
+
         self::$migrationsRan = true;
     }
 

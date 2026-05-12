@@ -7,6 +7,18 @@ use Modules\Finance\Http\Controllers\Admin\CollectionController;
 use Modules\Finance\Http\Controllers\Admin\FinanceReportController;
 use Modules\Finance\Http\Controllers\Admin\InvoiceController;
 use Modules\Finance\Http\Controllers\Admin\PaymentController;
+use Modules\Finance\Http\Controllers\CinetPayWebhookController;
+
+/*
+ * Story Parent 06 — Webhook public CinetPay.
+ *
+ * Route NON authentifiée, hors du groupe tenant : CinetPay POST directement.
+ * La sécurité est assurée par la vérification HMAC dans le controller.
+ * Throttle pour protéger contre les flood.
+ */
+Route::post('/webhooks/cinetpay', CinetPayWebhookController::class)
+    ->middleware(['throttle:120,1'])
+    ->name('webhooks.cinetpay');
 
 /*
 |--------------------------------------------------------------------------

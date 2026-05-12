@@ -8,60 +8,83 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Gate;
 use Modules\Enrollment\Entities\Student;
+use Modules\Finance\Entities\ParentOnlinePayment;
+use Modules\Finance\Services\CinetPayService;
 
 /**
  * Story Parent 06 — Paiement en ligne d'une facture enfant (CinetPay).
  *
- * Scaffold V2 : la gateway CinetPay (init transaction, webhooks, idempotence)
- * sera implémentée dans un Service dédié `CinetPayService`. Ce contrôleur
- * pose la signature des 2 endpoints prévus par la story + ChildPolicy::payInvoices.
+ * Endpoints :
+ *   - POST /api/admin/parent/children/{student}/invoices/{invoice}/pay
+ *           → initie une transaction CinetPay + renvoie le payment_url
+ *   - GET  /api/admin/parent/payments/{paymentId}/status
+ *           → retourne le statut d'un paiement initié par le parent connecté
+ *
+ * Ownership : ChildPolicy::payInvoices vérifie `is_financial_responsible`.
  */
 class ParentPaymentController extends Controller
 {
-    /**
-     * Initie un paiement en ligne pour une facture de l'enfant.
-     *
-     * Returns 200 + payment_id + redirect_url (vers CinetPay).
-     */
+    public function __construct(private CinetPayService $cinetPay) {}
+
     public function initiate(Request $request, Student $student, int $invoiceId): JsonResponse
     {
         $this->ensurePolicy($request, 'payInvoices', $student);
 
         $validated = $request->validate([
             'method' => ['required', 'in:mobile_money,card'],
+            'amount' => ['required', 'numeric', 'min:100'],
             'phone' => ['nullable', 'string', 'max:30'],
-            'return_url' => ['nullable', 'url'],
         ]);
 
-        // V2 : appel CinetPayService::initTransaction()
+        $payment = $this->cinetPay->init(
+            parent: $request->user(),
+            student: $student,
+            invoiceId: $invoiceId,
+            amount: (float) $validated['amount'],
+            method: $validated['method'],
+            phone: $validated['phone'] ?? null,
+        );
+
         return response()->json([
             'data' => [
-                'payment_id' => null,
-                'invoice_id' => $invoiceId,
-                'student_id' => $student->id,
-                'redirect_url' => null,
-                'status' => 'pending',
-                'method' => $validated['method'],
+                'payment_id' => $payment->id,
+                'transaction_id' => $payment->transaction_id,
+                'invoice_id' => $payment->invoice_id,
+                'student_id' => $payment->student_id,
+                'amount' => $payment->amount,
+                'currency' => $payment->currency,
+                'method' => $payment->method,
+                'status' => $payment->status,
+                'payment_url' => $payment->payment_url,
             ],
-            'meta' => [
-                'note' => 'Scaffold V2 — intégration CinetPay (init + webhooks + idempotence) à implémenter dans Modules/Finance/Services/CinetPayService.',
-            ],
-        ]);
+        ], 201);
     }
 
     /**
-     * Vérifie le statut d'un paiement initié par le Parent.
+     * Statut d'un paiement — filtre owner (parent_user_id === auth()->user()->id).
      */
     public function status(Request $request, int $paymentId): JsonResponse
     {
-        // V2 : vérifier que payment.parent_user_id === auth()->user()->id
+        $payment = ParentOnlinePayment::where('id', $paymentId)
+            ->where('parent_user_id', $request->user()->id)
+            ->first();
+
+        if (! $payment) {
+            return response()->json([
+                'message' => 'Paiement introuvable.',
+                'code' => 'PAYMENT_NOT_FOUND',
+            ], 404);
+        }
+
         return response()->json([
             'data' => [
-                'payment_id' => $paymentId,
-                'status' => 'unknown',
-            ],
-            'meta' => [
-                'note' => 'Scaffold V2 — récupération status via CinetPayService::checkTransaction().',
+                'payment_id' => $payment->id,
+                'transaction_id' => $payment->transaction_id,
+                'status' => $payment->status,
+                'amount' => $payment->amount,
+                'currency' => $payment->currency,
+                'cinetpay_transaction_id' => $payment->cinetpay_transaction_id,
+                'notified_at' => $payment->notified_at?->toIso8601String(),
             ],
         ]);
     }
