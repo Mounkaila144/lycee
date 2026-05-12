@@ -82,3 +82,4 @@ En tant qu'**Étudiant**, je veux pouvoir demander un transfert vers un autre pr
 | Date | Version | Description | Auteur |
 |---|---|---|---|
 | 2026-05-12 | 1.0 | Création initiale | SM Agent (Claude Opus 4.7) |
+| 2026-05-12 | 1.1 | **Story hors scope V1** — décision PO §A.4 : concepts LMD (transferts, équivalences, options) exclus du secondaire. Reportée V2 si université secondaire ajoutée. | Dev Agent (James) |

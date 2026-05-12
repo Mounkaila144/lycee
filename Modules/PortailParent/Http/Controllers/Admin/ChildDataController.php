@@ -71,6 +71,57 @@ class ChildDataController extends Controller
     }
 
     /**
+     * Story Parent 04 — Emploi du temps de l'enfant.
+     */
+    public function timetable(Request $request, Student $student): JsonResponse
+    {
+        $this->ensure($request, 'viewTimetable', $student);
+
+        return response()->json([
+            'data' => [],
+            'meta' => [
+                'student_id' => $student->id,
+                'note' => 'Scaffold — agrégation timetable à câbler avec Timetable.',
+            ],
+        ]);
+    }
+
+    /**
+     * Story Parent 09 — Documents disponibles de l'enfant.
+     */
+    public function documents(Request $request, Student $student): JsonResponse
+    {
+        $this->ensure($request, 'viewDocuments', $student);
+
+        return response()->json([
+            'data' => [],
+            'meta' => [
+                'student_id' => $student->id,
+                'note' => 'Scaffold — agrégation documents à câbler avec Documents (bulletins, attestations, certificats).',
+            ],
+        ]);
+    }
+
+    /**
+     * Story Parent 08 — Annonces générales de l'école (non liées à un enfant spécifique).
+     *
+     * Permission requise : `view announcements` (sans ChildPolicy car non-ownership).
+     */
+    public function announcements(Request $request): JsonResponse
+    {
+        if (! $request->user()->hasPermissionTo('view announcements')) {
+            throw new AuthorizationException('This action is unauthorized.');
+        }
+
+        return response()->json([
+            'data' => [],
+            'meta' => [
+                'note' => 'Scaffold — annonces générales à câbler avec un module Communication (V2).',
+            ],
+        ]);
+    }
+
+    /**
      * Vérifie l'ownership via Gate::forUser() (TenantSanctumAuth ne pose pas Auth::user()).
      */
     private function ensure(Request $request, string $ability, Student $student): void

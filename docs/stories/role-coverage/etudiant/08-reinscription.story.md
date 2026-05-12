@@ -3,7 +3,7 @@
 **Module** : Enrollment (frontend)
 **Rôle ciblé** : Étudiant
 **Menu(s) concerné(s)** : `/admin/student/reenrollment`
-**Status** : Approved
+**Status** : Ready for Review
 
 ## User Story
 

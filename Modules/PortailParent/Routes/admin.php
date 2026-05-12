@@ -36,4 +36,16 @@ Route::prefix('admin/parent')
         // Story Parent 05 — Factures de l'enfant
         Route::get('/children/{student}/invoices', [ChildDataController::class, 'invoices'])
             ->name('admin.parent.children.invoices');
+
+        // Story Parent 04 — Emploi du temps de l'enfant
+        Route::get('/children/{student}/timetable', [ChildDataController::class, 'timetable'])
+            ->name('admin.parent.children.timetable');
+
+        // Story Parent 09 — Documents de l'enfant
+        Route::get('/children/{student}/documents', [ChildDataController::class, 'documents'])
+            ->name('admin.parent.children.documents');
+
+        // Story Parent 08 — Annonces générales (pas d'ownership enfant-spécifique)
+        Route::get('/announcements', [ChildDataController::class, 'announcements'])
+            ->name('admin.parent.announcements');
     });

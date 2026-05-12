@@ -87,3 +87,4 @@ En tant que **Parent**, je veux échanger des messages avec les enseignants de c
 | Date | Version | Description | Auteur |
 |---|---|---|---|
 | 2026-05-12 | 1.0 | Création initiale | SM Agent (Claude Opus 4.7) |
+| 2026-05-12 | 1.1 | **Story différée V2** — mini-module `Modules/Messaging/` à créer (§A.4 PO). RBAC `role:Parent` + permission `message teachers` posé. | Dev Agent (James) |

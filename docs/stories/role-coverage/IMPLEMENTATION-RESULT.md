@@ -98,8 +98,8 @@ Middlewares `role:` appliqués aux modules critiques :
 | Lot | Stories Ready for Review | Stories restant Approved | Tests Feature |
 |---|---|---|---|
 | D.1 Professeur | **9/9** (01-09) ✅ | 0 | 19 tests (HomeMesClassesTest 7 + TeacherRoutesProtectionTest 12) |
-| D.2 Étudiant | **5/9** (01, 02, 04, 05, 06) ✅ | 4 (03 EDT, 07 Carte, 08 Réinscription, 09 LMD exclu V1) | 19 tests (StudentRoutesProtectionTest 7 + StudentHomeTest 12) |
-| D.3 Parent | **4/9** (01, 02, 03, 05) ✅ | 5 (04 EDT, 06 paiement V2, 07 messages V2, 08 annonces, 09 documents) | 15 tests (HomeMesEnfantsTest 7 + ChildDataTest 8) |
+| D.2 Étudiant | **8/9** (01, 02, 03, 04, 05, 06, 07, 08) ✅ | 1 (09 LMD exclu V1) | 24 tests (StudentRoutesProtectionTest 7 + StudentHomeTest 12 + StudentExtraEndpointsTest 5) |
+| D.3 Parent | **7/9** (01, 02, 03, 04, 05, 08, 09) ✅ | 2 (06 paiement V2, 07 messages V2) | 22 tests (HomeMesEnfantsTest 7 + ChildDataTest 8 + ExtraEndpointsTest 7) |
 | D.4 Caissier | **5/5** (01-05) ✅ | 0 | 17 tests (CaissierRoutesProtectionTest 9 + CashierCloseTest 8) |
 | D.5 Agent Comptable | **6/6** (01-06) ✅ | 0 | 23 tests (AgentComptableRoutesProtectionTest 8 + AgentComptableFinanceTest 15) |
 | D.6 Comptable (bonus) | **5/6** (01, 02, 04, 05, 06) ✅ | 1 (03 Rapprochement bancaire — 4 tables V2) | 12 tests (ComptableRoutesProtectionTest) |
@@ -108,11 +108,11 @@ Middlewares `role:` appliqués aux modules critiques :
 
 ### Total tests Feature
 
-**143 tests verts (233 assertions)** :
+**155 tests verts (256 assertions)** :
 - 11 tests Story 7.1 (`StudentStoreApiTest`)
 - 7 + 12 tests Professeur (`HomeMesClassesTest`, `TeacherRoutesProtectionTest`)
-- 7 + 12 tests Étudiant (`StudentRoutesProtectionTest`, `StudentHomeTest`)
-- 7 + 8 tests Parent (`HomeMesEnfantsTest`, `ChildDataTest`)
+- 7 + 12 + 5 tests Étudiant (`StudentRoutesProtectionTest`, `StudentHomeTest`, `StudentExtraEndpointsTest`)
+- 7 + 8 + 7 tests Parent (`HomeMesEnfantsTest`, `ChildDataTest`, `ExtraEndpointsTest`)
 - 9 + 8 tests Caissier (`CaissierRoutesProtectionTest`, `CashierCloseTest`)
 - 8 + 15 tests Agent Comptable (`AgentComptableRoutesProtectionTest`, `AgentComptableFinanceTest`)
 - 12 tests Comptable (`ComptableRoutesProtectionTest`)

@@ -78,3 +78,4 @@ En tant que **Comptable**, je veux rapprocher les paiements enregistrés en inte
 | Date | Version | Description | Auteur |
 |---|---|---|---|
 | 2026-05-12 | 1.0 | Création initiale | SM Agent (Claude Opus 4.7) |
+| 2026-05-12 | 1.1 | **Story différée V2** — création des 4 tables (`bank_accounts`, `bank_transactions`, `payment_bank_transaction_matches`, `reconciliation_periods`) hors scope Quick Wins. RBAC posé : Comptable peut lire `/admin/finance/payments/reconciliation/data`. | Dev Agent (James) |

@@ -3,7 +3,7 @@
 **Module** : PortailParent + Timetable
 **Rôle ciblé** : Parent
 **Menu(s) concerné(s)** : `/admin/parent/children/{id}/timetable`
-**Status** : Approved
+**Status** : Ready for Review
 
 ## User Story
 

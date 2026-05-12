@@ -3,7 +3,7 @@
 **Module** : PortailParent + Announcements (À CRÉER ou réutiliser)
 **Rôle ciblé** : Parent
 **Menu(s) concerné(s)** : `/admin/parent/announcements`
-**Status** : Approved
+**Status** : Ready for Review
 
 ## User Story
 

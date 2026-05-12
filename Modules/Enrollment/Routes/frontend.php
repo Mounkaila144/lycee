@@ -164,4 +164,13 @@ Route::prefix('frontend/student')
 
         // Story Étudiant 06 — Mes documents
         Route::get('/my-documents', [$controller, 'myDocuments'])->name('frontend.student.documents');
+
+        // Story Étudiant 03 — Mon emploi du temps
+        Route::get('/my-timetable', [$controller, 'myTimetable'])->name('frontend.student.timetable');
+
+        // Story Étudiant 07 — Ma carte étudiante
+        Route::get('/my-card', [$controller, 'myCard'])->name('frontend.student.card');
+
+        // Story Étudiant 08 — Réinscription
+        Route::get('/reenrollment', [$controller, 'reenrollment'])->name('frontend.student.reenrollment');
     });

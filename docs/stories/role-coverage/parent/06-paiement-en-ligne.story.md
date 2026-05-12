@@ -85,3 +85,4 @@ En tant que **Parent**, je veux payer la facture de mon enfant en ligne via Oran
 | Date | Version | Description | Auteur |
 |---|---|---|---|
 | 2026-05-12 | 1.0 | Création initiale | SM Agent (Claude Opus 4.7) |
+| 2026-05-12 | 1.1 | **Story différée V2** — gateway CinetPay actée (§A.4) mais implémentation complète (webhooks, idempotence, KYC) hors scope Quick Wins. RBAC `role:Parent` + `pay children invoices` posé via ChildPolicy. | Dev Agent (James) |

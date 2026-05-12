@@ -77,3 +77,4 @@ En tant qu'**Administrator**, je veux configurer les paramètres globaux du tena
 | Date | Version | Description | Auteur |
 |---|---|---|---|
 | 2026-05-12 | 1.0 | Création initiale | SM Agent (Claude Opus 4.7) |
+| 2026-05-12 | 1.1 | **Story différée V2** — module `Modules/Settings/` à créer. RBAC garanti par `role:Administrator` sur les routes Admin existantes. | Dev Agent (James) |

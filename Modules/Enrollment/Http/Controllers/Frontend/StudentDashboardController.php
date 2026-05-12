@@ -142,6 +142,70 @@ class StudentDashboardController extends Controller
     }
 
     /**
+     * Story Étudiant 03 — Mon emploi du temps (lecture seule, owner filter).
+     */
+    public function myTimetable(Request $request): JsonResponse
+    {
+        $student = $this->requireStudent($request);
+        if ($student instanceof JsonResponse) {
+            return $student;
+        }
+
+        return response()->json([
+            'data' => [],
+            'meta' => [
+                'student_id' => $student->id,
+                'note' => 'Endpoint scaffold — agrégation timetable à câbler avec Timetable.',
+            ],
+        ]);
+    }
+
+    /**
+     * Story Étudiant 07 — Ma carte étudiante (état + téléchargement PDF).
+     */
+    public function myCard(Request $request): JsonResponse
+    {
+        $student = $this->requireStudent($request);
+        if ($student instanceof JsonResponse) {
+            return $student;
+        }
+
+        return response()->json([
+            'data' => [
+                'student_id' => $student->id,
+                'matricule' => $student->matricule,
+                'card_status' => 'not_issued',
+                'pdf_url' => null,
+            ],
+            'meta' => [
+                'note' => 'Endpoint scaffold — génération PDF à câbler avec Documents/CardController.',
+            ],
+        ]);
+    }
+
+    /**
+     * Story Étudiant 08 — Réinscription : campagnes ouvertes pour l'élève.
+     */
+    public function reenrollment(Request $request): JsonResponse
+    {
+        $student = $this->requireStudent($request);
+        if ($student instanceof JsonResponse) {
+            return $student;
+        }
+
+        return response()->json([
+            'data' => [
+                'student_id' => $student->id,
+                'open_campaigns' => [],
+                'eligible' => true,
+            ],
+            'meta' => [
+                'note' => 'Endpoint scaffold — workflow de réinscription à câbler avec Enrollment.',
+            ],
+        ]);
+    }
+
+    /**
      * Résout l'étudiant connecté ou retourne une 404.
      */
     private function requireStudent(Request $request): \Modules\Enrollment\Entities\Student|JsonResponse

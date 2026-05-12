@@ -3,7 +3,7 @@
 **Module** : PortailParent + Documents
 **Rôle ciblé** : Parent
 **Menu(s) concerné(s)** : `/admin/parent/children/{id}/documents`
-**Status** : Approved
+**Status** : Ready for Review
 
 ## User Story
 

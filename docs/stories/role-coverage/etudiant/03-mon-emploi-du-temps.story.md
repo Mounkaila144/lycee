@@ -3,7 +3,7 @@
 **Module** : Timetable
 **Rôle ciblé** : Étudiant
 **Menu(s) concerné(s)** : `/admin/student/timetable`
-**Status** : Approved
+**Status** : Ready for Review
 
 ## User Story
 
