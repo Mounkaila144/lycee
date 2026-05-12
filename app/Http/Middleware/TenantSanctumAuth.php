@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -54,8 +55,10 @@ class TenantSanctumAuth
             ], 401);
         }
 
-        // Définir l'utilisateur authentifié
+        // Définir l'utilisateur authentifié sur la requête ET sur le guard tenant,
+        // pour que les middlewares Spatie (role/permission) puissent le retrouver via Auth::guard('tenant').
         $request->setUserResolver(fn () => $user);
+        Auth::guard($guard)->setUser($user);
 
         // Mettre à jour last_used_at
         $accessToken->forceFill(['last_used_at' => now()])->save();

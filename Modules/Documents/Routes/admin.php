@@ -7,7 +7,9 @@ use Modules\Documents\Http\Controllers\Admin\DiplomaController;
 use Modules\Documents\Http\Controllers\Admin\TranscriptController;
 use Modules\Documents\Http\Controllers\Admin\VerificationController;
 
-Route::prefix('admin/documents')->middleware(['auth:sanctum'])->group(function () {
+// RBAC durcissement (Stories Admin 10, Manager 08) : Admin, Manager et autres rôles
+// finance accèdent (les Profs/Étudiants ont leurs propres endpoints frontend).
+Route::prefix('admin/documents')->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager,tenant'])->group(function () {
 
     // Epic 1: Transcripts (Stories 01-05)
     Route::prefix('transcripts')->controller(TranscriptController::class)->group(function () {

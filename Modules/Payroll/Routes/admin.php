@@ -7,7 +7,10 @@ use Modules\Payroll\Http\Controllers\Admin\PayrollController;
 use Modules\Payroll\Http\Controllers\Admin\PayrollReportController;
 use Modules\Payroll\Http\Controllers\Admin\SocialDeclarationController;
 
-Route::prefix('admin/payroll')->middleware(['auth:sanctum'])->group(function () {
+// RBAC durcissement (Story Admin 12) : seuls Administrator et Manager accèdent
+// à la paie. Comptable a accès en lecture seule (cf. Story Comptable 06 — restriction
+// fine à appliquer story par story). Caissier/Agent Comptable/Professeur exclus.
+Route::prefix('admin/payroll')->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Comptable,tenant'])->group(function () {
     // Epic 1: Employee Management (Stories 01-04)
     Route::apiResource('employees', EmployeeController::class);
     Route::post('employees/{employeeId}/contracts', [EmployeeController::class, 'createContract']);

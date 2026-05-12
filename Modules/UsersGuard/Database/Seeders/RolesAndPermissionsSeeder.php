@@ -68,6 +68,17 @@ class RolesAndPermissionsSeeder extends Seeder
                 'upload documents',
                 'request attestations',
                 'view own attendance',
+
+                // Parent Permissions
+                'view children',
+                'view children grades',
+                'view children attendance',
+                'view children timetable',
+                'view children invoices',
+                'pay children invoices',
+                'view children documents',
+                'message teachers',
+                'view announcements',
             ];
 
             foreach ($permissions as $permission) {
@@ -128,6 +139,23 @@ class RolesAndPermissionsSeeder extends Seeder
                 'upload documents',
                 'request attestations',
                 'view own attendance',
+            ]);
+
+            $parentRole = Role::updateOrCreate(
+                ['name' => 'Parent', 'guard_name' => 'tenant'],
+                ['display_name' => 'Parent / Tuteur', 'description' => 'Parent ou tuteur légal — suivi scolaire et paiement en ligne']
+            );
+            $parentRole->syncPermissions([
+                'view dashboard',
+                'view children',
+                'view children grades',
+                'view children attendance',
+                'view children timetable',
+                'view children invoices',
+                'pay children invoices',
+                'view children documents',
+                'message teachers',
+                'view announcements',
             ]);
 
             // Create Financial Roles (Story 2)

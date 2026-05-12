@@ -9,5 +9,6 @@
     "Exams": true,
     "Finance": true,
     "Payroll": true,
-    "Documents": true
+    "Documents": true,
+    "PortailParent": true
 }

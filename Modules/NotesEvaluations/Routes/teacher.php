@@ -15,8 +15,11 @@ use Modules\NotesEvaluations\Http\Controllers\Teacher\RetakeGradeController;
 |--------------------------------------------------------------------------
 */
 
+// RBAC durcissement (Stories Professeur 01-09) : seuls les Professeurs (et Admin pour debug)
+// accèdent à ces endpoints. Ownership (teacher_id = auth()->id()) reste à contrôler
+// dans chaque controller — cf. DEV-AGENT-PROMPT §C.
 Route::prefix('api/frontend/teacher')
-    ->middleware(['tenant', 'tenant.auth'])
+    ->middleware(['tenant', 'tenant.auth', 'role:Professeur|Administrator,tenant'])
     ->group(function () {
         // Teacher's Modules
         Route::get('/my-modules', [GradeEntryController::class, 'myModules']);

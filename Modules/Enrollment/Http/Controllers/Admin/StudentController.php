@@ -79,41 +79,49 @@ class StudentController extends Controller
     }
 
     /**
-     * Store a newly created student
+     * Story 7.1 — Création d'un élève (Étape 1 : données personnelles).
+     *
+     * - Pas de génération de matricule ici (Story 7.2 le fera en Étape 3).
+     * - Détection de doublon (firstname + lastname + birthdate) → 409 si pas de force.
+     * - Photo stockée sur disque tenant.
      */
     public function store(StoreStudentRequest $request): JsonResponse
     {
         $validated = $request->validated();
+        $force = (bool) ($validated['force'] ?? false);
+        unset($validated['force']);
+
+        $duplicate = Student::on('tenant')
+            ->duplicateOf($validated['firstname'], $validated['lastname'], $validated['birthdate'])
+            ->first();
+
+        if ($duplicate && ! $force) {
+            return response()->json([
+                'message' => 'Un élève avec les mêmes nom, prénom et date de naissance existe déjà.',
+                'code' => 'STUDENT_DUPLICATE_FOUND',
+                'duplicate' => [
+                    'id' => $duplicate->id,
+                    'matricule' => $duplicate->matricule,
+                ],
+            ], 409);
+        }
+
+        if ($request->hasFile('photo')) {
+            $validated['photo'] = $request->file('photo')->store('students/photos', 'tenant');
+        }
+
+        $validated['nationality'] = $validated['nationality'] ?? 'Nigérienne';
+        $validated['city'] = $validated['city'] ?? 'Niamey';
 
         return DB::connection('tenant')->transaction(function () use ($validated) {
-            // Generate matricule (with programme if provided, simple otherwise)
-            if (! empty($validated['programme_id'])) {
-                $programme = Programme::on('tenant')->find($validated['programme_id']);
-
-                if ($programme) {
-                    $matricule = $this->matriculeGenerator->generateNext($programme);
-                } else {
-                    $matricule = $this->matriculeGenerator->generateSimpleMatricule();
-                }
-            } else {
-                $matricule = $this->matriculeGenerator->generateSimpleMatricule();
-            }
-
-            // Remove programme_id from student data (not a column on students table)
-            unset($validated['programme_id']);
-
-            // Create student
             $student = Student::on('tenant')->create([
                 ...$validated,
-                'matricule' => $matricule,
+                'matricule' => null,
                 'status' => 'Actif',
             ]);
 
-            // Load relationships
-            $student->load('documents');
-
             return response()->json([
-                'message' => 'Dossier étudiant créé avec succès',
+                'message' => 'Élève créé avec succès.',
                 'data' => new StudentResource($student),
             ], 201);
         });

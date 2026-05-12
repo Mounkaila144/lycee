@@ -140,3 +140,28 @@ Route::prefix('frontend/enrollment')
                 ->name('frontend.enrollment.exemption-certificate');
         });
     });
+
+/*
+ * Story Étudiant 01 — Portail / Home Étudiant.
+ * Routes /api/frontend/student/* protégées par role:Étudiant + ownership via auth()->user()->student.
+ */
+Route::prefix('frontend/student')
+    ->middleware(['tenant', 'tenant.auth', 'role:Étudiant|Administrator,tenant'])
+    ->group(function () {
+        $controller = \Modules\Enrollment\Http\Controllers\Frontend\StudentDashboardController::class;
+
+        Route::get('/me', [$controller, 'me'])->name('frontend.student.me');
+        Route::get('/dashboard', [$controller, 'dashboard'])->name('frontend.student.dashboard');
+
+        // Story Étudiant 02 — Mes notes
+        Route::get('/my-grades', [$controller, 'myGrades'])->name('frontend.student.grades');
+
+        // Story Étudiant 04 — Mes présences
+        Route::get('/my-attendance', [$controller, 'myAttendance'])->name('frontend.student.attendance');
+
+        // Story Étudiant 05 — Mes factures
+        Route::get('/my-invoices', [$controller, 'myInvoices'])->name('frontend.student.invoices');
+
+        // Story Étudiant 06 — Mes documents
+        Route::get('/my-documents', [$controller, 'myDocuments'])->name('frontend.student.documents');
+    });

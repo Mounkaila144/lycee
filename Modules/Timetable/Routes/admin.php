@@ -17,9 +17,13 @@ use Modules\Timetable\Http\Controllers\Admin\TimetableReportsController;
 | Elles utilisent la base de données tenant (connexion 'tenant')
 */
 
+// RBAC durcissement (Stories Professeur 07, Admin 08, Manager 07) :
+// Admin, Manager et Professeur accèdent. Le Professeur ne voit que SON emploi du temps
+// (ownership `teacher_id = auth()->id()` dans TimetableController — à compléter).
+// Mutations (création/édition créneaux, salles) restent restreintes côté Story Admin 08.
 // Protected admin routes (tenant + auth required)
 Route::prefix('admin')
-    ->middleware(['tenant', 'tenant.auth'])
+    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Professeur,tenant'])
     ->group(function () {
         // Gestion des salles
         Route::prefix('rooms')->name('rooms.')->group(function () {

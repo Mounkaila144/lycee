@@ -3,6 +3,7 @@
 namespace Modules\UsersGuard\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UsersGuard\UserResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -21,20 +22,25 @@ class AuthController extends Controller
     {
         $validated = $request->validated();
 
+        // We do NOT filter by `application` anymore: the role hierarchy + home_route
+        // determine where the user lands after login. The `application` field on the
+        // user model is kept for legacy reasons but is no longer a login gate.
         $user = TenantUser::where('username', $validated['username'])
-            ->where('application', $validated['application'])
             ->active()
             ->first();
 
-        if (!$user || !$this->checkPassword($validated['password'], $user->password)) {
+        if (! $user || ! $this->checkPassword($validated['password'], $user->password)) {
             throw ValidationException::withMessages([
                 'username' => ['Invalid credentials'],
             ]);
         }
 
+        $tenant = tenancy()->tenant;
+        $tenantKey = $tenant?->getTenantKey() ?? 'unknown';
+
         $token = $user->createToken('tenant-token', [
-            'role:' . $validated['application'],
-            'tenant:' . tenancy()->tenant->getTenantKey(),
+            'role:'.$validated['application'],
+            'tenant:'.$tenantKey,
         ])->plainTextToken;
 
         $user->load(['roles.permissions', 'permissions']);
@@ -45,24 +51,13 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Login successful',
             'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'username' => $user->username,
-                    'email' => $user->email,
-                    'firstname' => $user->firstname,
-                    'lastname' => $user->lastname,
-                    'full_name' => $user->full_name,
-                    'application' => $user->application,
-                    'avatar_url' => $user->avatar_url,
-                    'roles' => $user->roles,
-                    'permissions' => $user->permissions,
-                ],
+                'user' => (new UserResource($user))->toArray($request),
                 'token' => $token,
                 'token_type' => 'Bearer',
-                'tenant' => [
-                    'id' => tenancy()->tenant->getTenantKey(),
-                    'name' => tenancy()->tenant->company_name,
-                ],
+                'tenant' => $tenant ? [
+                    'id' => $tenant->getTenantKey(),
+                    'name' => $tenant->company_name,
+                ] : null,
             ],
         ]);
     }
@@ -77,27 +72,16 @@ class AuthController extends Controller
 
         $user->load(['roles.permissions', 'permissions']);
 
+        $tenant = tenancy()->tenant;
+
         return response()->json([
             'success' => true,
             'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'username' => $user->username,
-                    'email' => $user->email,
-                    'firstname' => $user->firstname,
-                    'lastname' => $user->lastname,
-                    'full_name' => $user->full_name,
-                    'application' => $user->application,
-                    'is_active' => $user->is_active,
-                    'avatar_url' => $user->avatar_url,
-                    'lastlogin' => $user->lastlogin,
-                    'roles' => $user->roles,
-                    'permissions' => $user->getAllPermissions(),
-                ],
-                'tenant' => [
-                    'id' => tenancy()->tenant->getTenantKey(),
-                    'name' => tenancy()->tenant->company_name,
-                ],
+                'user' => (new UserResource($user))->toArray($request),
+                'tenant' => $tenant ? [
+                    'id' => $tenant->getTenantKey(),
+                    'name' => $tenant->company_name,
+                ] : null,
             ],
         ]);
     }
@@ -126,9 +110,11 @@ class AuthController extends Controller
 
         $request->user()->currentAccessToken()->delete();
 
+        $tenantKey = tenancy()->tenant?->getTenantKey() ?? 'unknown';
+
         $token = $user->createToken('tenant-token', [
-            'role:' . $user->application,
-            'tenant:' . tenancy()->tenant->getTenantKey(),
+            'role:'.$user->application,
+            'tenant:'.$tenantKey,
         ])->plainTextToken;
 
         return response()->json([

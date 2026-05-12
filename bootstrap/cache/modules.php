@@ -9,9 +9,10 @@
     5 => 'Modules\\Finance\\Providers\\FinanceServiceProvider',
     6 => 'Modules\\NotesEvaluations\\Providers\\NotesEvaluationsServiceProvider',
     7 => 'Modules\\Payroll\\Providers\\PayrollServiceProvider',
-    8 => 'Modules\\StructureAcademique\\Providers\\StructureAcademiqueServiceProvider',
-    9 => 'Modules\\Timetable\\Providers\\TimetableServiceProvider',
-    10 => 'Modules\\UsersGuard\\Providers\\UsersGuardServiceProvider',
+    8 => 'Modules\\PortailParent\\Providers\\PortailParentServiceProvider',
+    9 => 'Modules\\StructureAcademique\\Providers\\StructureAcademiqueServiceProvider',
+    10 => 'Modules\\Timetable\\Providers\\TimetableServiceProvider',
+    11 => 'Modules\\UsersGuard\\Providers\\UsersGuardServiceProvider',
   ),
   'eager' => 
   array (
@@ -23,9 +24,10 @@
     5 => 'Modules\\Finance\\Providers\\FinanceServiceProvider',
     6 => 'Modules\\NotesEvaluations\\Providers\\NotesEvaluationsServiceProvider',
     7 => 'Modules\\Payroll\\Providers\\PayrollServiceProvider',
-    8 => 'Modules\\StructureAcademique\\Providers\\StructureAcademiqueServiceProvider',
-    9 => 'Modules\\Timetable\\Providers\\TimetableServiceProvider',
-    10 => 'Modules\\UsersGuard\\Providers\\UsersGuardServiceProvider',
+    8 => 'Modules\\PortailParent\\Providers\\PortailParentServiceProvider',
+    9 => 'Modules\\StructureAcademique\\Providers\\StructureAcademiqueServiceProvider',
+    10 => 'Modules\\Timetable\\Providers\\TimetableServiceProvider',
+    11 => 'Modules\\UsersGuard\\Providers\\UsersGuardServiceProvider',
   ),
   'deferred' => 
   array (

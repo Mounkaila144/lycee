@@ -2,7 +2,10 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('admin/exams')->middleware(['auth:sanctum'])->group(function () {
+// RBAC durcissement (Stories Professeur 08, Admin 09) :
+// Admin et Professeur (pour surveillance d'examens) accèdent.
+// Mutations destructrices (delete session, cancel) restreintes côté Admin via story Admin 09.
+Route::prefix('admin/exams')->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Professeur,tenant'])->group(function () {
 
     // Epic 1: Exam Planning (Stories 01-04)
     Route::prefix('sessions')->group(function () {

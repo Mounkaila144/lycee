@@ -22,41 +22,44 @@ Route::prefix('admin')->middleware(['tenant', 'tenant.auth'])->group(function ()
         Route::get('/', [IndexController::class, 'index']);
     });
 
-    // CRUD Utilisateurs Tenant
-    Route::prefix('users')->group(function () {
+    // CRUD Utilisateurs Tenant — Admin / Manager only (delete: Admin only)
+    Route::prefix('users')->middleware('role:Administrator|Manager,tenant')->group(function () {
         Route::get('/', [UserController::class, 'index']);
         Route::post('/', [UserController::class, 'store']);
         Route::get('/{user}', [UserController::class, 'show']);
         Route::put('/{user}', [UserController::class, 'update']);
-        Route::delete('/{user}', [UserController::class, 'destroy']);
 
-        // Restore & Force Delete
-        Route::post('/{user}/restore', [UserController::class, 'restore']);
-        Route::delete('/{user}/force', [UserController::class, 'forceDelete']);
+        Route::middleware('role:Administrator,tenant')->group(function () {
+            Route::delete('/{user}', [UserController::class, 'destroy']);
 
-        // Gestion des Permissions
-        Route::post('/{user}/permissions/add', [UserController::class, 'addPermissions']);
-        Route::post('/{user}/permissions/remove', [UserController::class, 'removePermissions']);
-        Route::post('/{user}/permissions/sync', [UserController::class, 'syncPermissions']);
+            // Restore & Force Delete
+            Route::post('/{user}/restore', [UserController::class, 'restore']);
+            Route::delete('/{user}/force', [UserController::class, 'forceDelete']);
 
-        // Gestion des Rôles
-        Route::post('/{user}/roles/add', [UserController::class, 'addRoles']);
-        Route::post('/{user}/roles/remove', [UserController::class, 'removeRoles']);
-        Route::post('/{user}/roles/sync', [UserController::class, 'syncRoles']);
+            // Gestion des Permissions
+            Route::post('/{user}/permissions/add', [UserController::class, 'addPermissions']);
+            Route::post('/{user}/permissions/remove', [UserController::class, 'removePermissions']);
+            Route::post('/{user}/permissions/sync', [UserController::class, 'syncPermissions']);
+
+            // Gestion des Rôles
+            Route::post('/{user}/roles/add', [UserController::class, 'addRoles']);
+            Route::post('/{user}/roles/remove', [UserController::class, 'removeRoles']);
+            Route::post('/{user}/roles/sync', [UserController::class, 'syncRoles']);
+        });
     });
 
-    // Teachers endpoint (users with "Professeur" role)
-    Route::prefix('teachers')->group(function () {
+    // Teachers endpoint — readable by Admin, Manager, and Professeur themselves
+    Route::prefix('teachers')->middleware('role:Administrator|Manager|Professeur,tenant')->group(function () {
         Route::get('/', [UserController::class, 'teachers']);
     });
 
-    // Students endpoint (users with "Étudiant" role)
-    Route::prefix('students')->group(function () {
+    // Students endpoint — readable by Admin, Manager, financial roles, Professeur
+    Route::prefix('students')->middleware('role:Administrator|Manager|Caissier|Comptable|Agent Comptable|Professeur,tenant')->group(function () {
         Route::get('/', [UserController::class, 'students']);
     });
 
-    // CRUD Permissions
-    Route::prefix('permissions')->group(function () {
+    // CRUD Permissions — Admin only
+    Route::prefix('permissions')->middleware('role:Administrator,tenant')->group(function () {
         Route::get('/', [PermissionController::class, 'index']);
         Route::post('/', [PermissionController::class, 'store']);
         Route::get('/{permission}', [PermissionController::class, 'show']);
@@ -64,8 +67,8 @@ Route::prefix('admin')->middleware(['tenant', 'tenant.auth'])->group(function ()
         Route::delete('/{permission}', [PermissionController::class, 'destroy']);
     });
 
-    // CRUD Rôles
-    Route::prefix('roles')->group(function () {
+    // CRUD Rôles — Admin only
+    Route::prefix('roles')->middleware('role:Administrator,tenant')->group(function () {
         Route::get('/', [RoleController::class, 'index']);
         Route::post('/', [RoleController::class, 'store']);
         Route::get('/{role}', [RoleController::class, 'show']);

@@ -4,11 +4,15 @@ namespace Modules\Enrollment\Entities;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
 use Modules\Enrollment\Database\Factories\StudentFactory;
+use Modules\PortailParent\Entities\ParentModel;
+use Modules\UsersGuard\Entities\TenantUser;
 
 class Student extends Model
 {
@@ -35,6 +39,7 @@ class Student extends Model
     }
 
     protected $fillable = [
+        'user_id',
         'matricule',
         'firstname',
         'lastname',
@@ -42,12 +47,12 @@ class Student extends Model
         'birthplace',
         'sex',
         'nationality',
-        'email',
         'phone',
-        'mobile',
         'address',
         'city',
-        'country',
+        'quarter',
+        'blood_group',
+        'health_notes',
         'photo',
         'status',
         'emergency_contact_name',
@@ -72,6 +77,18 @@ class Student extends Model
     public function auditLogs(): HasMany
     {
         return $this->hasMany(StudentAuditLog::class);
+    }
+
+    public function parents(): BelongsToMany
+    {
+        return $this->belongsToMany(ParentModel::class, 'parent_student', 'student_id', 'parent_id')
+            ->withPivot(['is_primary_contact', 'is_financial_responsible'])
+            ->withTimestamps();
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(TenantUser::class, 'user_id');
     }
 
     /**
@@ -106,9 +123,15 @@ class Student extends Model
         return $query->where(function ($q) use ($search) {
             $q->where('matricule', 'like', "%{$search}%")
                 ->orWhere('firstname', 'like', "%{$search}%")
-                ->orWhere('lastname', 'like', "%{$search}%")
-                ->orWhere('email', 'like', "%{$search}%");
+                ->orWhere('lastname', 'like', "%{$search}%");
         });
+    }
+
+    public function scopeDuplicateOf($query, string $firstname, string $lastname, string $birthdate)
+    {
+        return $query->where('firstname', $firstname)
+            ->where('lastname', $lastname)
+            ->whereDate('birthdate', $birthdate);
     }
 
     /**
@@ -122,14 +145,6 @@ class Student extends Model
     public function getNameAttribute(): string
     {
         return $this->full_name;
-    }
-
-    /**
-     * Route notifications for the mail channel.
-     */
-    public function routeNotificationForMail(): ?string
-    {
-        return $this->email;
     }
 
     public function getAgeAttribute(): int

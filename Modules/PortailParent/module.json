@@ -1,0 +1,15 @@
+{
+    "name": "PortailParent",
+    "alias": "portailparent",
+    "description": "Portail Parent — accès suivi scolaire, factures et paiement pour les parents/tuteurs",
+    "keywords": [
+        "parent",
+        "tuteur",
+        "portail"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\PortailParent\\Providers\\PortailParentServiceProvider"
+    ],
+    "files": []
+}

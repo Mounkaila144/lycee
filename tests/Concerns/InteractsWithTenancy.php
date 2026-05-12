@@ -119,21 +119,29 @@ trait InteractsWithTenancy
             '--force' => true,
         ]);
 
-        // STEP 6: Enrollment TENANT tables - DISABLED (LMD module, will be rebuilt for secondaire)
-        // Artisan::call('migrate', [
-        //     '--database' => 'mysql',
-        //     '--path' => $basePath.'/Modules/Enrollment/Database/Migrations/tenant',
-        //     '--realpath' => true,
-        //     '--force' => true,
-        // ]);
+        // STEP 6: Enrollment TENANT tables (Story 7.1 secondaire alignment included)
+        Artisan::call('migrate', [
+            '--database' => 'mysql',
+            '--path' => $basePath.'/Modules/Enrollment/Database/Migrations/tenant',
+            '--realpath' => true,
+            '--force' => true,
+        ]);
 
-        // STEP 7: NotesEvaluations TENANT tables - DISABLED (LMD module, will be rebuilt for secondaire)
-        // Artisan::call('migrate', [
-        //     '--database' => 'mysql',
-        //     '--path' => $basePath.'/Modules/NotesEvaluations/Database/Migrations/tenant',
-        //     '--realpath' => true,
-        //     '--force' => true,
-        // ]);
+        // STEP 7: PortailParent TENANT tables (parents + parent_student)
+        Artisan::call('migrate', [
+            '--database' => 'mysql',
+            '--path' => $basePath.'/Modules/PortailParent/Database/Migrations/tenant',
+            '--realpath' => true,
+            '--force' => true,
+        ]);
+
+        // STEP 8: Finance TENANT tables (notamment cashier_close_records — Story Caissier 05)
+        Artisan::call('migrate', [
+            '--database' => 'mysql',
+            '--path' => $basePath.'/Modules/Finance/Database/Migrations/tenant',
+            '--realpath' => true,
+            '--force' => true,
+        ]);
 
         self::$migrationsRan = true;
     }
@@ -190,5 +198,56 @@ trait InteractsWithTenancy
         self::$migrationsRan = false;
 
         parent::tearDownAfterClass();
+    }
+
+    /**
+     * Seed the role/permission catalog for the current tenant connection.
+     * Idempotent: safe to call multiple times within a test.
+     */
+    protected function seedRolesAndPermissions(): void
+    {
+        $hierarchy = config('role-routes.hierarchy', []);
+
+        $permissions = [
+            'view dashboard', 'view users', 'create users', 'edit users', 'delete users',
+            'view roles', 'view students', 'manage grades', 'view timetable',
+            'view own grades', 'view own timetable',
+            'view invoices', 'create invoices', 'edit invoices',
+            'view payments', 'create payments', 'generate receipts',
+            'view financial reports', 'export financial data',
+            'manage payment plans', 'manage refunds', 'manage bank reconciliation',
+            'manage collection',
+        ];
+
+        foreach ($permissions as $name) {
+            \Spatie\Permission\Models\Permission::updateOrCreate(
+                ['name' => $name, 'guard_name' => 'tenant'],
+                ['display_name' => ucfirst($name)]
+            );
+        }
+
+        foreach ($hierarchy as $roleName) {
+            \Spatie\Permission\Models\Role::updateOrCreate(
+                ['name' => $roleName, 'guard_name' => 'tenant'],
+                ['display_name' => $roleName]
+            );
+        }
+
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+    }
+
+    /**
+     * Assign a Spatie role to the test user (creates it if missing).
+     */
+    protected function assignRole(\Modules\UsersGuard\Entities\TenantUser $user, string $roleName): void
+    {
+        \Spatie\Permission\Models\Role::firstOrCreate(
+            ['name' => $roleName, 'guard_name' => 'tenant'],
+            ['display_name' => $roleName]
+        );
+
+        $user->assignRole($roleName);
+
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
     }
 }

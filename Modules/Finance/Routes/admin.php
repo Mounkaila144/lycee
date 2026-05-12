@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Finance\Http\Controllers\Admin\CashierCloseController;
 use Modules\Finance\Http\Controllers\Admin\CollectionController;
 use Modules\Finance\Http\Controllers\Admin\FinanceReportController;
 use Modules\Finance\Http\Controllers\Admin\InvoiceController;
@@ -21,8 +22,11 @@ use Modules\Finance\Http\Controllers\Admin\PaymentController;
 |
 */
 
+// RBAC durcissement transverse (Stories Caissier/Agent Comptable/Comptable) :
+// limite l'accès aux rôles finance. Fine-grained restrictions (refund, write-off)
+// à appliquer story par story — cf. DEV-AGENT-PROMPT §C / §D.4-D.6.
 Route::prefix('admin/finance')
-    ->middleware(['tenant', 'tenant.auth'])
+    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Comptable|Agent Comptable|Caissier,tenant'])
     ->group(function () {
         /*
         |--------------------------------------------------------------------------
@@ -40,33 +44,37 @@ Route::prefix('admin/finance')
                 ->name('admin.finance.fee-types.update');
         });
 
-        // Invoices (Stories 01, 03, 04, 05)
+        // Invoices (Stories Agent Comptable 02, 03, 04 + Comptable read)
         Route::prefix('invoices')->group(function () {
+            // Lectures : tous les rôles finance (Caissier inclus pour vérif au guichet)
             Route::get('/', [InvoiceController::class, 'index'])
                 ->name('admin.finance.invoices.index');
-
-            // Story 01: Generate automated invoice
-            Route::post('/generate-automated', [InvoiceController::class, 'generateAutomated'])
-                ->name('admin.finance.invoices.generate-automated');
-
-            // Story 03: Create custom invoice
-            Route::post('/', [InvoiceController::class, 'store'])
-                ->name('admin.finance.invoices.store');
-
             Route::get('/{id}', [InvoiceController::class, 'show'])
                 ->name('admin.finance.invoices.show');
-            Route::put('/{id}', [InvoiceController::class, 'update'])
-                ->name('admin.finance.invoices.update');
-            Route::delete('/{id}', [InvoiceController::class, 'destroy'])
-                ->name('admin.finance.invoices.destroy');
 
-            // Story 04: Create payment schedule
-            Route::post('/{id}/payment-schedule', [InvoiceController::class, 'createPaymentSchedule'])
-                ->name('admin.finance.invoices.create-payment-schedule');
-
-            // Story 05: Calculate late fees
+            // Calcul pénalités (Story Agent Comptable 04) — lecture
             Route::get('/{id}/late-fees', [InvoiceController::class, 'calculateLateFees'])
                 ->name('admin.finance.invoices.calculate-late-fees');
+
+            // Mutations : Caissier EXCLU (Stories Agent Comptable 02 / Comptable)
+            Route::middleware('role:Administrator|Comptable|Agent Comptable,tenant')->group(function () {
+                // Story Agent Comptable 01 : Generate automated invoice
+                Route::post('/generate-automated', [InvoiceController::class, 'generateAutomated'])
+                    ->name('admin.finance.invoices.generate-automated');
+
+                // Story Agent Comptable 02 : Create custom invoice
+                Route::post('/', [InvoiceController::class, 'store'])
+                    ->name('admin.finance.invoices.store');
+
+                Route::put('/{id}', [InvoiceController::class, 'update'])
+                    ->name('admin.finance.invoices.update');
+                Route::delete('/{id}', [InvoiceController::class, 'destroy'])
+                    ->name('admin.finance.invoices.destroy');
+
+                // Story Agent Comptable 03 : Échéancier
+                Route::post('/{id}/payment-schedule', [InvoiceController::class, 'createPaymentSchedule'])
+                    ->name('admin.finance.invoices.create-payment-schedule');
+            });
         });
 
         /*
@@ -95,8 +103,11 @@ Route::prefix('admin/finance')
             Route::get('/{id}/receipt', [PaymentController::class, 'getReceipt'])
                 ->name('admin.finance.payments.receipt');
 
-            // Story 11: Process refund
+            // Story 11: Process refund — RESTREINT (Caissier EXCLU)
+            // Stories Caissier 02 / Comptable 04 : seuls Administrator et Comptable
+            // peuvent rembourser. Agent Comptable et Caissier sont exclus.
             Route::post('/{id}/refund', [PaymentController::class, 'refund'])
+                ->middleware('role:Administrator|Comptable,tenant')
                 ->name('admin.finance.payments.refund');
 
             // Story 12: Bank reconciliation
@@ -108,17 +119,28 @@ Route::prefix('admin/finance')
                 ->name('admin.finance.payments.daily-summary');
         });
 
-        // Discounts/Scholarships (Story 06)
-        Route::prefix('discounts')->group(function () {
-            Route::get('/', [PaymentController::class, 'discounts'])
-                ->name('admin.finance.discounts.index');
-            Route::post('/', [PaymentController::class, 'applyDiscount'])
-                ->name('admin.finance.discounts.apply');
-            Route::post('/{id}/approve', [PaymentController::class, 'approveDiscount'])
-                ->name('admin.finance.discounts.approve');
-            Route::delete('/{id}', [PaymentController::class, 'revokeDiscount'])
-                ->name('admin.finance.discounts.revoke');
+        // Story Caissier 05 — Clôture journalière de caisse
+        Route::prefix('cashier-close')->group(function () {
+            Route::get('/', [CashierCloseController::class, 'index'])
+                ->name('admin.finance.cashier-close.index');
+            Route::post('/', [CashierCloseController::class, 'store'])
+                ->name('admin.finance.cashier-close.store');
         });
+
+        // Discounts/Scholarships (Story 06) — Caissier EXCLU (Story Caissier 04 actions interdites)
+        // Création/approval réservé Admin/Comptable/Agent Comptable.
+        Route::prefix('discounts')
+            ->middleware('role:Administrator|Comptable|Agent Comptable,tenant')
+            ->group(function () {
+                Route::get('/', [PaymentController::class, 'discounts'])
+                    ->name('admin.finance.discounts.index');
+                Route::post('/', [PaymentController::class, 'applyDiscount'])
+                    ->name('admin.finance.discounts.apply');
+                Route::post('/{id}/approve', [PaymentController::class, 'approveDiscount'])
+                    ->name('admin.finance.discounts.approve');
+                Route::delete('/{id}', [PaymentController::class, 'revokeDiscount'])
+                    ->name('admin.finance.discounts.revoke');
+            });
 
         /*
         |--------------------------------------------------------------------------
@@ -126,39 +148,46 @@ Route::prefix('admin/finance')
         |--------------------------------------------------------------------------
         */
 
-        // Collections & Reminders
+        // Collections & Reminders (Stories Agent Comptable 05, 06 + Comptable)
+        // Caissier EXCLU des mutations (recouvrement = Agent Comptable / Comptable / Admin).
+        // GET /blocks/check : ouvert à tous les modules pour vérification cross-module
+        // (cf. Story Agent Comptable 06 — Documents/Exams/Reenrollment consultent).
         Route::prefix('collection')->group(function () {
-            // Story 13: Automatic reminders
-            Route::post('/reminders/generate', [CollectionController::class, 'generateReminders'])
-                ->name('admin.finance.collection.generate-reminders');
-            Route::post('/reminders/send', [CollectionController::class, 'sendReminders'])
-                ->name('admin.finance.collection.send-reminders');
+            // Lecture publique aux rôles finance (déjà filtrée par middleware parent)
             Route::get('/reminders', [CollectionController::class, 'reminders'])
                 ->name('admin.finance.collection.reminders');
-
-            // Story 14: Service blocking
-            Route::post('/blocks', [CollectionController::class, 'blockServices'])
-                ->name('admin.finance.collection.block-services');
-            Route::post('/blocks/{id}/unblock', [CollectionController::class, 'unblockServices'])
-                ->name('admin.finance.collection.unblock-services');
             Route::get('/blocks', [CollectionController::class, 'blocks'])
                 ->name('admin.finance.collection.blocks');
             Route::get('/blocks/check', [CollectionController::class, 'checkBlocks'])
                 ->name('admin.finance.collection.check-blocks');
-            Route::post('/blocks/auto-process', [CollectionController::class, 'processAutomaticBlocking'])
-                ->name('admin.finance.collection.auto-block');
-
-            // Story 15: Payment plans
-            Route::post('/payment-plans', [CollectionController::class, 'createPaymentPlan'])
-                ->name('admin.finance.collection.create-payment-plan');
-
-            // Story 16: Write off bad debt
-            Route::post('/write-off/{id}', [CollectionController::class, 'writeOffDebt'])
-                ->name('admin.finance.collection.write-off');
-
-            // Collection statistics
             Route::get('/statistics', [CollectionController::class, 'statistics'])
                 ->name('admin.finance.collection.statistics');
+
+            // Mutations recouvrement : Caissier EXCLU
+            Route::middleware('role:Administrator|Comptable|Agent Comptable,tenant')->group(function () {
+                // Story Agent Comptable 05 : Reminders
+                Route::post('/reminders/generate', [CollectionController::class, 'generateReminders'])
+                    ->name('admin.finance.collection.generate-reminders');
+                Route::post('/reminders/send', [CollectionController::class, 'sendReminders'])
+                    ->name('admin.finance.collection.send-reminders');
+
+                // Story Agent Comptable 06 : Service blocking
+                Route::post('/blocks', [CollectionController::class, 'blockServices'])
+                    ->name('admin.finance.collection.block-services');
+                Route::post('/blocks/{id}/unblock', [CollectionController::class, 'unblockServices'])
+                    ->name('admin.finance.collection.unblock-services');
+                Route::post('/blocks/auto-process', [CollectionController::class, 'processAutomaticBlocking'])
+                    ->name('admin.finance.collection.auto-block');
+
+                // Story Agent Comptable 03 : Payment plans (échéanciers)
+                Route::post('/payment-plans', [CollectionController::class, 'createPaymentPlan'])
+                    ->name('admin.finance.collection.create-payment-plan');
+            });
+
+            // Write-off : Admin / Comptable seulement (Agent Comptable EXCLU)
+            Route::post('/write-off/{id}', [CollectionController::class, 'writeOffDebt'])
+                ->middleware('role:Administrator|Comptable,tenant')
+                ->name('admin.finance.collection.write-off');
         });
 
         /*

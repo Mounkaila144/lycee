@@ -24,8 +24,25 @@ use Modules\Enrollment\Http\Controllers\Admin\TransferController;
 |
 */
 
+/*
+ * Story 7.1 — Alias direct `/admin/students` (sans préfixe enrollment).
+ * Conforme à la spec PRD §5.4 API Endpoints (`POST /api/admin/students`).
+ * Création réservée Admin/Manager (cf. Stories Admin 05, Manager 04).
+ */
+Route::prefix('admin')
+    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager,tenant'])
+    ->group(function () {
+        Route::prefix('students')->group(function () {
+            Route::post('/', [StudentController::class, 'store'])->name('admin.students.store');
+        });
+    });
+
+// RBAC durcissement (Stories Admin 05, Manager 04, Professeur 09) :
+// Admin et Manager (CRUD), Professeur (lecture seule, à raffiner par controller).
+// Les actions destructrices (DELETE student, POST status) doivent être restreintes
+// dans les controllers ou nested route groups — cf. story Admin 05.
 Route::prefix('admin/enrollment')
-    ->middleware(['tenant', 'tenant.auth'])
+    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Professeur,tenant'])
     ->group(function () {
         // Students CRUD (dossiers étudiants - different from UsersGuard /admin/students user accounts)
         Route::prefix('students')->group(function () {

@@ -1,0 +1,26 @@
+{
+    "name": "modules/portailparent",
+    "description": "Portail Parent — accès suivi scolaire pour les parents/tuteurs",
+    "authors": [
+        {
+            "name": "CRM Academic Team",
+            "email": "dev@crm-academic.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\PortailParent\\": ""
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\PortailParent\\Tests\\": "tests/"
+        }
+    }
+}

@@ -24,6 +24,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.header' => \Stancl\Tenancy\Middleware\InitializeTenancyByRequestData::class,
             'auth.api' => \App\Http\Middleware\AuthenticateApi::class,
             'tenant.auth' => \App\Http\Middleware\TenantSanctumAuth::class,
+            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
@@ -42,5 +45,18 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             return $response;
+        });
+
+        // Forbidden: user authenticated but lacks role/permission (Spatie Permission)
+        $exceptions->render(function (\Spatie\Permission\Exceptions\UnauthorizedException $e, $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'FORBIDDEN',
+                    'message' => "Vous n'avez pas les droits requis pour cette action.",
+                    'required_roles' => $e->getRequiredRoles() ?? [],
+                    'required_permissions' => $e->getRequiredPermissions() ?? [],
+                ], 403);
+            }
         });
     })->create();

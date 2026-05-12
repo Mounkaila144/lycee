@@ -12,19 +12,19 @@ class StudentFactory extends Factory
     public function definition(): array
     {
         return [
-            'matricule' => $this->faker->unique()->numerify('####-TEST-###'),
+            'matricule' => null,
             'firstname' => $this->faker->firstName(),
             'lastname' => $this->faker->lastName(),
-            'birthdate' => $this->faker->dateTimeBetween('-25 years', '-18 years'),
+            'birthdate' => $this->faker->dateTimeBetween('-18 years', '-10 years'),
             'birthplace' => $this->faker->city(),
-            'sex' => $this->faker->randomElement(['M', 'F', 'O']),
-            'nationality' => 'Niger',
-            'email' => $this->faker->unique()->safeEmail(),
+            'sex' => $this->faker->randomElement(['M', 'F']),
+            'nationality' => 'Nigérienne',
             'phone' => '+227'.$this->faker->numerify('########'),
-            'mobile' => '+227'.$this->faker->numerify('########'),
             'address' => $this->faker->address(),
-            'city' => $this->faker->city(),
-            'country' => 'Niger',
+            'city' => 'Niamey',
+            'quarter' => null,
+            'blood_group' => null,
+            'health_notes' => null,
             'photo' => null,
             'status' => 'Actif',
             'emergency_contact_name' => $this->faker->name(),
@@ -32,51 +32,41 @@ class StudentFactory extends Factory
         ];
     }
 
-    public function active(): self
+    public function withMatricule(?string $matricule = null): self
     {
         return $this->state(fn (array $attributes) => [
-            'status' => 'Actif',
+            'matricule' => $matricule ?? $this->faker->unique()->numerify('STUD-####-###'),
         ]);
     }
 
-    public function suspended(): self
+    public function active(): self
     {
-        return $this->state(fn (array $attributes) => [
-            'status' => 'Suspendu',
-        ]);
+        return $this->state(fn () => ['status' => 'Actif']);
     }
 
     public function excluded(): self
     {
-        return $this->state(fn (array $attributes) => [
-            'status' => 'Exclu',
-        ]);
+        return $this->state(fn () => ['status' => 'Exclu']);
     }
 
     public function graduated(): self
     {
-        return $this->state(fn (array $attributes) => [
-            'status' => 'Diplômé',
-        ]);
+        return $this->state(fn () => ['status' => 'Diplômé']);
     }
 
     public function male(): self
     {
-        return $this->state(fn (array $attributes) => [
-            'sex' => 'M',
-        ]);
+        return $this->state(fn () => ['sex' => 'M']);
     }
 
     public function female(): self
     {
-        return $this->state(fn (array $attributes) => [
-            'sex' => 'F',
-        ]);
+        return $this->state(fn () => ['sex' => 'F']);
     }
 
     public function withPhoto(): self
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn () => [
             'photo' => 'students/photos/'.fake()->uuid().'.jpg',
         ]);
     }

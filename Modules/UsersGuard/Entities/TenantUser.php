@@ -3,10 +3,12 @@
 namespace Modules\UsersGuard\Entities;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Modules\PortailParent\Entities\ParentModel;
 use Spatie\Permission\Traits\HasRoles;
 
 /**
@@ -157,5 +159,21 @@ class TenantUser extends Authenticatable
     protected static function newFactory()
     {
         return \Modules\UsersGuard\Database\Factories\TenantUserFactory::new();
+    }
+
+    /**
+     * Parent profile (portail Parent) — null si l'utilisateur n'a pas le rôle Parent.
+     */
+    public function parent(): HasOne
+    {
+        return $this->hasOne(ParentModel::class, 'user_id');
+    }
+
+    /**
+     * Student profile (portail Étudiant) — null si l'utilisateur n'a pas le rôle Étudiant.
+     */
+    public function student(): HasOne
+    {
+        return $this->hasOne(\Modules\Enrollment\Entities\Student::class, 'user_id');
     }
 }
