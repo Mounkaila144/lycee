@@ -18,6 +18,9 @@ class ClasseResource extends JsonResource
             'max_capacity' => $this->max_capacity,
             'classroom' => $this->classroom,
             'academic_year_id' => $this->academic_year_id,
+            'level_id' => $this->level_id,
+            'series_id' => $this->series_id,
+            'head_teacher_id' => $this->head_teacher_id,
 
             // Relations conditionnelles
             'level' => new LevelResource($this->whenLoaded('level')),
