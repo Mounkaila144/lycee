@@ -12,6 +12,7 @@ Route::prefix('admin/messages')
     ->middleware(['tenant', 'tenant.auth', 'role:Parent|Professeur|Administrator,tenant'])
     ->group(function () {
         Route::get('/', [MessagingController::class, 'index'])->name('admin.messages.index');
+        Route::get('/recipients', [MessagingController::class, 'recipients'])->name('admin.messages.recipients');
         Route::post('/', [MessagingController::class, 'store'])->name('admin.messages.store');
         Route::get('/{message}', [MessagingController::class, 'show'])->name('admin.messages.show');
     });
