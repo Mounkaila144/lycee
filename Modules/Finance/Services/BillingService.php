@@ -302,9 +302,12 @@ class BillingService
     protected function generateInvoiceNumber(AcademicYear $academicYear): string
     {
         $format = config('finance.billing.invoice_number_format', 'INV-{year}-{sequence}');
-        $year = $academicYear->start_year;
 
-        // Get next sequence number for this year
+        // AcademicYear stocke start_date (Carbon) ; on dérive l'année calendaire
+        // de début. `start_year` n'existe pas sur le modèle — utiliser cette
+        // valeur produisait des numéros « INV--00001 » non uniques.
+        $year = $academicYear->start_date?->year ?? (int) now()->year;
+
         $lastInvoice = Invoice::on('tenant')
             ->where('invoice_number', 'like', "INV-{$year}-%")
             ->orderBy('id', 'desc')
