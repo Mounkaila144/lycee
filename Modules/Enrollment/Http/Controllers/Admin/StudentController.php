@@ -116,7 +116,7 @@ class StudentController extends Controller
         return DB::connection('tenant')->transaction(function () use ($validated) {
             $student = Student::on('tenant')->create([
                 ...$validated,
-                'matricule' => null,
+                'matricule' => $this->matriculeGenerator->generateSimpleMatricule(),
                 'status' => 'Actif',
             ]);
 
