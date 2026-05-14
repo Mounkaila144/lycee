@@ -16,7 +16,19 @@ class FinanceServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerConfig();
+        $this->registerViews();
         $this->loadMigrations();
+    }
+
+    /**
+     * Register Blade views (namespace `finance::`).
+     */
+    protected function registerViews(): void
+    {
+        $this->loadViewsFrom(
+            module_path($this->moduleName, 'Resources/views'),
+            $this->moduleNameLower
+        );
     }
 
     /**

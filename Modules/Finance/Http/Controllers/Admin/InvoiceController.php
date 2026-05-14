@@ -159,6 +159,33 @@ class InvoiceController extends Controller
     }
 
     /**
+     * Generate a downloadable PDF for the invoice.
+     */
+    public function downloadPdf(int $id)
+    {
+        $invoice = Invoice::on('tenant')
+            ->with(['student', 'items.feeType', 'academicYear', 'payments'])
+            ->findOrFail($id);
+
+        $totalPaid = (float) $invoice->payments
+            ->whereNotIn('status', ['refunded', 'failed'])
+            ->sum('amount');
+        $remaining = max(0, (float) $invoice->total_amount - $totalPaid);
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('finance::invoices.pdf', [
+            'invoice' => $invoice,
+            'totalPaid' => $totalPaid,
+            'remaining' => $remaining,
+            'generatedAt' => now(),
+        ]);
+        $pdf->setPaper('a4', 'portrait');
+
+        $fileName = "facture_{$invoice->invoice_number}.pdf";
+
+        return $pdf->download($fileName);
+    }
+
+    /**
      * Update invoice
      */
     public function update(Request $request, int $id): JsonResponse

@@ -65,6 +65,9 @@ Route::prefix('admin/finance')
             Route::get('/{id}', [InvoiceController::class, 'show'])
                 ->name('admin.finance.invoices.show');
 
+            Route::get('/{id}/pdf', [InvoiceController::class, 'downloadPdf'])
+                ->name('admin.finance.invoices.pdf');
+
             // Calcul pénalités (Story Agent Comptable 04) — lecture
             Route::get('/{id}/late-fees', [InvoiceController::class, 'calculateLateFees'])
                 ->name('admin.finance.invoices.calculate-late-fees');
