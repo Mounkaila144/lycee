@@ -11,7 +11,7 @@ class RouteServiceProvider extends ServiceProvider
 
     public function map(): void
     {
-        Route::middleware(['api'])->namespace($this->namespace.'\Admin')
+        Route::prefix('api')->middleware(['api'])->namespace($this->namespace.'\Admin')
             ->group(module_path('Payroll', '/Routes/admin.php'));
     }
 }

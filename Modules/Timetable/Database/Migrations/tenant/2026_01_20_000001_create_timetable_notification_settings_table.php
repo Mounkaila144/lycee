@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -16,7 +17,7 @@ return new class extends Migration
             $table->boolean('notify_replacements')->default(true);
             $table->boolean('notify_reminders')->default(true);
             $table->enum('reminder_timing', ['1h', '2h', '24h', '48h'])->default('24h');
-            $table->json('channels')->default('["database", "mail"]');
+            $table->json('channels')->default(DB::raw("(JSON_ARRAY('database', 'mail'))"));
             $table->boolean('quiet_hours_enabled')->default(false);
             $table->time('quiet_hours_start')->nullable();
             $table->time('quiet_hours_end')->nullable();

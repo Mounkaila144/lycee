@@ -107,7 +107,7 @@ class RoleController extends Controller
         $role = Role::where('guard_name', 'tenant')->findOrFail($id);
 
         // Prevent deletion of system roles
-        $systemRoles = ['Administrator', 'Manager', 'User', 'Professeur', 'Étudiant', 'Caissier', 'Agent Comptable', 'Comptable'];
+        $systemRoles = ['Administrator', 'Manager', 'User', 'Professeur', 'Élève', 'Parent', 'Caissier', 'Comptable'];
         if (in_array($role->name, $systemRoles)) {
             return response()->json([
                 'message' => 'Impossible de supprimer un rôle système.',

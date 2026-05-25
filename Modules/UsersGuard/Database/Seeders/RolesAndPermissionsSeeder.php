@@ -90,6 +90,12 @@ class RolesAndPermissionsSeeder extends Seeder
 
             $this->command->info('  - Permissions created');
 
+            // Legacy role rename: 'Étudiant' (université) → 'Élève' (secondaire).
+            // Renaming the existing row preserves user assignments (model_has_roles).
+            Role::where('guard_name', 'tenant')
+                ->where('name', 'Étudiant')
+                ->update(['name' => 'Élève', 'display_name' => 'Élève', 'description' => 'Élève - Accès portail élève']);
+
             // Create Roles
             $adminRole = Role::updateOrCreate(
                 ['name' => 'Administrator', 'guard_name' => 'tenant'],
@@ -129,8 +135,8 @@ class RolesAndPermissionsSeeder extends Seeder
             ]);
 
             $studentRole = Role::updateOrCreate(
-                ['name' => 'Étudiant', 'guard_name' => 'tenant'],
-                ['display_name' => 'Étudiant', 'description' => 'Étudiant - Accès portail étudiant']
+                ['name' => 'Élève', 'guard_name' => 'tenant'],
+                ['display_name' => 'Élève', 'description' => 'Élève - Accès portail élève']
             );
             $studentRole->syncPermissions([
                 'view dashboard',
@@ -206,42 +212,39 @@ class RolesAndPermissionsSeeder extends Seeder
                 'view financial reports',
             ]);
 
-            // Create Accounting Clerk Role
-            $agentComptableRole = Role::updateOrCreate(
-                ['name' => 'Agent Comptable', 'guard_name' => 'tenant'],
-                ['display_name' => 'Agent Comptable', 'description' => 'Agent Comptable - Facturation et suivi impayés']
-            );
-            $agentComptableRole->syncPermissions([
-                'view dashboard',
-                'view students',
-                'view invoices',
-                'create invoices',
-                'edit invoices',
-                'manage payment plans',
-                'manage late fees',
-                'manage collection',
-                'view financial reports',
-            ]);
-
-            // Create Accountant Role
+            // Create Accountant Role (Comptable) — now also covers the former
+            // "Agent Comptable" scope (invoicing + collection management).
             $comptableRole = Role::updateOrCreate(
                 ['name' => 'Comptable', 'guard_name' => 'tenant'],
-                ['display_name' => 'Comptable', 'description' => 'Comptable - Gestion comptable et rapports financiers']
+                ['display_name' => 'Comptable', 'description' => 'Comptable - Comptabilité, facturation, recouvrement et rapports financiers']
             );
             $comptableRole->syncPermissions([
                 'view dashboard',
                 'view students',
                 'view invoices',
+                'create invoices',
+                'edit invoices',
                 'view payments',
                 'create payments',
                 'generate receipts',
                 'manage payment plans',
+                'manage late fees',
                 'manage refunds',
                 'manage bank reconciliation',
                 'view financial reports',
                 'export financial data',
                 'manage collection',
             ]);
+
+            // Merge legacy "Agent Comptable" role into "Comptable":
+            // reassign its users to Comptable, then delete the redundant role.
+            $legacyAgent = Role::where('guard_name', 'tenant')->where('name', 'Agent Comptable')->first();
+            if ($legacyAgent) {
+                foreach ($legacyAgent->users as $agentUser) {
+                    $agentUser->assignRole($comptableRole);
+                }
+                $legacyAgent->delete();
+            }
 
             $this->command->info('  - Roles created');
 

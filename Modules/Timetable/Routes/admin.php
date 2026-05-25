@@ -22,7 +22,7 @@ use Modules\Timetable\Http\Controllers\Admin\TimetableReportsController;
 // (ownership `teacher_id = auth()->id()` dans TimetableController — à compléter).
 // Mutations (création/édition créneaux, salles) restent restreintes côté Story Admin 08.
 // Protected admin routes (tenant + auth required)
-Route::prefix('admin')
+Route::prefix('api/admin')
     ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Professeur,tenant'])
     ->group(function () {
         // Gestion des salles

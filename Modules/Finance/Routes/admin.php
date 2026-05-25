@@ -39,7 +39,7 @@ Route::post('/webhooks/cinetpay', CinetPayWebhookController::class)
 // limite l'accès aux rôles finance. Fine-grained restrictions (refund, write-off)
 // à appliquer story par story — cf. DEV-AGENT-PROMPT §C / §D.4-D.6.
 Route::prefix('admin/finance')
-    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Comptable|Agent Comptable|Caissier,tenant'])
+    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Comptable|Caissier,tenant'])
     ->group(function () {
         /*
         |--------------------------------------------------------------------------
@@ -73,7 +73,7 @@ Route::prefix('admin/finance')
                 ->name('admin.finance.invoices.calculate-late-fees');
 
             // Mutations : Caissier EXCLU (Stories Agent Comptable 02 / Comptable)
-            Route::middleware('role:Administrator|Comptable|Agent Comptable,tenant')->group(function () {
+            Route::middleware('role:Administrator|Comptable,tenant')->group(function () {
                 // Story Agent Comptable 01 : Generate automated invoice
                 Route::post('/generate-automated', [InvoiceController::class, 'generateAutomated'])
                     ->name('admin.finance.invoices.generate-automated');
@@ -160,7 +160,7 @@ Route::prefix('admin/finance')
         // Discounts/Scholarships (Story 06) — Caissier EXCLU (Story Caissier 04 actions interdites)
         // Création/approval réservé Admin/Comptable/Agent Comptable.
         Route::prefix('discounts')
-            ->middleware('role:Administrator|Comptable|Agent Comptable,tenant')
+            ->middleware('role:Administrator|Comptable,tenant')
             ->group(function () {
                 Route::get('/', [PaymentController::class, 'discounts'])
                     ->name('admin.finance.discounts.index');
@@ -194,7 +194,7 @@ Route::prefix('admin/finance')
                 ->name('admin.finance.collection.statistics');
 
             // Mutations recouvrement : Caissier EXCLU
-            Route::middleware('role:Administrator|Comptable|Agent Comptable,tenant')->group(function () {
+            Route::middleware('role:Administrator|Comptable,tenant')->group(function () {
                 // Story Agent Comptable 05 : Reminders
                 Route::post('/reminders/generate', [CollectionController::class, 'generateReminders'])
                     ->name('admin.finance.collection.generate-reminders');

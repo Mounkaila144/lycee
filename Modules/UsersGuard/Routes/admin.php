@@ -54,7 +54,7 @@ Route::prefix('admin')->middleware(['tenant', 'tenant.auth'])->group(function ()
     });
 
     // Students endpoint — readable by Admin, Manager, financial roles, Professeur
-    Route::prefix('students')->middleware('role:Administrator|Manager|Caissier|Comptable|Agent Comptable|Professeur,tenant')->group(function () {
+    Route::prefix('students')->middleware('role:Administrator|Manager|Caissier|Comptable|Professeur,tenant')->group(function () {
         Route::get('/', [UserController::class, 'students']);
     });
 

@@ -99,7 +99,7 @@ class UserController extends Controller
         $status = $request->input('status');
 
         $query = TenantUser::query()
-            ->role('Étudiant')
+            ->role('Élève')
             ->active()
             ->with(['roles', 'permissions']);
 

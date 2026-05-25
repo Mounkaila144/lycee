@@ -46,13 +46,13 @@ return [
 
         // CENTRAL DATABASE CONNECTION (for super admin & tenants table)
         // In testing: uses crm_test database
-        // In production: uses crm_central database
+        // In production: uses lycee_api database
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '3306'),
-            'database' => $testDatabaseName ?? env('DB_DATABASE', 'crm_central'),
+            'database' => $testDatabaseName ?? env('DB_DATABASE', 'lycee_api'),
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
             'unix_socket' => env('DB_SOCKET', ''),

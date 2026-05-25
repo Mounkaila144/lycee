@@ -73,6 +73,14 @@ class PaymentReminder extends Model
     }
 
     /**
+     * Scope by date range (based on when the reminder was sent)
+     */
+    public function scopeDateRange($query, $startDate, $endDate)
+    {
+        return $query->whereBetween('sent_at', [$startDate, $endDate]);
+    }
+
+    /**
      * Scope for reminders due today
      */
     public function scopeDueToday($query)

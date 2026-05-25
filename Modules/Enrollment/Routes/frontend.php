@@ -146,7 +146,7 @@ Route::prefix('frontend/enrollment')
  * Routes /api/frontend/student/* protégées par role:Étudiant + ownership via auth()->user()->student.
  */
 Route::prefix('frontend/student')
-    ->middleware(['tenant', 'tenant.auth', 'role:Étudiant|Administrator,tenant'])
+    ->middleware(['tenant', 'tenant.auth', 'role:Élève|Administrator,tenant'])
     ->group(function () {
         $controller = \Modules\Enrollment\Http\Controllers\Frontend\StudentDashboardController::class;
 

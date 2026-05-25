@@ -1,25 +1,37 @@
 {
-    "permissions": {
-        "allow": [
-            "Bash",
-            "Read",
-            "Write",
-            "Edit",
-            "Glob",
-            "Grep",
-            "WebFetch",
-            "WebSearch",
-            "Task",
-            "NotebookEdit",
-            "mcp__ide__getDiagnostics",
-            "mcp__chrome-devtools__*"
-        ],
-        "deny": []
-    },
-    "mcpServers": {
-        "chrome-devtools": {
-            "command": "npx",
-            "args": ["@anthropic/claude-mcp-devtools@latest"]
-        }
+  "permissions": {
+    "allow": [
+      "Bash",
+      "PowerShell",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Task",
+      "Agent",
+      "NotebookEdit",
+      "Skill",
+      "mcp__ide__getDiagnostics",
+      "mcp__chrome-devtools__*",
+      "mcp__firefox-devtools__*",
+      "mcp__laravel-boost__*"
+    ],
+    "deny": []
+  },
+  "defaultMode": "bypassPermissions",
+  "enabledMcpjsonServers": [
+    "laravel-boost"
+  ],
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "@anthropic/claude-mcp-devtools@latest"
+      ]
     }
+  },
+  "enableAllProjectMcpServers": true
 }
