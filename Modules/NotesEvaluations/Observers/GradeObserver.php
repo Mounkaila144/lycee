@@ -67,9 +67,15 @@ class GradeObserver
             return;
         }
 
-        $moduleId = $evaluation->module_id;
+        $moduleId = $evaluation->module_id ?? null;
         $semesterId = $evaluation->semester_id;
         $studentId = $grade->student_id;
+
+        // Secondary-school evaluations are class/subject based and have no LMD
+        // module — skip the module-average recalculation in that case.
+        if (! $moduleId) {
+            return;
+        }
 
         // Recalculate module average
         $this->averageService->calculate($studentId, $moduleId, $semesterId);

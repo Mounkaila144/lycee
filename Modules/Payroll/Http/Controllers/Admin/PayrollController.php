@@ -103,7 +103,7 @@ class PayrollController extends Controller
     {
         $period = PayrollPeriod::on('tenant')->findOrFail($id);
 
-        $period = $this->payrollService->validatePayroll($period, auth()->id());
+        $period = $this->payrollService->validatePayroll($period, auth('tenant')->id());
 
         return response()->json([
             'message' => 'Paie validée avec succès',
@@ -118,7 +118,7 @@ class PayrollController extends Controller
     {
         $period = PayrollPeriod::on('tenant')->findOrFail($id);
 
-        $payslips = $this->payrollService->generatePayslips($period, auth()->id());
+        $payslips = $this->payrollService->generatePayslips($period, auth('tenant')->id());
 
         return response()->json([
             'message' => 'Bulletins de paie générés avec succès',
@@ -160,7 +160,7 @@ class PayrollController extends Controller
 
         $period = $this->payrollService->markAsPaid(
             $period,
-            auth()->id(),
+            auth('tenant')->id(),
             Carbon::parse($request->payment_date)
         );
 

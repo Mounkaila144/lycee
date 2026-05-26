@@ -38,10 +38,13 @@ class TimetableSlot extends Model
     }
 
     protected $fillable = [
+        'class_id',
+        'subject_id',
         'module_id',
         'teacher_id',
         'group_id',
         'room_id',
+        'room_name',
         'semester_id',
         'day_of_week',
         'start_time',
@@ -51,6 +54,16 @@ class TimetableSlot extends Model
         'specific_date',
         'notes',
     ];
+
+    public function classe(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\StructureAcademique\Entities\Classe::class, 'class_id');
+    }
+
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\StructureAcademique\Entities\Subject::class, 'subject_id');
+    }
 
     /**
      * Laravel 12: casts() method

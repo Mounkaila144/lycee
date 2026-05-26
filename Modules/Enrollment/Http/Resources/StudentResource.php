@@ -22,6 +22,13 @@ class StudentResource extends JsonResource
             'sex' => $this->sex,
             'nationality' => $this->nationality,
 
+            'class_id' => $this->class_id,
+            'classe' => $this->whenLoaded('classe', fn () => $this->classe ? [
+                'id' => $this->classe->id,
+                'name' => $this->classe->name,
+            ] : null),
+
+            'email' => $this->email,
             'phone' => $this->phone,
             'address' => $this->address,
             'city' => $this->city,

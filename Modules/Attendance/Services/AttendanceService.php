@@ -13,22 +13,24 @@ class AttendanceService
      * Créer une session d'appel (Story 01)
      */
     public function createSession(
-        int $timetableSlotId,
+        int $classId,
+        int $subjectId,
         Carbon $sessionDate,
         string $method = 'manual'
     ): AttendanceSession {
-        return DB::connection('tenant')->transaction(function () use ($timetableSlotId, $sessionDate, $method) {
+        return DB::connection('tenant')->transaction(function () use ($classId, $subjectId, $sessionDate, $method) {
             $session = AttendanceSession::create([
-                'timetable_slot_id' => $timetableSlotId,
+                'class_id' => $classId,
+                'subject_id' => $subjectId,
                 'session_date' => $sessionDate,
                 'start_time' => now()->format('H:i:s'),
-                'end_time' => now()->addHours(2)->format('H:i:s'),
-                'status' => 'draft',
+                'end_time' => now()->addHours(1)->format('H:i:s'),
+                'status' => 'in_progress',
                 'method' => $method,
-                'created_by' => auth()->id(),
+                'created_by' => auth('tenant')->id(),
             ]);
 
-            // Initialiser records pour tous les étudiants du groupe
+            // Initialiser les records pour tous les élèves de la classe
             $this->initializeSessionRecords($session);
 
             return $session;
@@ -36,24 +38,22 @@ class AttendanceService
     }
 
     /**
-     * Initialiser les enregistrements pour tous les étudiants
+     * Initialiser les enregistrements pour tous les élèves de la classe
      */
     private function initializeSessionRecords(AttendanceSession $session): void
     {
-        $slot = $session->timetableSlot;
-        $groupId = $slot->group_id;
-
         $students = DB::connection('tenant')
-            ->table('group_student')
-            ->where('group_id', $groupId)
-            ->pluck('student_id');
+            ->table('students')
+            ->where('class_id', $session->class_id)
+            ->whereNull('deleted_at')
+            ->pluck('id');
 
         foreach ($students as $studentId) {
             AttendanceRecord::create([
                 'attendance_session_id' => $session->id,
                 'student_id' => $studentId,
                 'status' => 'absent',
-                'recorded_by' => auth()->id(),
+                'recorded_by' => auth('tenant')->id(),
             ]);
         }
     }
@@ -101,7 +101,7 @@ class AttendanceService
 
         $record->update([
             'status' => $newStatus,
-            'modified_by' => auth()->id(),
+            'modified_by' => auth('tenant')->id(),
             'modification_reason' => $reason,
         ]);
 
@@ -117,7 +117,7 @@ class AttendanceService
 
         $session->update([
             'status' => 'completed',
-            'completed_by' => auth()->id(),
+            'completed_by' => auth('tenant')->id(),
             'completed_at' => now(),
         ]);
 
@@ -141,7 +141,7 @@ class AttendanceService
      */
     public function getAttendanceSheet(int $sessionId): array
     {
-        $session = AttendanceSession::with(['timetableSlot.module', 'timetableSlot.group'])
+        $session = AttendanceSession::with(['classe', 'subject'])
             ->findOrFail($sessionId);
 
         $records = AttendanceRecord::where('attendance_session_id', $sessionId)

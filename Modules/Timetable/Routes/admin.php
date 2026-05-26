@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Timetable\Http\Controllers\Admin\RoomController;
+use Modules\Timetable\Http\Controllers\Admin\SecondaryTimetableController;
 use Modules\Timetable\Http\Controllers\Admin\TimetableController;
 use Modules\Timetable\Http\Controllers\Admin\TimetableDuplicationController;
 use Modules\Timetable\Http\Controllers\Admin\TimetableExceptionController;
@@ -44,6 +45,11 @@ Route::prefix('api/admin')
 
         // Gestion des emplois du temps
         Route::prefix('timetable')->name('timetable.')->group(function () {
+            // Secondary (class-based) timetable slots
+            Route::get('/class-slots', [SecondaryTimetableController::class, 'index'])->name('class-slots.index');
+            Route::post('/class-slots', [SecondaryTimetableController::class, 'store'])->name('class-slots.store');
+            Route::delete('/class-slots/{id}', [SecondaryTimetableController::class, 'destroy'])->name('class-slots.destroy');
+
             // CRUD Créneaux
             Route::get('/slots', [TimetableController::class, 'index'])->name('slots.index');
             Route::post('/slots', [TimetableController::class, 'store'])->name('slots.store');

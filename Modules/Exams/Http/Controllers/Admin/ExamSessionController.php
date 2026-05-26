@@ -14,17 +14,17 @@ class ExamSessionController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $query = ExamSession::query()->with(['module', 'evaluationPeriod', 'academicYear']);
+        $query = ExamSession::on('tenant')->with(['classe', 'subject', 'creator']);
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        if ($request->filled('module_id')) {
-            $query->where('module_id', $request->module_id);
+        if ($request->filled('class_id')) {
+            $query->where('class_id', $request->class_id);
         }
 
-        $sessions = $query->latest()->paginate(20);
+        $sessions = $query->orderByDesc('exam_date')->orderBy('start_time')->paginate(50);
 
         return response()->json($sessions);
     }
@@ -32,22 +32,38 @@ class ExamSessionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'module_id' => 'required|exists:modules,id',
-            'evaluation_period_id' => 'required|exists:evaluation_periods,id',
-            'academic_year_id' => 'required|exists:academic_years,id',
+            'class_id' => 'required|integer|exists:tenant.classes,id',
+            'subject_id' => 'required|integer|exists:tenant.subjects,id',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'type' => 'required|in:normal,rattrapage,special',
+            'type' => 'nullable|in:normal,rattrapage,special',
             'exam_date' => 'required|date',
-            'start_time' => 'required',
-            'end_time' => 'required',
+            'start_time' => 'required|date_format:H:i',
+            'end_time' => 'required|date_format:H:i|after:start_time',
+            'room_name' => 'nullable|string|max:100',
             'instructions' => 'nullable|string',
-            'allowed_materials' => 'nullable|array',
         ]);
 
-        $session = $this->planningService->createExamSession($validated);
+        $duration = (strtotime($validated['end_time']) - strtotime($validated['start_time'])) / 60;
 
-        return response()->json($session->load(['module', 'evaluationPeriod']), 201);
+        $session = ExamSession::create([
+            'class_id' => $validated['class_id'],
+            'subject_id' => $validated['subject_id'],
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'type' => $validated['type'] ?? 'normal',
+            'exam_date' => $validated['exam_date'],
+            'start_time' => $validated['start_time'],
+            'end_time' => $validated['end_time'],
+            'duration_minutes' => (int) $duration,
+            'total_capacity' => 0,
+            'room_name' => $validated['room_name'] ?? null,
+            'instructions' => $validated['instructions'] ?? null,
+            'status' => 'planned',
+            'created_by' => auth('tenant')->id(),
+        ]);
+
+        return response()->json(['data' => $session->load(['classe', 'subject'])], 201);
     }
 
     public function show(ExamSession $session): JsonResponse
@@ -72,11 +88,11 @@ class ExamSessionController extends Controller
         return response()->json($session);
     }
 
-    public function destroy(ExamSession $session): JsonResponse
+    public function destroy(int $session): JsonResponse
     {
-        $session->delete();
+        ExamSession::on('tenant')->findOrFail($session)->delete();
 
-        return response()->json(null, 204);
+        return response()->json(['message' => 'Examen supprimé.']);
     }
 
     public function publish(ExamSession $session): JsonResponse

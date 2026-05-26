@@ -81,10 +81,10 @@ class JustificationService
             ->where('student_id', $justification->student_id)
             ->where('status', 'absent')
             ->update([
-            'status' => 'excused',
-            'modified_by' => auth()->id(),
-            'modification_reason' => 'Justificatif approuvé #'.$justification->id,
-        ]);
+                'status' => 'excused',
+                'modified_by' => auth()->id(),
+                'modification_reason' => 'Justificatif approuvé #'.$justification->id,
+            ]);
     }
 
     /**

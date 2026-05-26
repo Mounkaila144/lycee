@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Enrollment\Entities\Student;
-use Modules\StructureAcademique\Entities\ModuleEvaluationConfig;
 use Modules\UsersGuard\Entities\User;
 
 class Grade extends Model
@@ -61,7 +60,7 @@ class Grade extends Model
 
     public function evaluation(): BelongsTo
     {
-        return $this->belongsTo(ModuleEvaluationConfig::class, 'evaluation_id');
+        return $this->belongsTo(Evaluation::class, 'evaluation_id');
     }
 
     public function enteredByUser(): BelongsTo

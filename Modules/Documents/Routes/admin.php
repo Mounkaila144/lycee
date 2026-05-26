@@ -4,12 +4,20 @@ use Illuminate\Support\Facades\Route;
 use Modules\Documents\Http\Controllers\Admin\CardController;
 use Modules\Documents\Http\Controllers\Admin\CertificateController;
 use Modules\Documents\Http\Controllers\Admin\DiplomaController;
+use Modules\Documents\Http\Controllers\Admin\SecondaryCertificateController;
 use Modules\Documents\Http\Controllers\Admin\TranscriptController;
 use Modules\Documents\Http\Controllers\Admin\VerificationController;
 
 // RBAC durcissement (Stories Admin 10, Manager 08) : Admin, Manager et autres rôles
 // finance accèdent (les Profs/Étudiants ont leurs propres endpoints frontend).
 Route::prefix('admin/documents')->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager,tenant'])->group(function () {
+
+    // Secondary certificates (certificat de scolarité / attestation d'inscription)
+    Route::prefix('school-certificates')->controller(SecondaryCertificateController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::get('/{id}/download', 'download');
+    });
 
     // Epic 1: Transcripts (Stories 01-05)
     Route::prefix('transcripts')->controller(TranscriptController::class)->group(function () {

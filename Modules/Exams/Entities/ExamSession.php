@@ -19,6 +19,9 @@ class ExamSession extends Model
     protected $connection = 'tenant';
 
     protected $fillable = [
+        'class_id',
+        'subject_id',
+        'room_name',
         'module_id',
         'evaluation_period_id',
         'academic_year_id',
@@ -50,6 +53,16 @@ class ExamSession extends Model
     public function module(): BelongsTo
     {
         return $this->belongsTo(AcademicModule::class, 'module_id');
+    }
+
+    public function classe(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\StructureAcademique\Entities\Classe::class, 'class_id');
+    }
+
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\StructureAcademique\Entities\Subject::class, 'subject_id');
     }
 
     public function evaluationPeriod(): BelongsTo

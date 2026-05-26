@@ -9,6 +9,7 @@ use Modules\NotesEvaluations\Http\Controllers\Admin\CorrectionApprovalController
 use Modules\NotesEvaluations\Http\Controllers\Admin\DeliberationController;
 use Modules\NotesEvaluations\Http\Controllers\Admin\EctsController;
 use Modules\NotesEvaluations\Http\Controllers\Admin\EliminatoryController;
+use Modules\NotesEvaluations\Http\Controllers\Admin\EvaluationController;
 use Modules\NotesEvaluations\Http\Controllers\Admin\FinalResultsController;
 use Modules\NotesEvaluations\Http\Controllers\Admin\GradeValidationController;
 use Modules\NotesEvaluations\Http\Controllers\Admin\ModuleAverageController;
@@ -334,5 +335,23 @@ Route::prefix('api/admin')
 
             // Academic Year Analytics
             Route::get('/academic-years/{academicYear}/historical-comparison', [AnalyticsController::class, 'historicalComparison']);
+        });
+    });
+
+/*
+|--------------------------------------------------------------------------
+| Secondary grade entry (Évaluations) — Admin, Manager AND Professeur.
+| A grade-entry sheet per (class + subject + period) with /20 scores.
+|--------------------------------------------------------------------------
+*/
+Route::prefix('api/admin')
+    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Professeur,tenant'])
+    ->group(function () {
+        Route::prefix('evaluations')->group(function () {
+            Route::get('/', [EvaluationController::class, 'index']);
+            Route::post('/', [EvaluationController::class, 'store']);
+            Route::get('/{evaluation}/grades', [EvaluationController::class, 'gradeSheet']);
+            Route::post('/{evaluation}/grades', [EvaluationController::class, 'saveGrades']);
+            Route::delete('/{evaluation}', [EvaluationController::class, 'destroy']);
         });
     });

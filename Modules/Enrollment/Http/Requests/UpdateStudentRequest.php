@@ -35,6 +35,7 @@ class UpdateStudentRequest extends FormRequest
             // Personal information
             // IMMUTABLE FIELDS: firstname, lastname, birthdate, matricule cannot be updated
             // Only modifiable fields are listed below
+            'class_id' => ['nullable', 'integer', 'exists:tenant.classes,id'],
             'birthplace' => ['nullable', 'string', 'max:255'],
             'sex' => ['sometimes', Rule::in(['M', 'F', 'O'])],
             'nationality' => ['sometimes', 'string', 'max:255'],

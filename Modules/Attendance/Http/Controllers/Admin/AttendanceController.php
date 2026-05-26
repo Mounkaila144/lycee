@@ -22,18 +22,20 @@ class AttendanceController extends Controller
     public function createSession(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'timetable_slot_id' => 'required|integer|exists:tenant.timetable_slots,id',
+            'class_id' => 'required|integer|exists:tenant.classes,id',
+            'subject_id' => 'required|integer|exists:tenant.subjects,id',
             'session_date' => 'required|date',
             'method' => ['nullable', 'string', Rule::in(['manual', 'mobile', 'qr_code', 'imported'])],
         ]);
 
         $session = $this->attendanceService->createSession(
-            $validated['timetable_slot_id'],
+            $validated['class_id'],
+            $validated['subject_id'],
             Carbon::parse($validated['session_date']),
             $validated['method'] ?? 'manual'
         );
 
-        return response()->json($session->load(['timetableSlot', 'records.student']), 201);
+        return response()->json($session->load(['classe', 'subject', 'records.student']), 201);
     }
 
     /**
@@ -43,7 +45,7 @@ class AttendanceController extends Controller
     {
         $validated = $request->validate([
             'session_id' => 'required|integer|exists:tenant.attendance_sessions,id',
-            'student_id' => 'required|integer|exists:tenant.users,id',
+            'student_id' => 'required|integer|exists:tenant.students,id',
             'status' => ['required', 'string', Rule::in(['present', 'absent', 'late', 'excused'])],
             'arrival_time' => 'nullable|date_format:H:i',
         ]);
@@ -128,10 +130,10 @@ class AttendanceController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = AttendanceSession::with(['timetableSlot.module', 'creator']);
+        $query = AttendanceSession::with(['classe', 'subject', 'creator']);
 
-        if ($request->has('semester_id')) {
-            $query->whereHas('timetableSlot', fn ($q) => $q->where('semester_id', $request->semester_id));
+        if ($request->has('class_id')) {
+            $query->where('class_id', $request->class_id);
         }
 
         if ($request->has('status')) {

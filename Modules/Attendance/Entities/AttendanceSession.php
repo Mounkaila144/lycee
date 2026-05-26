@@ -16,6 +16,8 @@ class AttendanceSession extends Model
 
     protected $fillable = [
         'timetable_slot_id',
+        'class_id',
+        'subject_id',
         'session_date',
         'start_time',
         'end_time',
@@ -38,6 +40,16 @@ class AttendanceSession extends Model
     public function timetableSlot()
     {
         return $this->belongsTo(TimetableSlot::class);
+    }
+
+    public function classe()
+    {
+        return $this->belongsTo(\Modules\StructureAcademique\Entities\Classe::class, 'class_id');
+    }
+
+    public function subject()
+    {
+        return $this->belongsTo(\Modules\StructureAcademique\Entities\Subject::class, 'subject_id');
     }
 
     public function creator()

@@ -133,7 +133,7 @@ class SocialDeclarationController extends Controller
 
         $declaration = $this->declarationService->validateDeclaration(
             $declaration,
-            auth()->id(),
+            auth('tenant')->id(),
             $request->input('notes')
         );
 

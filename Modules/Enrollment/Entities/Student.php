@@ -40,6 +40,7 @@ class Student extends Model
 
     protected $fillable = [
         'user_id',
+        'class_id',
         'matricule',
         'firstname',
         'lastname',
@@ -72,6 +73,11 @@ class Student extends Model
     /**
      * Relations
      */
+    public function classe(): BelongsTo
+    {
+        return $this->belongsTo(\Modules\StructureAcademique\Entities\Classe::class, 'class_id');
+    }
+
     public function documents(): HasMany
     {
         return $this->hasMany(StudentDocument::class);
