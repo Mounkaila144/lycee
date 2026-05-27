@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Gate;
 use Modules\Enrollment\Entities\Student;
+use Modules\Enrollment\Services\StudentDataService;
 
 /**
  * Données rattachées à un enfant via le portail Parent.
@@ -22,84 +23,56 @@ use Modules\Enrollment\Entities\Student;
  */
 class ChildDataController extends Controller
 {
-    /**
-     * Story Parent 02 — Notes de l'enfant (uniquement notes publiées).
-     */
-    public function grades(Request $request, Student $student): JsonResponse
-    {
-        $this->ensure($request, 'viewGrades', $student);
+    public function __construct(private readonly StudentDataService $studentData) {}
 
-        return response()->json([
-            'data' => [],
-            'meta' => [
-                'student_id' => $student->id,
-                'note' => 'Scaffold — agrégation grades à câbler avec NotesEvaluations (filtre is_published=true).',
-            ],
-        ]);
+    /**
+     * Story Parent 02 — Notes de l'enfant.
+     */
+    public function grades(Request $request, int $student): JsonResponse
+    {
+        $child = $this->resolveChild($request, 'viewGrades', $student);
+
+        return response()->json(['data' => $this->studentData->grades($child)]);
     }
 
     /**
      * Story Parent 03 — Présences/absences de l'enfant.
      */
-    public function attendance(Request $request, Student $student): JsonResponse
+    public function attendance(Request $request, int $student): JsonResponse
     {
-        $this->ensure($request, 'viewAttendance', $student);
+        $child = $this->resolveChild($request, 'viewAttendance', $student);
 
-        return response()->json([
-            'data' => [],
-            'meta' => [
-                'student_id' => $student->id,
-                'note' => 'Scaffold — agrégation attendance à câbler avec Attendance.',
-            ],
-        ]);
+        return response()->json(['data' => $this->studentData->attendance($child)]);
     }
 
     /**
      * Story Parent 05 — Factures de l'enfant.
      */
-    public function invoices(Request $request, Student $student): JsonResponse
+    public function invoices(Request $request, int $student): JsonResponse
     {
-        $this->ensure($request, 'viewInvoices', $student);
+        $child = $this->resolveChild($request, 'viewInvoices', $student);
 
-        return response()->json([
-            'data' => [],
-            'meta' => [
-                'student_id' => $student->id,
-                'note' => 'Scaffold — agrégation invoices à câbler avec Finance.',
-            ],
-        ]);
+        return response()->json(['data' => $this->studentData->invoices($child)]);
     }
 
     /**
      * Story Parent 04 — Emploi du temps de l'enfant.
      */
-    public function timetable(Request $request, Student $student): JsonResponse
+    public function timetable(Request $request, int $student): JsonResponse
     {
-        $this->ensure($request, 'viewTimetable', $student);
+        $child = $this->resolveChild($request, 'viewTimetable', $student);
 
-        return response()->json([
-            'data' => [],
-            'meta' => [
-                'student_id' => $student->id,
-                'note' => 'Scaffold — agrégation timetable à câbler avec Timetable.',
-            ],
-        ]);
+        return response()->json(['data' => $this->studentData->timetable($child)]);
     }
 
     /**
      * Story Parent 09 — Documents disponibles de l'enfant.
      */
-    public function documents(Request $request, Student $student): JsonResponse
+    public function documents(Request $request, int $student): JsonResponse
     {
-        $this->ensure($request, 'viewDocuments', $student);
+        $child = $this->resolveChild($request, 'viewDocuments', $student);
 
-        return response()->json([
-            'data' => [],
-            'meta' => [
-                'student_id' => $student->id,
-                'note' => 'Scaffold — agrégation documents à câbler avec Documents (bulletins, attestations, certificats).',
-            ],
-        ]);
+        return response()->json(['data' => $this->studentData->documents($child)]);
     }
 
     /**
@@ -122,12 +95,18 @@ class ChildDataController extends Controller
     }
 
     /**
-     * Vérifie l'ownership via Gate::forUser() (TenantSanctumAuth ne pose pas Auth::user()).
+     * Load the child on the tenant connection (route-model-binding runs before
+     * tenancy init, so we accept an int and load manually) and verify ownership
+     * via Gate::forUser() (TenantSanctumAuth ne pose pas Auth::user()).
      */
-    private function ensure(Request $request, string $ability, Student $student): void
+    private function resolveChild(Request $request, string $ability, int $studentId): Student
     {
+        $student = Student::on('tenant')->findOrFail($studentId);
+
         if (! Gate::forUser($request->user())->allows($ability, $student)) {
             throw new AuthorizationException('This action is unauthorized.');
         }
+
+        return $student;
     }
 }

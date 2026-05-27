@@ -206,6 +206,62 @@ class CollectionController extends Controller
     /**
      * Story 15: Create payment plan
      */
+    /**
+     * List payment plans (installment schedules), grouped by invoice.
+     * Optional filters: invoice_id, student_id, status.
+     */
+    public function paymentPlans(Request $request): JsonResponse
+    {
+        $query = \Modules\Finance\Entities\PaymentSchedule::on('tenant')
+            ->with(['invoice.student'])
+            ->orderByDesc('invoice_id')
+            ->orderBy('installment_number');
+
+        if ($request->filled('invoice_id')) {
+            $query->where('invoice_id', $request->input('invoice_id'));
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        if ($request->filled('student_id')) {
+            $studentId = (int) $request->input('student_id');
+            $query->whereHas('invoice', fn ($q) => $q->where('student_id', $studentId));
+        }
+
+        $plans = $query->get()
+            ->groupBy('invoice_id')
+            ->map(function ($schedules) {
+                $invoice = $schedules->first()->invoice;
+                $student = $invoice?->student;
+
+                return [
+                    'invoice_id' => $invoice?->id,
+                    'invoice_number' => $invoice?->invoice_number,
+                    'student' => $student ? [
+                        'id' => $student->id,
+                        'matricule' => $student->matricule,
+                        'name' => trim($student->lastname.' '.$student->firstname),
+                    ] : null,
+                    'installments_count' => $schedules->count(),
+                    'total_amount' => round($schedules->sum('amount'), 2),
+                    'total_paid' => round($schedules->sum('paid_amount'), 2),
+                    'installments' => $schedules->map(fn ($s) => [
+                        'id' => $s->id,
+                        'installment_number' => $s->installment_number,
+                        'due_date' => optional($s->due_date)->format('Y-m-d'),
+                        'amount' => (float) $s->amount,
+                        'paid_amount' => (float) $s->paid_amount,
+                        'balance' => $s->balance,
+                        'status' => $s->status,
+                    ])->values(),
+                ];
+            })->values();
+
+        return response()->json(['data' => $plans]);
+    }
+
     public function createPaymentPlan(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [

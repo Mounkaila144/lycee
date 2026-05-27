@@ -2,6 +2,7 @@
 
 namespace Modules\Finance\Http\Controllers\Admin;
 
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,6 +13,7 @@ use Modules\Finance\Entities\Invoice;
 use Modules\Finance\Entities\Payment;
 use Modules\Finance\Services\BillingService;
 use Modules\Finance\Services\PaymentService;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Payment Controller
@@ -178,6 +180,88 @@ class PaymentController extends Controller
         $receiptData = $this->paymentService->generateReceiptData($payment);
 
         return response()->json(['data' => $receiptData]);
+    }
+
+    /**
+     * Download the payment receipt as an inline PDF.
+     */
+    public function downloadReceipt(int $id): Response
+    {
+        $payment = Payment::on('tenant')
+            ->with(['invoice', 'student', 'recordedBy'])
+            ->findOrFail($id);
+
+        $data = $this->paymentService->generateReceiptData($payment);
+
+        $pdf = Pdf::loadHTML($this->renderReceiptHtml($data));
+
+        return $pdf->download(($data['receipt_number'] ?: 'recu').'.pdf');
+    }
+
+    /**
+     * @param  array<string, mixed>  $d
+     */
+    private function renderReceiptHtml(array $d): string
+    {
+        $student = $d['student'] ?? [];
+        $name = e(trim(($student['lastname'] ?? '').' '.($student['firstname'] ?? '')));
+        $matricule = e($student['matricule'] ?? '');
+        $receipt = e($d['receipt_number'] ?? '');
+        $date = e($d['payment_date'] ?? '');
+        $amount = number_format((float) ($d['amount'] ?? 0), 0, ',', ' ');
+        $words = e($d['amount_words'] ?? '');
+        $method = e($d['payment_method'] ?? '');
+        $reference = e($d['reference_number'] ?? '—');
+        $invoiceNumber = e($d['invoice_number'] ?? '');
+        $invoiceTotal = number_format((float) ($d['invoice_total'] ?? 0), 0, ',', ' ');
+        $invoicePaid = number_format((float) ($d['invoice_paid'] ?? 0), 0, ',', ' ');
+        $invoiceBalance = number_format((float) ($d['invoice_balance'] ?? 0), 0, ',', ' ');
+        $recordedBy = e($d['recorded_by'] ?? '');
+
+        return <<<HTML
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+body{font-family:DejaVu Sans,sans-serif;color:#1a1a1a;padding:40px;font-size:13px;}
+.header{text-align:center;margin-bottom:24px;}
+.header h2{margin:2px;font-size:15px;}
+.header .sub{font-size:11px;color:#555;}
+h1{text-align:center;font-size:20px;margin:24px 0;}
+.row{margin:7px 0;}
+.label{font-weight:bold;display:inline-block;width:170px;}
+.amount{font-size:18px;font-weight:bold;color:#1565c0;}
+.box{border:1px solid #ccc;border-radius:4px;padding:12px 16px;margin-top:14px;}
+.footer{margin-top:50px;display:flex;justify-content:space-between;}
+.meta{margin-top:40px;font-size:11px;color:#666;}
+</style></head><body>
+<div class="header">
+  <h2>RÉPUBLIQUE DU NIGER</h2>
+  <div class="sub">Établissement scolaire — Service de la comptabilité</div>
+</div>
+<h1>Reçu de paiement</h1>
+<div class="row"><span class="label">N° de reçu :</span> {$receipt}</div>
+<div class="row"><span class="label">Date :</span> {$date}</div>
+<div class="box">
+  <div class="row"><span class="label">Élève :</span> {$name}</div>
+  <div class="row"><span class="label">Matricule :</span> {$matricule}</div>
+  <div class="row"><span class="label">Facture :</span> {$invoiceNumber}</div>
+</div>
+<div class="box">
+  <div class="row"><span class="label">Montant payé :</span> <span class="amount">{$amount} FCFA</span></div>
+  <div class="row"><span class="label">Arrêté à :</span> {$words}</div>
+  <div class="row"><span class="label">Mode de paiement :</span> {$method}</div>
+  <div class="row"><span class="label">Référence :</span> {$reference}</div>
+</div>
+<div class="box">
+  <div class="row"><span class="label">Total facture :</span> {$invoiceTotal} FCFA</div>
+  <div class="row"><span class="label">Total payé :</span> {$invoicePaid} FCFA</div>
+  <div class="row"><span class="label">Solde restant :</span> {$invoiceBalance} FCFA</div>
+</div>
+<div class="footer">
+  <div>Encaissé par : {$recordedBy}</div>
+  <div>Signature / Cachet</div>
+</div>
+<div class="meta">Ce reçu fait foi du paiement enregistré.</div>
+</body></html>
+HTML;
     }
 
     /**

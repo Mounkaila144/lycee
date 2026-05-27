@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\Documents\Http\Controllers\Admin\CardController;
 use Modules\Documents\Http\Controllers\Admin\CertificateController;
 use Modules\Documents\Http\Controllers\Admin\DiplomaController;
+use Modules\Documents\Http\Controllers\Admin\SecondaryCardController;
 use Modules\Documents\Http\Controllers\Admin\SecondaryCertificateController;
 use Modules\Documents\Http\Controllers\Admin\TranscriptController;
 use Modules\Documents\Http\Controllers\Admin\VerificationController;
@@ -64,6 +65,13 @@ Route::prefix('admin/documents')->middleware(['tenant', 'tenant.auth', 'role:Adm
         Route::patch('/{card}/access-permissions', 'updateAccessPermissions');
         Route::post('/{card}/suspend', 'suspendCard');
         Route::post('/{card}/activate', 'activateCard');
+    });
+
+    // Secondary student cards (carte scolaire) — inline PDF, no template needed.
+    Route::prefix('secondary-cards')->controller(SecondaryCardController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::get('/{id}/download', 'download');
     });
 
     // Epic 5: Verification & Archive (Stories 21-24)

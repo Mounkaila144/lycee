@@ -282,13 +282,25 @@ class SubjectClassCoefficientController extends Controller
      */
     private function hasGrades(SubjectClassCoefficient $coefficient): bool
     {
-        if (! \Schema::connection('tenant')->hasTable('grades')) {
+        $schema = \Schema::connection('tenant');
+
+        if (! $schema->hasTable('grades') || ! $schema->hasTable('evaluations')) {
             return false;
         }
 
+        // In the secondary schema the subject lives on the evaluation (and the
+        // level/series on the evaluation's class), not directly on the grade.
         return \DB::connection('tenant')
             ->table('grades')
-            ->where('subject_id', $coefficient->subject_id)
+            ->join('evaluations', 'grades.evaluation_id', '=', 'evaluations.id')
+            ->join('classes', 'evaluations.class_id', '=', 'classes.id')
+            ->where('evaluations.subject_id', $coefficient->subject_id)
+            ->where('classes.level_id', $coefficient->level_id)
+            ->when(
+                $coefficient->series_id !== null,
+                fn ($query) => $query->where('classes.series_id', $coefficient->series_id),
+            )
+            ->whereNull('grades.deleted_at')
             ->exists();
     }
 }

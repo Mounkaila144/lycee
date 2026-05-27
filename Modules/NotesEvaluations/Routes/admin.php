@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\NotesEvaluations\Http\Controllers\Admin\AbsenceReviewController;
 use Modules\NotesEvaluations\Http\Controllers\Admin\AnalyticsController;
+use Modules\NotesEvaluations\Http\Controllers\Admin\BulletinController;
 use Modules\NotesEvaluations\Http\Controllers\Admin\CoefficientController;
 use Modules\NotesEvaluations\Http\Controllers\Admin\CompensationController;
 use Modules\NotesEvaluations\Http\Controllers\Admin\CorrectionApprovalController;
@@ -353,5 +354,11 @@ Route::prefix('api/admin')
             Route::get('/{evaluation}/grades', [EvaluationController::class, 'gradeSheet']);
             Route::post('/{evaluation}/grades', [EvaluationController::class, 'saveGrades']);
             Route::delete('/{evaluation}', [EvaluationController::class, 'destroy']);
+        });
+
+        // Bulletins trimestriels (report cards) by class + period.
+        Route::prefix('bulletins')->group(function () {
+            Route::get('/', [BulletinController::class, 'index']);
+            Route::get('/{studentId}/pdf', [BulletinController::class, 'studentPdf']);
         });
     });

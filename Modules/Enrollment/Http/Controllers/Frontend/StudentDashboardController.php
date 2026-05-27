@@ -6,6 +6,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Enrollment\Http\Resources\StudentResource;
+use Modules\Enrollment\Services\StudentDataService;
 
 /**
  * Stories Étudiant 01 (Home Portail) + données rattachées (profil, KPIs basiques).
@@ -15,6 +16,8 @@ use Modules\Enrollment\Http\Resources\StudentResource;
  */
 class StudentDashboardController extends Controller
 {
+    public function __construct(private readonly StudentDataService $studentData) {}
+
     /**
      * Profil Student du user connecté.
      */
@@ -50,15 +53,10 @@ class StudentDashboardController extends Controller
         }
 
         return response()->json([
-            'data' => [
-                'student' => new StudentResource($student),
-                'moyenne_actuelle' => null,
-                'next_class' => null,
-                'recent_absences_count' => 0,
-                'pending_invoices_count' => 0,
-                'available_documents_count' => 0,
-                'message' => 'Agrégations Notes/Attendance/Finance à implémenter (Stories Étudiant 02, 04, 05, 06).',
-            ],
+            'data' => array_merge(
+                ['student' => new StudentResource($student)],
+                $this->studentData->dashboard($student),
+            ),
         ]);
     }
 
@@ -75,13 +73,7 @@ class StudentDashboardController extends Controller
             return $student;
         }
 
-        return response()->json([
-            'data' => [],
-            'meta' => [
-                'student_id' => $student->id,
-                'note' => 'Endpoint scaffold — agrégation des notes à câbler avec NotesEvaluations.',
-            ],
-        ]);
+        return response()->json(['data' => $this->studentData->grades($student)]);
     }
 
     /**
@@ -94,13 +86,7 @@ class StudentDashboardController extends Controller
             return $student;
         }
 
-        return response()->json([
-            'data' => [],
-            'meta' => [
-                'student_id' => $student->id,
-                'note' => 'Endpoint scaffold — agrégation présences à câbler avec Attendance.',
-            ],
-        ]);
+        return response()->json(['data' => $this->studentData->attendance($student)]);
     }
 
     /**
@@ -113,13 +99,7 @@ class StudentDashboardController extends Controller
             return $student;
         }
 
-        return response()->json([
-            'data' => [],
-            'meta' => [
-                'student_id' => $student->id,
-                'note' => 'Endpoint scaffold — agrégation factures à câbler avec Finance.',
-            ],
-        ]);
+        return response()->json(['data' => $this->studentData->invoices($student)]);
     }
 
     /**
@@ -132,13 +112,7 @@ class StudentDashboardController extends Controller
             return $student;
         }
 
-        return response()->json([
-            'data' => [],
-            'meta' => [
-                'student_id' => $student->id,
-                'note' => 'Endpoint scaffold — agrégation documents à câbler avec Documents.',
-            ],
-        ]);
+        return response()->json(['data' => $this->studentData->documents($student)]);
     }
 
     /**
@@ -151,13 +125,7 @@ class StudentDashboardController extends Controller
             return $student;
         }
 
-        return response()->json([
-            'data' => [],
-            'meta' => [
-                'student_id' => $student->id,
-                'note' => 'Endpoint scaffold — agrégation timetable à câbler avec Timetable.',
-            ],
-        ]);
+        return response()->json(['data' => $this->studentData->timetable($student)]);
     }
 
     /**
@@ -170,15 +138,21 @@ class StudentDashboardController extends Controller
             return $student;
         }
 
+        $card = \Modules\Documents\Entities\Document::on('tenant')
+            ->where('student_id', $student->id)
+            ->where('document_type', 'student_card')
+            ->orderByDesc('issue_date')
+            ->orderByDesc('id')
+            ->first();
+
         return response()->json([
             'data' => [
                 'student_id' => $student->id,
                 'matricule' => $student->matricule,
-                'card_status' => 'not_issued',
-                'pdf_url' => null,
-            ],
-            'meta' => [
-                'note' => 'Endpoint scaffold — génération PDF à câbler avec Documents/CardController.',
+                'card_status' => $card ? 'issued' : 'not_issued',
+                'card_number' => $card?->document_number,
+                'issue_date' => optional($card?->issue_date)->format('Y-m-d'),
+                'verification_code' => $card?->verification_code,
             ],
         ]);
     }

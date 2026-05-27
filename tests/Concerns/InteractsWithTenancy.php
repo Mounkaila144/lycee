@@ -168,6 +168,35 @@ trait InteractsWithTenancy
             '--force' => true,
         ]);
 
+        // STEP 12: Secondary grades + evaluations tables (NotesEvaluations).
+        // Only the two secondary migrations are needed (grades, then evaluations
+        // which re-points the FK); the LMD migrations are skipped on purpose.
+        foreach ([
+            '/Modules/NotesEvaluations/Database/Migrations/tenant/2026_01_19_000001_create_grades_table.php',
+            '/Modules/NotesEvaluations/Database/Migrations/tenant/2026_01_19_000003_create_grade_history_table.php',
+            '/Modules/NotesEvaluations/Database/Migrations/tenant/2026_05_25_000002_create_evaluations_table.php',
+        ] as $migrationFile) {
+            Artisan::call('migrate', [
+                '--database' => 'mysql',
+                '--path' => $basePath.$migrationFile,
+                '--realpath' => true,
+                '--force' => true,
+            ]);
+        }
+
+        // STEP 13: Documents tables (templates + documents) for certificate/card tests.
+        foreach ([
+            '/Modules/Documents/Database/Migrations/tenant/2026_01_20_000001_create_document_templates_table.php',
+            '/Modules/Documents/Database/Migrations/tenant/2026_01_20_000002_create_documents_table.php',
+        ] as $migrationFile) {
+            Artisan::call('migrate', [
+                '--database' => 'mysql',
+                '--path' => $basePath.$migrationFile,
+                '--realpath' => true,
+                '--force' => true,
+            ]);
+        }
+
         self::$migrationsRan = true;
     }
 

@@ -61,16 +61,21 @@ class ParentChildrenController extends Controller
 
     /**
      * Détail d'un enfant (avec ownership ChildPolicy::view).
+     *
+     * ⚠️ Route-model-binding cassé avant l'init tenancy (SubstituteBindings) :
+     * on accepte un int et on charge manuellement sur la connexion tenant.
      */
-    public function show(Request $request, Student $student): ChildResource
+    public function show(Request $request, int $student): ChildResource
     {
+        $child = Student::on('tenant')->findOrFail($student);
+
         // Note : on n'utilise pas $this->authorize() car TenantSanctumAuth ne définit
         // pas Auth::user() sur le guard par défaut (il utilise Auth::guard('tenant')).
         // Gate::forUser() permet de cibler explicitement l'utilisateur tenant connecté.
-        if (! Gate::forUser($request->user())->allows('view', $student)) {
+        if (! Gate::forUser($request->user())->allows('view', $child)) {
             throw new AuthorizationException('This action is unauthorized.');
         }
 
-        return new ChildResource($student);
+        return new ChildResource($child);
     }
 }

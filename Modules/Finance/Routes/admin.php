@@ -119,6 +119,10 @@ Route::prefix('admin/finance')
             Route::get('/{id}/receipt', [PaymentController::class, 'getReceipt'])
                 ->name('admin.finance.payments.receipt');
 
+            // Receipt as inline PDF
+            Route::get('/{id}/receipt/pdf', [PaymentController::class, 'downloadReceipt'])
+                ->name('admin.finance.payments.receipt-pdf');
+
             // Story 11: Process refund — RESTREINT (Caissier EXCLU)
             // Stories Caissier 02 / Comptable 04 : seuls Administrator et Comptable
             // peuvent rembourser. Agent Comptable et Caissier sont exclus.
@@ -210,6 +214,8 @@ Route::prefix('admin/finance')
                     ->name('admin.finance.collection.auto-block');
 
                 // Story Agent Comptable 03 : Payment plans (échéanciers)
+                Route::get('/payment-plans', [CollectionController::class, 'paymentPlans'])
+                    ->name('admin.finance.collection.payment-plans');
                 Route::post('/payment-plans', [CollectionController::class, 'createPaymentPlan'])
                     ->name('admin.finance.collection.create-payment-plan');
             });
