@@ -99,13 +99,11 @@ class SecondaryCertificateController extends Controller
         $number = e($document->document_number);
         $code = e($document->verification_code);
         $date = optional($document->issue_date)->format('d/m/Y') ?? now()->format('d/m/Y');
+        $header = \Modules\Settings\Entities\TenantSetting::schoolHeaderHtml();
 
         return <<<HTML
 <!DOCTYPE html><html><head><meta charset="utf-8"><style>
 body{font-family:DejaVu Sans,sans-serif;color:#1a1a1a;padding:40px;font-size:14px;}
-.header{text-align:center;margin-bottom:30px;}
-.header h2{margin:2px;font-size:15px;}
-.header .sub{font-size:12px;color:#555;}
 h1{text-align:center;font-size:20px;text-decoration:underline;margin:30px 0;}
 .body p{line-height:1.9;text-align:justify;}
 .row{margin:6px 0;}
@@ -113,11 +111,7 @@ h1{text-align:center;font-size:20px;text-decoration:underline;margin:30px 0;}
 .footer{margin-top:60px;display:flex;justify-content:space-between;}
 .meta{margin-top:50px;font-size:11px;color:#666;border-top:1px solid #ccc;padding-top:8px;}
 </style></head><body>
-<div class="header">
-  <h2>RÉPUBLIQUE DU NIGER</h2>
-  <div class="sub">Ministère de l'Éducation Nationale</div>
-  <div class="sub">Établissement scolaire</div>
-</div>
+{$header}
 <h1>{$typeLabel}</h1>
 <div class="body">
   <p>Le Chef d'établissement soussigné certifie que l'élève dont les informations suivent est régulièrement inscrit(e) dans l'établissement pour l'année scolaire en cours :</p>

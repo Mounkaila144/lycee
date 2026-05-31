@@ -40,12 +40,21 @@
     </style>
 </head>
 <body>
+    @php($school = $school ?? [])
     <div class="header">
-        <div>
-            <h1>FACTURE</h1>
-            <div><strong>N° :</strong> {{ $invoice->invoice_number }}</div>
-            <div><strong>Date :</strong> {{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d/m/Y') }}</div>
-            <div><strong>Échéance :</strong> {{ \Carbon\Carbon::parse($invoice->due_date)->format('d/m/Y') }}</div>
+        <div style="display:flex;align-items:flex-start;">
+            @if(!empty($school['logo']))
+                <img src="{{ $school['logo'] }}" alt="Logo" style="max-height:64px;max-width:120px;margin-right:14px;">
+            @endif
+            <div>
+                <h1>FACTURE</h1>
+                @if(!empty($school['name']))
+                    <div style="font-weight:bold;color:#1976d2;font-size:13px;">{{ $school['name'] }}</div>
+                @endif
+                <div><strong>N° :</strong> {{ $invoice->invoice_number }}</div>
+                <div><strong>Date :</strong> {{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d/m/Y') }}</div>
+                <div><strong>Échéance :</strong> {{ \Carbon\Carbon::parse($invoice->due_date)->format('d/m/Y') }}</div>
+            </div>
         </div>
         <div class="meta">
             <span class="status {{ $invoice->status }}">{{ strtoupper($invoice->status) }}</span>
@@ -59,8 +68,14 @@
         <tr>
             <td>
                 <h3>Émetteur</h3>
-                <p><strong>{{ config('app.name', 'Établissement') }}</strong></p>
-                <p>Système de gestion scolaire</p>
+                <p><strong>{{ $school['name'] ?? config('app.name', 'Établissement') }}</strong></p>
+                @if(!empty($school['address']))<p>{{ $school['address'] }}{{ !empty($school['city']) ? ', '.$school['city'] : '' }}</p>@endif
+                @if(!empty($school['bp']))<p>BP : {{ $school['bp'] }}</p>@endif
+                @if(!empty($school['phone']))<p>Tél : {{ $school['phone'] }}</p>@endif
+                @if(!empty($school['email']))<p>{{ $school['email'] }}</p>@endif
+                @if(!empty($school['nif']))<p>NIF : {{ $school['nif'] }}</p>@endif
+                @if(!empty($school['rccm']))<p>RCCM : {{ $school['rccm'] }}</p>@endif
+                @if(empty($school['name']) && empty($school['address']))<p>Système de gestion scolaire</p>@endif
             </td>
             <td>
                 <h3>Étudiant</h3>
@@ -151,7 +166,7 @@
     @endif
 
     <div class="footer">
-        Facture générée le {{ $generatedAt->format('d/m/Y à H:i') }} — {{ config('app.name') }}
+        Facture générée le {{ $generatedAt->format('d/m/Y à H:i') }} — {{ $school['name'] ?? config('app.name') }}
     </div>
 </body>
 </html>

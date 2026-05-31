@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Enrollment\Http\Controllers\Admin\ClassReenrollmentController;
 use Modules\Enrollment\Http\Controllers\Admin\EnrollmentController;
 use Modules\Enrollment\Http\Controllers\Admin\EnrollmentStatisticsController;
 use Modules\Enrollment\Http\Controllers\Admin\EnrollmentValidationController;
@@ -44,6 +45,18 @@ Route::prefix('admin')
 Route::prefix('admin/enrollment')
     ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Professeur,tenant'])
     ->group(function () {
+        // Secondary re-enrollment (promotion to next level for a new year).
+        Route::prefix('reenrollment')
+            ->middleware('role:Administrator|Manager,tenant')
+            ->controller(ClassReenrollmentController::class)
+            ->group(function () {
+                Route::get('/preview', 'preview')->name('admin.enrollment.reenrollment.preview');
+                Route::post('/process', 'process')->name('admin.enrollment.reenrollment.process');
+                Route::post('/student', 'processStudent')->name('admin.enrollment.reenrollment.student');
+                Route::get('/roster', 'roster')->name('admin.enrollment.reenrollment.roster');
+                Route::post('/backfill', 'backfill')->name('admin.enrollment.reenrollment.backfill');
+            });
+
         // Students CRUD (dossiers étudiants - different from UsersGuard /admin/students user accounts)
         Route::prefix('students')->group(function () {
             Route::get('/', [StudentController::class, 'index'])->name('admin.enrollment.students.index');

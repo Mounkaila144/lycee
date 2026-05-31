@@ -14,7 +14,7 @@ class SemesterFactory extends Factory
     {
         return [
             'academic_year_id' => AcademicYear::factory(),
-            'name' => fake()->randomElement(['S1', 'S2']),
+            'name' => fake()->randomElement(['1er Semestre', '2e Semestre']),
             'start_date' => '2025-10-01',
             'end_date' => '2026-02-28',
             'is_active' => false,
@@ -24,7 +24,7 @@ class SemesterFactory extends Factory
     public function s1(): static
     {
         return $this->state(fn (array $attributes) => [
-            'name' => 'S1',
+            'name' => '1er Semestre',
             'start_date' => '2025-10-01',
             'end_date' => '2026-02-28',
         ]);
@@ -33,7 +33,7 @@ class SemesterFactory extends Factory
     public function s2(): static
     {
         return $this->state(fn (array $attributes) => [
-            'name' => 'S2',
+            'name' => '2e Semestre',
             'start_date' => '2026-03-01',
             'end_date' => '2026-06-30',
         ]);

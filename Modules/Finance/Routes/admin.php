@@ -3,10 +3,14 @@
 use Illuminate\Support\Facades\Route;
 use Modules\Finance\Http\Controllers\Admin\BankReconciliationController;
 use Modules\Finance\Http\Controllers\Admin\CashierCloseController;
+use Modules\Finance\Http\Controllers\Admin\ClassFeeController;
 use Modules\Finance\Http\Controllers\Admin\CollectionController;
+use Modules\Finance\Http\Controllers\Admin\ExpenseController;
 use Modules\Finance\Http\Controllers\Admin\FinanceReportController;
+use Modules\Finance\Http\Controllers\Admin\GeneralLedgerController;
 use Modules\Finance\Http\Controllers\Admin\InvoiceController;
 use Modules\Finance\Http\Controllers\Admin\PaymentController;
+use Modules\Finance\Http\Controllers\Admin\PaymentStatisticsController;
 use Modules\Finance\Http\Controllers\CinetPayWebhookController;
 
 /*
@@ -55,6 +59,41 @@ Route::prefix('admin/finance')
                 ->name('admin.finance.fee-types.store');
             Route::put('/{id}', [InvoiceController::class, 'updateFeeType'])
                 ->name('admin.finance.fee-types.update');
+        });
+
+        // Per-class mandatory fee schedule (tuition + registration)
+        Route::prefix('class-fees')->group(function () {
+            Route::get('/', [ClassFeeController::class, 'index'])
+                ->name('admin.finance.class-fees.index');
+            Route::post('/sync', [ClassFeeController::class, 'sync'])
+                ->name('admin.finance.class-fees.sync');
+            Route::post('/apply-to-level', [ClassFeeController::class, 'applyToLevel'])
+                ->name('admin.finance.class-fees.apply-to-level');
+        });
+
+        /*
+        |--------------------------------------------------------------------------
+        | Dépenses & Comptabilité générale (charges opérationnelles + résultat)
+        | Accès restreint : Administrator, Manager, Comptable (Caissier exclu).
+        |--------------------------------------------------------------------------
+        */
+        Route::middleware('role:Administrator|Manager|Comptable,tenant')->group(function () {
+            // Catégories de dépenses
+            Route::get('expense-categories', [ExpenseController::class, 'indexCategories']);
+            Route::post('expense-categories', [ExpenseController::class, 'storeCategory']);
+            Route::put('expense-categories/{id}', [ExpenseController::class, 'updateCategory']);
+
+            // Dépenses / charges
+            Route::get('expenses', [ExpenseController::class, 'index']);
+            Route::get('expenses/check-duplicate', [ExpenseController::class, 'checkDuplicate']);
+            Route::post('expenses', [ExpenseController::class, 'store']);
+            Route::get('expenses/{id}', [ExpenseController::class, 'show']);
+            Route::put('expenses/{id}', [ExpenseController::class, 'update']);
+            Route::post('expenses/{id}/mark-paid', [ExpenseController::class, 'markPaid']);
+            Route::delete('expenses/{id}', [ExpenseController::class, 'destroy']);
+
+            // Comptabilité générale : résultat consolidé
+            Route::get('general-ledger/resultat', [GeneralLedgerController::class, 'resultat']);
         });
 
         // Invoices (Stories Agent Comptable 02, 03, 04 + Comptable read)
@@ -271,6 +310,12 @@ Route::prefix('admin/finance')
             // Report summary
             Route::get('/summary', [FinanceReportController::class, 'summary'])
                 ->name('admin.finance.reports.summary');
+
+            // School-fee payment statistics (paid/unpaid, global + per class)
+            Route::get('/payment-statistics', [PaymentStatisticsController::class, 'index'])
+                ->name('admin.finance.reports.payment-statistics');
+            Route::get('/outstanding-students', [PaymentStatisticsController::class, 'outstandingStudents'])
+                ->name('admin.finance.reports.outstanding-students');
 
             // Clear cache
             Route::post('/clear-cache', [FinanceReportController::class, 'clearCache'])

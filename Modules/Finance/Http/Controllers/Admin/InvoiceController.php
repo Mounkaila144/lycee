@@ -177,6 +177,7 @@ class InvoiceController extends Controller
             'totalPaid' => $totalPaid,
             'remaining' => $remaining,
             'generatedAt' => now(),
+            'school' => \Modules\Settings\Entities\TenantSetting::schoolProfile(),
         ]);
         $pdf->setPaper('a4', 'portrait');
 

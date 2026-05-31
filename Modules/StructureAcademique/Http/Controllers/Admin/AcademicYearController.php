@@ -169,14 +169,14 @@ class AcademicYearController extends Controller
 
         Semester::on('tenant')->create([
             'academic_year_id' => $academicYear->id,
-            'name' => 'S1',
+            'name' => '1er Semestre',
             'start_date' => $startDate,
             'end_date' => $s1EndDate,
         ]);
 
         Semester::on('tenant')->create([
             'academic_year_id' => $academicYear->id,
-            'name' => 'S2',
+            'name' => '2e Semestre',
             'start_date' => $s1EndDate->copy()->addDay(),
             'end_date' => $endDate,
         ]);

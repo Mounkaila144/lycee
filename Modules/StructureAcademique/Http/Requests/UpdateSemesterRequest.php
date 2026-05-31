@@ -72,12 +72,15 @@ class UpdateSemesterRequest extends FormRequest
                 ->first();
 
             if ($otherSemester) {
-                if ($semester->name === 'S1' && $endDate->gte($otherSemester->start_date)) {
-                    $validator->errors()->add('end_date', 'La fin du S1 doit être avant le début du S2.');
+                // Le 1er semestre commence avant le 2e : on s'appuie sur l'ordre des dates de début.
+                $estPremier = $semester->start_date <= $otherSemester->start_date;
+
+                if ($estPremier && $endDate->gte($otherSemester->start_date)) {
+                    $validator->errors()->add('end_date', 'La fin du 1er semestre doit être avant le début du 2e.');
                 }
 
-                if ($semester->name === 'S2' && $startDate->lte($otherSemester->end_date)) {
-                    $validator->errors()->add('start_date', 'Le début du S2 doit être après la fin du S1.');
+                if (! $estPremier && $startDate->lte($otherSemester->end_date)) {
+                    $validator->errors()->add('start_date', 'Le début du 2e semestre doit être après la fin du 1er.');
                 }
             }
         });

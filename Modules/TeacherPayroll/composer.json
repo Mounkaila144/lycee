@@ -1,0 +1,26 @@
+{
+    "name": "modules/teacher-payroll",
+    "description": "Module de gestion de la paie des professeurs",
+    "authors": [
+        {
+            "name": "CRM Academic Team",
+            "email": "dev@crm-academic.local"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\TeacherPayroll\\": ""
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\TeacherPayroll\\Tests\\": "tests/"
+        }
+    }
+}

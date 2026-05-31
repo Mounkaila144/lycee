@@ -48,6 +48,11 @@ class StudentController extends Controller
             $query->where('status', $status);
         }
 
+        // Filter by class
+        if ($classId = $request->input('class_id')) {
+            $query->where('class_id', $classId);
+        }
+
         // Filter by sex
         if ($sex = $request->input('sex')) {
             $query->where('sex', $sex);
@@ -120,9 +125,19 @@ class StudentController extends Controller
                 'status' => 'Actif',
             ]);
 
+            // Auto-generate the mandatory invoice from the class fee schedule.
+            $invoice = null;
+            if ($student->class_id) {
+                $invoice = app(\Modules\Finance\Services\BillingService::class)
+                    ->generateClassInvoice($student->fresh('classe'));
+            }
+
             return response()->json([
-                'message' => 'Élève créé avec succès.',
+                'message' => $invoice
+                    ? 'Élève créé avec succès. Facture des frais générée automatiquement.'
+                    : 'Élève créé avec succès.',
                 'data' => new StudentResource($student),
+                'invoice_id' => $invoice?->id,
             ], 201);
         });
     }

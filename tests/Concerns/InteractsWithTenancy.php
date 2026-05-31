@@ -197,6 +197,14 @@ trait InteractsWithTenancy
             ]);
         }
 
+        // STEP 14: TeacherPayroll TENANT tables (paie des professeurs).
+        Artisan::call('migrate', [
+            '--database' => 'mysql',
+            '--path' => $basePath.'/Modules/TeacherPayroll/Database/Migrations/tenant',
+            '--realpath' => true,
+            '--force' => true,
+        ]);
+
         self::$migrationsRan = true;
     }
 

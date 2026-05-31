@@ -1,0 +1,18 @@
+{
+    "name": "TeacherPayroll",
+    "alias": "teacherpayroll",
+    "description": "Module de gestion de la paie des professeurs (statuts, modes de paiement, heures, primes, retenues, avances)",
+    "keywords": [
+        "paie",
+        "professeurs",
+        "enseignants",
+        "vacataires",
+        "heures",
+        "fiche de paie"
+    ],
+    "priority": 0,
+    "providers": [
+        "Modules\\TeacherPayroll\\Providers\\TeacherPayrollServiceProvider"
+    ],
+    "files": []
+}

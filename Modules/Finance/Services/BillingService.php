@@ -45,6 +45,7 @@ class BillingService
             // Create invoice
             $invoice = Invoice::on('tenant')->create([
                 'student_id' => $student->id,
+                'class_id' => $options['class_id'] ?? $student->class_id,
                 'academic_year_id' => $academicYear->id,
                 'invoice_number' => $this->generateInvoiceNumber($academicYear),
                 'invoice_date' => $options['invoice_date'] ?? now(),
@@ -106,6 +107,7 @@ class BillingService
         return DB::connection('tenant')->transaction(function () use ($student, $academicYear, $items, $options) {
             $invoice = Invoice::on('tenant')->create([
                 'student_id' => $student->id,
+                'class_id' => $options['class_id'] ?? $student->class_id,
                 'academic_year_id' => $academicYear->id,
                 'invoice_number' => $this->generateInvoiceNumber($academicYear),
                 'invoice_date' => $options['invoice_date'] ?? now(),
@@ -137,6 +139,58 @@ class BillingService
 
             return $invoice->fresh(['items', 'student', 'academicYear']);
         });
+    }
+
+    /**
+     * Auto-generate the mandatory invoice for a student based on the fee
+     * schedule of its class (class_fees). Idempotent: returns the existing
+     * non-cancelled invoice for that student+class+year if one already exists,
+     * and returns null if the class has no fee schedule.
+     */
+    public function generateClassInvoice(Student $student, ?\Modules\StructureAcademique\Entities\Classe $class = null): ?Invoice
+    {
+        $class ??= $student->classe;
+        if (! $class) {
+            return null;
+        }
+
+        $fees = \Modules\Finance\Entities\ClassFee::on('tenant')
+            ->with('feeType')
+            ->where('class_id', $class->id)
+            ->get();
+
+        if ($fees->isEmpty()) {
+            return null;
+        }
+
+        $existing = Invoice::on('tenant')
+            ->where('student_id', $student->id)
+            ->where('class_id', $class->id)
+            ->where('academic_year_id', $class->academic_year_id)
+            ->where('status', '!=', 'cancelled')
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $academicYear = AcademicYear::on('tenant')->find($class->academic_year_id);
+        if (! $academicYear) {
+            return null;
+        }
+
+        $items = $fees->map(fn (\Modules\Finance\Entities\ClassFee $fee) => [
+            'fee_type_id' => $fee->fee_type_id,
+            'description' => $fee->label ?: ($fee->feeType?->name ?? 'Frais de scolarité'),
+            'quantity' => 1,
+            'unit_price' => (float) $fee->amount,
+            'discount_amount' => 0,
+        ])->all();
+
+        return $this->createCustomInvoice($student, $academicYear, $items, [
+            'class_id' => $class->id,
+            'notes' => 'Frais obligatoires '.$class->name,
+        ]);
     }
 
     /**

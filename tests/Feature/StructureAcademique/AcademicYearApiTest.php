@@ -86,7 +86,7 @@ class AcademicYearApiTest extends TestCase
         // Vérifier S1 et S2 créés
         $semesters = $response->json('data.semesters');
         $names = collect($semesters)->pluck('name')->sort()->values()->all();
-        $this->assertEquals(['S1', 'S2'], $names);
+        $this->assertEquals(['1er Semestre', '2e Semestre'], $names);
     }
 
     #[Test]
@@ -101,8 +101,8 @@ class AcademicYearApiTest extends TestCase
         $response->assertStatus(201);
 
         $semesters = collect($response->json('data.semesters'));
-        $s1 = $semesters->firstWhere('name', 'S1');
-        $s2 = $semesters->firstWhere('name', 'S2');
+        $s1 = $semesters->firstWhere('name', '1er Semestre');
+        $s2 = $semesters->firstWhere('name', '2e Semestre');
 
         // S1 starts at year start
         $this->assertEquals('2025-10-01', $s1['start_date']);
@@ -125,8 +125,8 @@ class AcademicYearApiTest extends TestCase
         $response->assertStatus(201);
 
         $semesters = collect($response->json('data.semesters'));
-        $s1 = $semesters->firstWhere('name', 'S1');
-        $s2 = $semesters->firstWhere('name', 'S2');
+        $s1 = $semesters->firstWhere('name', '1er Semestre');
+        $s2 = $semesters->firstWhere('name', '2e Semestre');
 
         $this->assertEquals('2026-01-31', $s1['end_date']);
         $this->assertEquals('2026-02-01', $s2['start_date']);

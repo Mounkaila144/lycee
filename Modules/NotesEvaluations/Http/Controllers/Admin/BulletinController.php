@@ -86,6 +86,7 @@ class BulletinController extends Controller
         $classAvg = $bulletin['stats']['class_average'] !== null ? number_format((float) $bulletin['stats']['class_average'], 2, ',', ' ') : '—';
         $mention = $this->mention($student['general_average']);
         $date = now()->format('d/m/Y');
+        $header = \Modules\Settings\Entities\TenantSetting::schoolHeaderHtml();
 
         $rows = '';
         foreach ($student['subjects'] as $row) {
@@ -101,9 +102,6 @@ class BulletinController extends Controller
         return <<<HTML
 <!DOCTYPE html><html><head><meta charset="utf-8"><style>
 body{font-family:DejaVu Sans,sans-serif;color:#1a1a1a;padding:32px;font-size:12px;}
-.header{text-align:center;margin-bottom:18px;}
-.header h2{margin:2px;font-size:14px;}
-.header .sub{font-size:11px;color:#555;}
 h1{text-align:center;font-size:17px;margin:18px 0 6px;}
 .meta{display:flex;justify-content:space-between;margin:10px 0 14px;font-size:12px;}
 .meta .box{border:1px solid #ccc;padding:6px 10px;border-radius:4px;}
@@ -117,11 +115,7 @@ td.subj{font-weight:bold;}
 .footer{margin-top:40px;display:flex;justify-content:space-between;}
 .mention{font-weight:bold;}
 </style></head><body>
-<div class="header">
-  <h2>RÉPUBLIQUE DU NIGER</h2>
-  <div class="sub">Ministère de l'Éducation Nationale</div>
-  <div class="sub">Établissement scolaire</div>
-</div>
+{$header}
 <h1>Bulletin de notes — {$period}</h1>
 <div class="meta">
   <div class="box"><strong>Élève :</strong> {$fullName}<br><strong>Matricule :</strong> {$matricule}</div>

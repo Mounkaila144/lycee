@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Enrollment\Entities\Student;
 use Modules\StructureAcademique\Entities\AcademicYear;
+use Modules\StructureAcademique\Entities\Classe;
 
 class Invoice extends Model
 {
@@ -19,6 +20,7 @@ class Invoice extends Model
 
     protected $fillable = [
         'student_id',
+        'class_id',
         'academic_year_id',
         'invoice_number',
         'invoice_date',
@@ -53,6 +55,14 @@ class Invoice extends Model
     public function academicYear(): BelongsTo
     {
         return $this->belongsTo(AcademicYear::class);
+    }
+
+    /**
+     * Class the invoice was issued for (the student's class at emission time).
+     */
+    public function classe(): BelongsTo
+    {
+        return $this->belongsTo(Classe::class, 'class_id');
     }
 
     /**

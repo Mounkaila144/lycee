@@ -217,14 +217,12 @@ class PaymentController extends Controller
         $invoicePaid = number_format((float) ($d['invoice_paid'] ?? 0), 0, ',', ' ');
         $invoiceBalance = number_format((float) ($d['invoice_balance'] ?? 0), 0, ',', ' ');
         $recordedBy = e($d['recorded_by'] ?? '');
+        $header = \Modules\Settings\Entities\TenantSetting::schoolHeaderHtml();
 
         return <<<HTML
 <!DOCTYPE html><html><head><meta charset="utf-8"><style>
 body{font-family:DejaVu Sans,sans-serif;color:#1a1a1a;padding:40px;font-size:13px;}
-.header{text-align:center;margin-bottom:24px;}
-.header h2{margin:2px;font-size:15px;}
-.header .sub{font-size:11px;color:#555;}
-h1{text-align:center;font-size:20px;margin:24px 0;}
+h1{text-align:center;font-size:20px;margin:18px 0 24px;}
 .row{margin:7px 0;}
 .label{font-weight:bold;display:inline-block;width:170px;}
 .amount{font-size:18px;font-weight:bold;color:#1565c0;}
@@ -232,10 +230,7 @@ h1{text-align:center;font-size:20px;margin:24px 0;}
 .footer{margin-top:50px;display:flex;justify-content:space-between;}
 .meta{margin-top:40px;font-size:11px;color:#666;}
 </style></head><body>
-<div class="header">
-  <h2>RÉPUBLIQUE DU NIGER</h2>
-  <div class="sub">Établissement scolaire — Service de la comptabilité</div>
-</div>
+{$header}
 <h1>Reçu de paiement</h1>
 <div class="row"><span class="label">N° de reçu :</span> {$receipt}</div>
 <div class="row"><span class="label">Date :</span> {$date}</div>

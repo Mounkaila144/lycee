@@ -9,6 +9,7 @@
     "Exams": true,
     "Finance": true,
     "Payroll": true,
+    "TeacherPayroll": true,
     "Documents": true,
     "PortailParent": true,
     "Settings": true,
