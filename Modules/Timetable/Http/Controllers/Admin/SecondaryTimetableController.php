@@ -6,6 +6,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
+use Modules\StructureAcademique\Entities\TeacherAssignment;
 use Modules\Timetable\Entities\TimetableSlot;
 
 /**
@@ -46,6 +47,23 @@ class SecondaryTimetableController extends Controller
             'end_time' => 'required|date_format:H:i|after:start_time',
             'room_name' => 'nullable|string|max:100',
         ]);
+
+        // A teacher may only be scheduled for a subject they are assigned to teach
+        // in that class (cf. teacher_assignments). Prevents the admin from booking a
+        // teacher on a subject/class they were never assigned.
+        if (! empty($validated['teacher_id'])) {
+            $isAssigned = TeacherAssignment::on('tenant')
+                ->where('teacher_id', $validated['teacher_id'])
+                ->where('class_id', $validated['class_id'])
+                ->where('subject_id', $validated['subject_id'])
+                ->exists();
+
+            if (! $isAssigned) {
+                return response()->json([
+                    'message' => "Cet enseignant n'est pas affecté à cette matière dans cette classe. Affectez-la d'abord depuis la fiche de l'enseignant.",
+                ], 422);
+            }
+        }
 
         // Overlap check: same class, same day, overlapping time range.
         $overlap = TimetableSlot::on('tenant')

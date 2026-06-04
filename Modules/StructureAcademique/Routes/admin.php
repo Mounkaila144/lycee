@@ -1,16 +1,17 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\StructureAcademique\Http\Controllers\Admin\AcademicPeriodController;
 use Modules\StructureAcademique\Http\Controllers\Admin\AcademicYearController;
+use Modules\StructureAcademique\Http\Controllers\Admin\ClasseController;
 use Modules\StructureAcademique\Http\Controllers\Admin\CycleController;
+use Modules\StructureAcademique\Http\Controllers\Admin\EvaluationPeriodController;
 use Modules\StructureAcademique\Http\Controllers\Admin\LevelController;
 use Modules\StructureAcademique\Http\Controllers\Admin\SemesterController;
-use Modules\StructureAcademique\Http\Controllers\Admin\ClasseController;
 use Modules\StructureAcademique\Http\Controllers\Admin\SeriesController;
 use Modules\StructureAcademique\Http\Controllers\Admin\SubjectClassCoefficientController;
 use Modules\StructureAcademique\Http\Controllers\Admin\SubjectController;
-use Modules\StructureAcademique\Http\Controllers\Admin\AcademicPeriodController;
-use Modules\StructureAcademique\Http\Controllers\Admin\EvaluationPeriodController;
+use Modules\StructureAcademique\Http\Controllers\Admin\TeacherAssignmentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -114,4 +115,18 @@ Route::prefix('admin')
             Route::put('/{classe}', [ClasseController::class, 'update'])->name('update');
             Route::delete('/{classe}', [ClasseController::class, 'destroy'])->name('destroy');
         });
+
+        // Affectations enseignants (matière enseignée par classe).
+        // L'enseignant connecté peut lire ses propres affectations ; la gestion
+        // (création/suppression) est réservée aux Admin / Manager.
+        Route::get('/my-teaching-assignments', [TeacherAssignmentController::class, 'mine'])
+            ->name('teacher-assignments.mine');
+
+        Route::prefix('teacher-assignments')->name('teacher-assignments.')
+            ->middleware('role:Administrator|Manager,tenant')
+            ->group(function () {
+                Route::get('/', [TeacherAssignmentController::class, 'index'])->name('index');
+                Route::post('/', [TeacherAssignmentController::class, 'store'])->name('store');
+                Route::delete('/{assignment}', [TeacherAssignmentController::class, 'destroy'])->name('destroy');
+            });
     });

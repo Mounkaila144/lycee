@@ -355,8 +355,18 @@ Route::prefix('api/admin')
             Route::post('/{evaluation}/grades', [EvaluationController::class, 'saveGrades']);
             Route::delete('/{evaluation}', [EvaluationController::class, 'destroy']);
         });
+    });
 
-        // Bulletins trimestriels (report cards) by class + period.
+/*
+|--------------------------------------------------------------------------
+| Bulletins trimestriels (report cards) by class + period.
+| Restricted to Admin / Manager: a bulletin aggregates every subject's grades
+| (across all teachers), so a single Professeur must not access it.
+|--------------------------------------------------------------------------
+*/
+Route::prefix('api/admin')
+    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager,tenant'])
+    ->group(function () {
         Route::prefix('bulletins')->group(function () {
             Route::get('/', [BulletinController::class, 'index']);
             Route::get('/{studentId}/pdf', [BulletinController::class, 'studentPdf']);

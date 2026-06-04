@@ -10,11 +10,15 @@ use Illuminate\Validation\Rule;
 use Modules\Enrollment\Entities\Student;
 use Modules\NotesEvaluations\Entities\Evaluation;
 use Modules\NotesEvaluations\Entities\Grade;
+use Modules\StructureAcademique\Entities\TeacherAssignment;
 
 class EvaluationController extends Controller
 {
     /**
      * List evaluations, filterable by class / subject / semester.
+     *
+     * A teacher (Professeur, not also Admin/Manager) only ever sees the
+     * evaluations they created themselves — never another teacher's grades.
      */
     public function index(Request $request): JsonResponse
     {
@@ -26,6 +30,10 @@ class EvaluationController extends Controller
             if ($request->filled($filter)) {
                 $query->where($filter, $request->input($filter));
             }
+        }
+
+        if (($teacherId = $this->restrictedTeacherId()) !== null) {
+            $query->where('created_by', $teacherId);
         }
 
         return response()->json(['data' => $query->get()]);
@@ -46,6 +54,13 @@ class EvaluationController extends Controller
             'max_score' => 'nullable|numeric|min:1|max:100',
             'coefficient' => 'nullable|numeric|min:0.5|max:20',
         ]);
+
+        if (($teacherId = $this->restrictedTeacherId()) !== null
+            && ! $this->teacherTeaches($teacherId, (int) $validated['class_id'], (int) $validated['subject_id'])) {
+            return response()->json([
+                'message' => "Vous n'êtes pas affecté à cette matière dans cette classe.",
+            ], 403);
+        }
 
         $evaluation = Evaluation::create([
             'class_id' => $validated['class_id'],
@@ -69,6 +84,10 @@ class EvaluationController extends Controller
     public function gradeSheet(int $id): JsonResponse
     {
         $evaluation = Evaluation::on('tenant')->with(['classe', 'subject'])->findOrFail($id);
+
+        if (($denied = $this->guardOwnership($evaluation)) !== null) {
+            return $denied;
+        }
 
         $students = Student::on('tenant')
             ->where('class_id', $evaluation->class_id)
@@ -119,6 +138,10 @@ class EvaluationController extends Controller
     {
         $evaluation = Evaluation::on('tenant')->findOrFail($id);
 
+        if (($denied = $this->guardOwnership($evaluation)) !== null) {
+            return $denied;
+        }
+
         $validated = $request->validate([
             'grades' => 'required|array',
             'grades.*.student_id' => 'required|integer|exists:tenant.students,id',
@@ -153,8 +176,58 @@ class EvaluationController extends Controller
     public function destroy(int $id): JsonResponse
     {
         $evaluation = Evaluation::on('tenant')->findOrFail($id);
+
+        if (($denied = $this->guardOwnership($evaluation)) !== null) {
+            return $denied;
+        }
+
         $evaluation->delete();
 
         return response()->json(['message' => 'Évaluation supprimée.']);
+    }
+
+    /**
+     * The id of the authenticated user when they are a restricted teacher
+     * (Professeur without an Admin/Manager role), otherwise null.
+     */
+    private function restrictedTeacherId(): ?int
+    {
+        $user = auth('tenant')->user();
+
+        if ($user
+            && $user->hasRole('Professeur')
+            && ! $user->hasAnyRole(['Administrator', 'Manager'])) {
+            return (int) $user->id;
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether the given teacher is assigned to teach this subject in this class.
+     */
+    private function teacherTeaches(int $teacherId, int $classId, int $subjectId): bool
+    {
+        return TeacherAssignment::on('tenant')
+            ->where('teacher_id', $teacherId)
+            ->where('class_id', $classId)
+            ->where('subject_id', $subjectId)
+            ->exists();
+    }
+
+    /**
+     * Deny a restricted teacher access to an evaluation they did not create.
+     * Returns a 403 JsonResponse when denied, null when allowed.
+     */
+    private function guardOwnership(Evaluation $evaluation): ?JsonResponse
+    {
+        if (($teacherId = $this->restrictedTeacherId()) !== null
+            && (int) $evaluation->created_by !== $teacherId) {
+            return response()->json([
+                'message' => "Vous ne pouvez accéder qu'aux évaluations que vous avez créées.",
+            ], 403);
+        }
+
+        return null;
     }
 }

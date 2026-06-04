@@ -205,6 +205,14 @@ trait InteractsWithTenancy
             '--force' => true,
         ]);
 
+        // STEP 15: Timetable TENANT tables (rooms, class-based timetable_slots).
+        Artisan::call('migrate', [
+            '--database' => 'mysql',
+            '--path' => $basePath.'/Modules/Timetable/Database/Migrations/tenant',
+            '--realpath' => true,
+            '--force' => true,
+        ]);
+
         self::$migrationsRan = true;
     }
 
