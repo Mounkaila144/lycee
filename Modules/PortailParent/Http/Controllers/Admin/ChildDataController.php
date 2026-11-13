@@ -12,7 +12,7 @@ use Modules\Documents\Entities\Document;
 use Modules\Enrollment\Entities\Student;
 use Modules\Finance\Entities\Invoice;
 use Modules\Finance\Entities\Payment;
-use Modules\NotesEvaluations\Entities\Grade;
+use Modules\NotesEvaluations\Services\Lycee\LyceeReportService;
 use Modules\Timetable\Services\TimetableViewService;
 
 /**
@@ -39,37 +39,26 @@ class ChildDataController extends Controller
     ];
 
     /**
-     * Story Parent 02 — Notes publiées de l'enfant.
+     * Story Parent 02 — Notes de l'enfant (modèle lycée, évaluations publiées uniquement).
+     * Même forme que GET /api/admin/lycee-grades/results/students/{student}.
      */
-    public function grades(Request $request, int $studentId): JsonResponse
+    public function grades(Request $request, int $studentId, LyceeReportService $lyceeReports): JsonResponse
     {
         $student = $this->resolveChild($request, 'viewGrades', $studentId);
 
-        $grades = Grade::query()
-            ->where('student_id', $student->id)
-            ->published()
-            ->visibleToStudents()
-            ->with(['evaluation.module', 'evaluation.semester'])
-            ->orderByDesc('published_at')
-            ->get()
-            ->map(fn (Grade $grade): array => [
-                'id' => $grade->id,
-                'subject' => $grade->evaluation?->module?->name ?? $grade->evaluation?->name,
-                'evaluation' => $grade->evaluation?->name,
-                'type' => $grade->evaluation?->type,
-                'score' => $grade->is_absent ? null : ($grade->score !== null ? (float) $grade->score : null),
-                'max_score' => $grade->evaluation?->max_score !== null ? (float) $grade->evaluation->max_score : 20.0,
-                'is_absent' => (bool) $grade->is_absent,
-                'comment' => $grade->comment,
-                'semester' => $grade->evaluation?->semester?->name,
-                'evaluation_date' => $grade->evaluation?->planned_date?->format('Y-m-d')
-                    ?? $grade->published_at?->format('Y-m-d'),
-            ])
-            ->values();
+        $semesterId = $request->filled('semester_id') ? $request->integer('semester_id') : null;
+        $classe = $lyceeReports->studentClasse($student, $semesterId);
+        $classe?->loadMissing('headTeacher');
+        $semester = $lyceeReports->resolveSemester($classe, $semesterId);
+        $report = $lyceeReports->studentReport($student, $classe, $semester, true);
 
         return response()->json([
-            'data' => $grades,
-            'meta' => ['student_id' => $student->id],
+            'data' => $report,
+            'meta' => [
+                'student_id' => $student->id,
+                'semester_id' => $report['semester']['id'] ?? null,
+                'semesters' => $lyceeReports->semestersFor($classe),
+            ],
         ]);
     }
 

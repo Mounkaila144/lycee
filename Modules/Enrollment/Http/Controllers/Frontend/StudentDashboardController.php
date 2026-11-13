@@ -47,12 +47,14 @@ class StudentDashboardController extends Controller
         }
 
         $invoiceTotals = $this->portal->invoiceTotals($this->portal->invoices($student));
+        $generalAverage = $this->portal->currentGeneralAverage($student);
 
         return response()->json([
             'data' => [
                 'student' => new StudentResource($student),
                 'classe' => $this->portal->currentClassSummary($student),
-                'moyenne_actuelle' => $this->portal->weightedAverage($this->portal->grades($student)),
+                'moyenne_actuelle' => $generalAverage,
+                'average' => $generalAverage,
                 'next_class' => $this->portal->nextClass($this->portal->timetable($student), now()),
                 'recent_absences_count' => $this->portal->recentAbsencesCount($student),
                 'pending_invoices_count' => $this->portal->pendingInvoicesCount($student),
@@ -64,7 +66,8 @@ class StudentDashboardController extends Controller
     }
 
     /**
-     * Story Élève 02 — Mes notes publiées.
+     * Story Élève 02 — Mes notes (modèle lycée, évaluations publiées uniquement).
+     * Même forme que GET /api/admin/lycee-grades/results/students/{student}.
      */
     public function myGrades(Request $request): JsonResponse
     {
@@ -73,14 +76,15 @@ class StudentDashboardController extends Controller
             return $student;
         }
 
-        $grades = $this->portal->grades($student);
+        $semesterId = $request->filled('semester_id') ? $request->integer('semester_id') : null;
+        $grades = $this->portal->lyceeGradesReport($student, $semesterId);
 
         return response()->json([
-            'data' => $grades,
+            'data' => $grades['report'],
             'meta' => [
                 'student_id' => $student->id,
-                'count' => $grades->count(),
-                'average' => $this->portal->weightedAverage($grades),
+                'semester_id' => $grades['report']['semester']['id'] ?? null,
+                'semesters' => $grades['semesters'],
             ],
         ]);
     }

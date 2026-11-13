@@ -10,11 +10,10 @@ use Modules\Enrollment\Entities\Student;
 use Modules\Finance\Entities\Invoice;
 use Modules\Finance\Entities\InvoiceItem;
 use Modules\Finance\Entities\Payment;
-use Modules\NotesEvaluations\Database\Factories\GradeFactory;
+use Modules\NotesEvaluations\Entities\ClassEvaluation;
+use Modules\NotesEvaluations\Entities\ClassEvaluationGrade;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Classe;
-use Modules\StructureAcademique\Entities\Module as AcademicModule;
-use Modules\StructureAcademique\Entities\ModuleEvaluationConfig;
 use Modules\StructureAcademique\Entities\Semester;
 use Modules\StructureAcademique\Entities\Subject;
 use Modules\Timetable\Entities\TimetableSlot;
@@ -83,41 +82,46 @@ class StudentPortalDataTest extends TestCase
     public function my_grades_returns_only_my_published_grades_with_average(): void
     {
         [, $student, $token] = $this->studentWithProfile();
-        $module = AcademicModule::factory()->create(['name' => 'Mathématiques']);
-        $evaluation = ModuleEvaluationConfig::factory()->create([
-            'module_id' => $module->id,
-            'name' => 'Devoir 1',
-            'max_score' => 20,
-            'coefficient' => 1,
-            'planned_date' => '2026-10-15',
+        $classe = $this->enrollInActiveClass($student);
+        $classmate = Student::factory()->create();
+        ClassEnrollment::on('tenant')->create([
+            'student_id' => $classmate->id,
+            'classe_id' => $classe->id,
+            'academic_year_id' => $classe->academic_year_id,
+            'enrolled_at' => '2026-10-01',
+            'assignment_type' => 'Nouvelle inscription',
+            'status' => 'Actif',
         ]);
+        $semester = Semester::factory()->create(['academic_year_id' => $classe->academic_year_id, 'name' => 'S1', 'is_active' => true]);
+        $subject = Subject::factory()->create(['name' => 'Mathématiques']);
+        $teacher = TenantUser::factory()->create();
 
-        $published = GradeFactory::new()->published()->create([
-            'student_id' => $student->id,
-            'evaluation_id' => $evaluation->id,
-            'score' => 14.5,
+        $published = ClassEvaluation::factory()->published()->create([
+            'classe_id' => $classe->id, 'subject_id' => $subject->id, 'semester_id' => $semester->id,
+            'teacher_id' => $teacher->id, 'title' => 'Devoir 1', 'evaluation_date' => '2026-10-15',
         ]);
-        GradeFactory::new()->create([
-            'student_id' => $student->id,
-            'evaluation_id' => ModuleEvaluationConfig::factory()->create(['module_id' => $module->id])->id,
-            'status' => 'Draft',
+        $draft = ClassEvaluation::factory()->create([
+            'classe_id' => $classe->id, 'subject_id' => $subject->id, 'semester_id' => $semester->id, 'teacher_id' => $teacher->id,
         ]);
-        GradeFactory::new()->published()->create([
-            'student_id' => Student::factory()->create()->id,
-            'evaluation_id' => $evaluation->id,
-            'score' => 3,
-        ]);
+        ClassEvaluationGrade::factory()->create(['class_evaluation_id' => $published->id, 'student_id' => $student->id, 'score' => 14.5]);
+        ClassEvaluationGrade::factory()->create(['class_evaluation_id' => $draft->id, 'student_id' => $student->id, 'score' => 2]);
+        ClassEvaluationGrade::factory()->create(['class_evaluation_id' => $published->id, 'student_id' => $classmate->id, 'score' => 3]);
 
         $this->withToken($token)
             ->getJson('/api/frontend/student/my-grades?student_id=999')
             ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $published->id)
-            ->assertJsonPath('data.0.subject', 'Mathématiques')
-            ->assertJsonPath('data.0.evaluation', 'Devoir 1')
-            ->assertJsonPath('data.0.score', 14.5)
+            ->assertJsonPath('data.student.id', $student->id)
+            ->assertJsonCount(1, 'data.subjects')
+            ->assertJsonPath('data.subjects.0.subject.name', 'Mathématiques')
+            ->assertJsonCount(1, 'data.subjects.0.evaluations')
+            ->assertJsonPath('data.subjects.0.evaluations.0.id', $published->id)
+            ->assertJsonPath('data.subjects.0.evaluations.0.title', 'Devoir 1')
+            ->assertJsonPath('data.subjects.0.evaluations.0.score', 14.5)
+            ->assertJsonPath('data.subjects.0.evaluations.0.date', '2026-10-15')
+            ->assertJsonPath('data.general_average', 14.5)
+            ->assertJsonPath('data.rank', 1)
             ->assertJsonPath('meta.student_id', $student->id)
-            ->assertJsonPath('meta.average', 14.5);
+            ->assertJsonPath('meta.semester_id', $semester->id);
     }
 
     #[Test]

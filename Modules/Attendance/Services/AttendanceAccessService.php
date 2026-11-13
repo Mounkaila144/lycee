@@ -7,13 +7,15 @@ use Illuminate\Support\Facades\Schema;
 use Modules\Attendance\Entities\AbsenceJustification;
 use Modules\Attendance\Entities\AttendanceSession;
 use Modules\Enrollment\Entities\Student;
+use Modules\NotesEvaluations\Entities\TeacherAssignment;
 use Modules\StructureAcademique\Entities\Classe;
 use Modules\Timetable\Entities\TimetableSlot;
 
 /**
  * Règles d'accès du module Présences :
  *  - Administrator / Manager : accès complet ;
- *  - Professeur : uniquement ses classes (professeur principal ou créneau d'emploi du temps) ;
+ *  - Professeur : uniquement ses classes (professeur principal, créneau d'emploi du temps
+ *    ou affectation de matière — teacher_assignments) ;
  *  - Élève : uniquement lui-même ; Parent : uniquement ses enfants.
  */
 class AttendanceAccessService
@@ -28,6 +30,8 @@ class AttendanceAccessService
     private ?bool $sessionsHaveClasse = null;
 
     private ?bool $justificationsTableExists = null;
+
+    private ?bool $teacherAssignmentsTableExists = null;
 
     public function hasAnyRole(?Authenticatable $user, array $roles): bool
     {
@@ -48,8 +52,8 @@ class AttendanceAccessService
     }
 
     /**
-     * Classes d'un enseignant : celles dont il est professeur principal et celles
-     * où il a au moins un créneau d'emploi du temps.
+     * Classes d'un enseignant : celles dont il est professeur principal, celles
+     * où il a au moins un créneau d'emploi du temps et celles où une matière lui est affectée.
      *
      * @return list<int>
      */
@@ -70,7 +74,23 @@ class AttendanceAccessService
             );
         }
 
+        if ($this->teacherAssignmentsTableExists()) {
+            $classeIds = $classeIds->merge(
+                TeacherAssignment::query()
+                    ->where('teacher_id', $teacherId)
+                    ->pluck('classe_id')
+            );
+        }
+
         return $classeIds->map(fn ($id) => (int) $id)->unique()->values()->all();
+    }
+
+    /**
+     * Tolérance tant que la migration 2026_11_14_000001 (notes lycée) n'est pas jouée sur le tenant.
+     */
+    public function teacherAssignmentsTableExists(): bool
+    {
+        return $this->teacherAssignmentsTableExists ??= Schema::connection('tenant')->hasTable('teacher_assignments');
     }
 
     /**

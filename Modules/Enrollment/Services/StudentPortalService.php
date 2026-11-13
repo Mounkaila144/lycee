@@ -14,6 +14,7 @@ use Modules\Enrollment\Http\Resources\ReenrollmentCampaignResource;
 use Modules\Finance\Entities\Invoice;
 use Modules\Finance\Entities\Payment;
 use Modules\NotesEvaluations\Entities\Grade;
+use Modules\NotesEvaluations\Services\Lycee\LyceeReportService;
 use Modules\Timetable\Services\TimetableViewService;
 
 /**
@@ -24,7 +25,10 @@ use Modules\Timetable\Services\TimetableViewService;
  */
 class StudentPortalService
 {
-    public function __construct(private TimetableViewService $timetableViewService) {}
+    public function __construct(
+        private TimetableViewService $timetableViewService,
+        private LyceeReportService $lyceeReports
+    ) {}
 
     public const ATTENDANCE_STATUS_LABELS = [
         'present' => 'Présent',
@@ -72,7 +76,33 @@ class StudentPortalService
     }
 
     /**
-     * Notes publiées et visibles par l'élève.
+     * Relevé de notes lycée (évaluations publiées uniquement) : même forme que
+     * GET /api/admin/lycee-grades/results/students/{student}. Semestre actif par défaut.
+     *
+     * @return array{report: array<string, mixed>, semesters: list<array<string, mixed>>}
+     */
+    public function lyceeGradesReport(Student $student, ?int $semesterId = null): array
+    {
+        $classe = $this->lyceeReports->studentClasse($student, $semesterId);
+        $classe?->loadMissing('headTeacher');
+        $semester = $this->lyceeReports->resolveSemester($classe, $semesterId);
+
+        return [
+            'report' => $this->lyceeReports->studentReport($student, $classe, $semester, true),
+            'semesters' => $this->lyceeReports->semestersFor($classe),
+        ];
+    }
+
+    /**
+     * Moyenne générale (évaluations publiées) du semestre actif — dashboard Élève.
+     */
+    public function currentGeneralAverage(Student $student): ?float
+    {
+        return $this->lyceeReports->currentGeneralAverage($student);
+    }
+
+    /**
+     * Notes publiées et visibles par l'élève (ancien modèle universitaire, conservé pour compatibilité).
      *
      * @return Collection<int, array<string, mixed>>
      */

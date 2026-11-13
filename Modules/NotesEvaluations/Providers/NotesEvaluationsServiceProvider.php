@@ -28,6 +28,7 @@ class NotesEvaluationsServiceProvider extends ServiceProvider
         $this->loadMigrations();
         $this->loadRoutesFrom(module_path($this->moduleName, 'Routes/admin.php'));
         $this->loadRoutesFrom(module_path($this->moduleName, 'Routes/teacher.php'));
+        $this->loadRoutesFrom(module_path($this->moduleName, 'Routes/lycee.php'));
         $this->registerObservers();
     }
 

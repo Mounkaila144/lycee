@@ -5,16 +5,18 @@ namespace Tests\Feature\RoleCoverage\Parent;
 use Illuminate\Support\Facades\Artisan;
 use Modules\Attendance\Entities\AttendanceRecord;
 use Modules\Attendance\Entities\AttendanceSession;
+use Modules\Enrollment\Entities\ClassEnrollment;
 use Modules\Enrollment\Entities\Student;
 use Modules\Finance\Entities\Invoice;
 use Modules\Finance\Entities\InvoiceItem;
 use Modules\Finance\Entities\Payment;
-use Modules\NotesEvaluations\Database\Factories\GradeFactory;
+use Modules\NotesEvaluations\Entities\ClassEvaluation;
+use Modules\NotesEvaluations\Entities\ClassEvaluationGrade;
 use Modules\PortailParent\Entities\ParentModel;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Classe;
-use Modules\StructureAcademique\Entities\Module as AcademicModule;
-use Modules\StructureAcademique\Entities\ModuleEvaluationConfig;
+use Modules\StructureAcademique\Entities\Semester;
+use Modules\StructureAcademique\Entities\Subject;
 use Modules\UsersGuard\Entities\TenantUser;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -234,45 +236,51 @@ class ChildDataTest extends TestCase
     public function grades_return_only_published_grades_of_the_child(): void
     {
         [, , $child, $token] = $this->parentWithChild();
-        $module = AcademicModule::factory()->create(['name' => 'Mathématiques']);
-        $evaluation = ModuleEvaluationConfig::factory()->create([
-            'module_id' => $module->id,
-            'name' => 'Devoir 1',
-            'max_score' => 20,
-            'planned_date' => '2026-10-15',
-        ]);
+        $year = AcademicYear::factory()->active()->create();
+        $classe = Classe::factory()->create(['academic_year_id' => $year->id]);
+        $classmate = Student::factory()->create();
 
-        $published = GradeFactory::new()->create([
-            'student_id' => $child->id,
-            'evaluation_id' => $evaluation->id,
-            'score' => 14.5,
-            'status' => 'Published',
-            'is_visible_to_students' => true,
-            'published_at' => now(),
+        foreach ([$child, $classmate] as $student) {
+            ClassEnrollment::on('tenant')->create([
+                'student_id' => $student->id,
+                'classe_id' => $classe->id,
+                'academic_year_id' => $year->id,
+                'enrolled_at' => '2026-10-01',
+                'assignment_type' => 'Nouvelle inscription',
+                'status' => 'Actif',
+            ]);
+        }
+
+        $semester = Semester::factory()->create(['academic_year_id' => $year->id, 'name' => 'S1', 'is_active' => true]);
+        $subject = Subject::factory()->create(['name' => 'Mathématiques']);
+        $teacher = TenantUser::factory()->create();
+        $published = ClassEvaluation::factory()->published()->create([
+            'classe_id' => $classe->id, 'subject_id' => $subject->id, 'semester_id' => $semester->id,
+            'teacher_id' => $teacher->id, 'title' => 'Devoir 1', 'evaluation_date' => '2026-10-15',
         ]);
-        GradeFactory::new()->create([
-            'student_id' => $child->id,
-            'evaluation_id' => ModuleEvaluationConfig::factory()->create(['module_id' => $module->id])->id,
-            'status' => 'Draft',
+        $draft = ClassEvaluation::factory()->create([
+            'classe_id' => $classe->id, 'subject_id' => $subject->id, 'semester_id' => $semester->id, 'teacher_id' => $teacher->id,
         ]);
-        GradeFactory::new()->create([
-            'student_id' => Student::factory()->create()->id,
-            'evaluation_id' => $evaluation->id,
-            'status' => 'Published',
-            'is_visible_to_students' => true,
-            'published_at' => now(),
-        ]);
+        ClassEvaluationGrade::factory()->create(['class_evaluation_id' => $published->id, 'student_id' => $child->id, 'score' => 14.5]);
+        ClassEvaluationGrade::factory()->create(['class_evaluation_id' => $draft->id, 'student_id' => $child->id, 'score' => 2]);
+        ClassEvaluationGrade::factory()->create(['class_evaluation_id' => $published->id, 'student_id' => $classmate->id, 'score' => 16]);
 
         $this->withToken($token)
             ->getJson("/api/admin/parent/children/{$child->id}/grades")
             ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $published->id)
-            ->assertJsonPath('data.0.subject', 'Mathématiques')
-            ->assertJsonPath('data.0.evaluation', 'Devoir 1')
-            ->assertJsonPath('data.0.score', 14.5)
-            ->assertJsonPath('data.0.max_score', 20)
-            ->assertJsonPath('data.0.evaluation_date', '2026-10-15');
+            ->assertJsonPath('data.student.id', $child->id)
+            ->assertJsonCount(1, 'data.subjects')
+            ->assertJsonPath('data.subjects.0.subject.name', 'Mathématiques')
+            ->assertJsonCount(1, 'data.subjects.0.evaluations')
+            ->assertJsonPath('data.subjects.0.evaluations.0.id', $published->id)
+            ->assertJsonPath('data.subjects.0.evaluations.0.title', 'Devoir 1')
+            ->assertJsonPath('data.subjects.0.evaluations.0.score', 14.5)
+            ->assertJsonPath('data.subjects.0.evaluations.0.max_score', 20)
+            ->assertJsonPath('data.subjects.0.evaluations.0.date', '2026-10-15')
+            ->assertJsonPath('data.subjects.0.class_average', 15.25)
+            ->assertJsonPath('data.general_average', 14.5)
+            ->assertJsonPath('data.rank', 2)
+            ->assertJsonPath('meta.student_id', $child->id);
     }
 
     #[Test]
