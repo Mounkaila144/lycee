@@ -2,8 +2,9 @@
 
 namespace Tests\Feature\NotesEvaluations;
 
+use Illuminate\Support\Facades\Artisan;
 use Modules\NotesEvaluations\Entities\GradeValidation;
-use Modules\UsersGuard\Entities\User;
+use Modules\UsersGuard\Entities\TenantUser as User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Tests\Concerns\InteractsWithTenancy;
@@ -11,7 +12,9 @@ use Tests\TestCase;
 
 class GradeValidationApiTest extends TestCase
 {
-    use InteractsWithTenancy;
+    use InteractsWithTenancy {
+        runMigrationsOnce as runBaseMigrationsOnce;
+    }
 
     private User $user;
 
@@ -23,8 +26,29 @@ class GradeValidationApiTest extends TestCase
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
 
+        $this->seedRolesAndPermissions();
         $this->user = User::factory()->create();
+        $this->assignRole($this->user, 'Administrator');
         $this->token = $this->user->createToken('test-token')->plainTextToken;
+    }
+
+    /**
+     * Run the shared tenant migrations, then the NotesEvaluations tables (not part of the shared set).
+     */
+    protected function runMigrationsOnce(): void
+    {
+        if (self::$migrationsRan) {
+            return;
+        }
+
+        $this->runBaseMigrationsOnce();
+
+        Artisan::call('migrate', [
+            '--database' => 'mysql',
+            '--path' => base_path('Modules/NotesEvaluations/Database/Migrations/tenant'),
+            '--realpath' => true,
+            '--force' => true,
+        ]);
     }
 
     protected function tearDown(): void

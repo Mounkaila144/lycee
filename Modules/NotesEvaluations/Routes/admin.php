@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
 use Modules\NotesEvaluations\Http\Controllers\Admin\AbsenceReviewController;
 use Modules\NotesEvaluations\Http\Controllers\Admin\AnalyticsController;
@@ -31,7 +32,7 @@ use Modules\NotesEvaluations\Http\Controllers\Admin\StatisticsController;
 // RBAC durcissement (Stories Admin 06, Manager 05) : seuls Admin et Manager
 // accèdent au pilotage des notes/évaluations admin. Les Profs passent par teacher.php.
 Route::prefix('api/admin')
-    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager,tenant'])
+    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager,tenant', SubstituteBindings::class])
     ->group(function () {
         // Grade Validations
         Route::prefix('grade-validations')->group(function () {

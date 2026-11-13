@@ -39,6 +39,15 @@ class StudentResource extends JsonResource
             'emergency_contact_phone' => $this->emergency_contact_phone,
 
             'documents' => StudentDocumentResource::collection($this->whenLoaded('documents')),
+            'class_enrollment' => $this->whenPivotLoaded('class_enrollments', fn () => [
+                'id' => $this->pivot->id,
+                'classe_id' => $this->pivot->classe_id,
+                'academic_year_id' => $this->pivot->academic_year_id,
+                'assignment_type' => $this->pivot->assignment_type,
+                'status' => $this->pivot->status,
+                'enrolled_at' => $this->pivot->enrolled_at,
+                'final_decision' => $this->pivot->final_decision,
+            ]),
 
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),

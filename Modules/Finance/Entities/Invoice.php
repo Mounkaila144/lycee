@@ -129,15 +129,20 @@ class Invoice extends Model
     }
 
     /**
-     * Scope for overdue invoices
+     * Scope for overdue invoices.
+     *
+     * The OR is grouped so that it does not escape the other constraints
+     * of the query (soft deletes, academic year, student, search...).
      */
     public function scopeOverdue($query)
     {
-        return $query->where('status', 'overdue')
-            ->orWhere(function ($q) {
-                $q->whereIn('status', ['pending', 'partial'])
-                    ->where('due_date', '<', now());
-            });
+        return $query->where(function ($overdueQuery) {
+            $overdueQuery->where('status', 'overdue')
+                ->orWhere(function ($q) {
+                    $q->whereIn('status', ['pending', 'partial'])
+                        ->where('due_date', '<', now());
+                });
+        });
     }
 
     /**

@@ -17,10 +17,10 @@ class ClasseFactory extends Factory
             'academic_year_id' => AcademicYear::factory(),
             'level_id' => Level::factory(),
             'series_id' => null,
-            'section' => fake()->randomElement(['A', 'B', 'C', '1', '2']),
-            'name' => fake()->unique()->word(),
-            'max_capacity' => fake()->numberBetween(30, 80),
-            'classroom' => 'Salle ' . fake()->numberBetween(1, 20),
+            'section' => \fake()->randomElement(['A', 'B', 'C', '1', '2']),
+            'name' => \fake()->unique()->word(),
+            'max_capacity' => \fake()->numberBetween(30, 80),
+            'classroom' => 'Salle ' . \fake()->numberBetween(1, 20),
             'head_teacher_id' => null,
         ];
     }

@@ -140,7 +140,7 @@ class CollectionController extends Controller
     public function blocks(Request $request): JsonResponse
     {
         $query = ServiceBlock::on('tenant')
-            ->with(['student', 'blockedBy', 'unblockedBy']);
+            ->with(['student', 'blockedBy:id,username,firstname,lastname', 'unblockedBy:id,username,firstname,lastname']);
 
         if ($studentId = $request->input('student_id')) {
             $query->byStudent($studentId);

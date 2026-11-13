@@ -8,6 +8,7 @@ use Modules\Enrollment\Entities\Student;
 use Modules\NotesEvaluations\Entities\GradeConfig;
 use Modules\NotesEvaluations\Entities\JuryDecision;
 use Modules\NotesEvaluations\Entities\ModuleGrade;
+use Modules\NotesEvaluations\Entities\RetakeEnrollment;
 use Modules\NotesEvaluations\Entities\SemesterResult;
 use Modules\NotesEvaluations\Jobs\GenerateFinalDocumentsJob;
 use Modules\NotesEvaluations\Notifications\FinalResultsNotification;
@@ -89,7 +90,7 @@ class FinalResultsService
         // Check recalculations completed
         $pendingRecalculations = SemesterResult::where('semester_id', $semesterId)
             ->where('retake_session_completed', false)
-            ->whereHas('student.retakeEnrollments', fn ($q) => $q->where('semester_id', $semesterId))
+            ->whereIn('student_id', RetakeEnrollment::where('semester_id', $semesterId)->select('student_id'))
             ->count();
 
         if ($pendingRecalculations > 0) {

@@ -20,7 +20,7 @@ class StudentGroupController extends Controller
 
         // Find the student associated with this user
         $student = Student::on('tenant')
-            ->where('email', $user->email)
+            ->where('user_id', $user->id)
             ->first();
 
         if (! $student) {
@@ -77,7 +77,7 @@ class StudentGroupController extends Controller
         $user = Auth::user();
 
         $student = Student::on('tenant')
-            ->where('email', $user->email)
+            ->where('user_id', $user->id)
             ->first();
 
         if (! $student) {

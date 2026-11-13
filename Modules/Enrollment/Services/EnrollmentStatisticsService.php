@@ -100,7 +100,7 @@ class EnrollmentStatisticsService
             return $programmes->map(function ($program) use ($year) {
                 $enrollments = StudentEnrollment::on('tenant')
                     ->where('academic_year_id', $year->id)
-                    ->where('program_id', $program->id)
+                    ->where('programme_id', $program->id)
                     ->with('student')
                     ->get();
 
@@ -125,7 +125,7 @@ class EnrollmentStatisticsService
                 if ($previousYear) {
                     $previousCount = StudentEnrollment::on('tenant')
                         ->where('academic_year_id', $previousYear->id)
-                        ->where('program_id', $program->id)
+                        ->where('programme_id', $program->id)
                         ->count();
                 }
 
@@ -176,7 +176,7 @@ class EnrollmentStatisticsService
                     ->where('academic_year_id', $year->id);
 
                 if ($programId) {
-                    $query->where('program_id', $programId);
+                    $query->where('programme_id', $programId);
                 }
 
                 $count = $query->count();

@@ -2,8 +2,17 @@
 
 namespace Tests\Feature\RoleCoverage\Parent;
 
+use Illuminate\Support\Facades\Artisan;
+use Modules\Documents\Entities\Document;
+use Modules\Enrollment\Entities\ClassEnrollment;
+use Modules\Enrollment\Entities\Group;
 use Modules\Enrollment\Entities\Student;
 use Modules\PortailParent\Entities\ParentModel;
+use Modules\StructureAcademique\Entities\AcademicYear;
+use Modules\StructureAcademique\Entities\Classe;
+use Modules\StructureAcademique\Entities\Semester;
+use Modules\StructureAcademique\Entities\Subject;
+use Modules\Timetable\Entities\TimetableSlot;
 use Modules\UsersGuard\Entities\TenantUser;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -18,7 +27,40 @@ use Tests\TestCase;
  */
 class ExtraEndpointsTest extends TestCase
 {
-    use InteractsWithTenancy;
+    use InteractsWithTenancy {
+        runMigrationsOnce as baseRunMigrationsOnce;
+    }
+
+    protected static bool $extraMigrationsRan = false;
+
+    public static function setUpBeforeClass(): void
+    {
+        parent::setUpBeforeClass();
+        self::$extraMigrationsRan = false;
+    }
+
+    /**
+     * Migrations partagées + tables Timetable et Documents.
+     */
+    protected function runMigrationsOnce(): void
+    {
+        $this->baseRunMigrationsOnce();
+
+        if (self::$extraMigrationsRan) {
+            return;
+        }
+
+        foreach (['Modules/Timetable/Database/Migrations/tenant', 'Modules/Documents/Database/Migrations/tenant'] as $path) {
+            Artisan::call('migrate', [
+                '--database' => 'mysql',
+                '--path' => base_path($path),
+                '--realpath' => true,
+                '--force' => true,
+            ]);
+        }
+
+        self::$extraMigrationsRan = true;
+    }
 
     protected function setUp(): void
     {
@@ -142,5 +184,91 @@ class ExtraEndpointsTest extends TestCase
         $this->withToken($token)
             ->getJson('/api/admin/parent/announcements')
             ->assertForbidden();
+    }
+
+    #[Test]
+    public function timetable_returns_slots_of_the_child_active_class(): void
+    {
+        [, $child, $token] = $this->parentWithChild();
+        $academicYear = AcademicYear::factory()->create(['name' => '2090-2091', 'is_active' => true]);
+        $semester = Semester::factory()->create(['academic_year_id' => $academicYear->id, 'is_active' => true]);
+        $classe = Classe::factory()->create(['academic_year_id' => $academicYear->id, 'name' => '6ème A']);
+        $otherClasse = Classe::factory()->create(['academic_year_id' => $academicYear->id]);
+        $subject = Subject::factory()->create(['name' => 'Mathématiques']);
+
+        ClassEnrollment::query()->create([
+            'student_id' => $child->id,
+            'classe_id' => $classe->id,
+            'academic_year_id' => $academicYear->id,
+            'enrolled_at' => now()->toDateString(),
+            'status' => 'Actif',
+        ]);
+
+        $groupId = Group::factory()->forSemester($semester)->create()->id;
+
+        $slot = TimetableSlot::factory()->create([
+            'group_id' => $groupId,
+            'classe_id' => $classe->id,
+            'subject_id' => $subject->id,
+            'semester_id' => $semester->id,
+            'day_of_week' => 'Lundi',
+            'start_time' => '08:00:00',
+            'end_time' => '10:00:00',
+        ]);
+        TimetableSlot::factory()->create([
+            'group_id' => $groupId,
+            'classe_id' => $otherClasse->id,
+            'semester_id' => $semester->id,
+        ]);
+
+        $this->withToken($token)
+            ->getJson("/api/admin/parent/children/{$child->id}/timetable")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $slot->id)
+            ->assertJsonPath('data.0.subject', 'Mathématiques')
+            ->assertJsonPath('data.0.start_time', '08:00')
+            ->assertJsonPath('meta.classe.id', $classe->id);
+    }
+
+    #[Test]
+    public function timetable_is_empty_when_child_has_no_active_class(): void
+    {
+        [, $child, $token] = $this->parentWithChild();
+
+        $this->withToken($token)
+            ->getJson("/api/admin/parent/children/{$child->id}/timetable")
+            ->assertOk()
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('meta.classe', null);
+    }
+
+    #[Test]
+    public function documents_return_only_issued_documents_of_the_child(): void
+    {
+        [, $child, $token] = $this->parentWithChild();
+        $academicYearId = AcademicYear::factory()->create(['name' => '2091-2092'])->id;
+
+        $issued = Document::factory()->create([
+            'student_id' => $child->id,
+            'academic_year_id' => $academicYearId,
+            'status' => 'issued',
+            'document_type' => 'certificate_enrollment',
+            'document_number' => 'DOC-0001',
+        ]);
+        Document::factory()->create(['student_id' => $child->id, 'academic_year_id' => $academicYearId, 'status' => 'cancelled']);
+        Document::factory()->create([
+            'student_id' => Student::factory()->create()->id,
+            'academic_year_id' => $academicYearId,
+            'status' => 'issued',
+        ]);
+
+        $this->withToken($token)
+            ->getJson("/api/admin/parent/children/{$child->id}/documents")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $issued->id)
+            ->assertJsonPath('data.0.type', 'certificate_enrollment')
+            ->assertJsonPath('data.0.document_number', 'DOC-0001');
     }
 }

@@ -5,12 +5,14 @@ namespace Modules\Attendance\Http\Controllers\Admin;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Modules\Attendance\Services\AttendanceAccessService;
 use Modules\Attendance\Services\AttendanceReportService;
 
 class AttendanceReportController extends Controller
 {
     public function __construct(
-        private AttendanceReportService $reportService
+        private AttendanceReportService $reportService,
+        private AttendanceAccessService $accessService
     ) {}
 
     /**
@@ -20,12 +22,13 @@ class AttendanceReportController extends Controller
     {
         $validated = $request->validate([
             'semester_id' => 'required|integer|exists:tenant.semesters,id',
-            'group_id' => 'nullable|integer|exists:tenant.groups,id',
+            'classe_id' => 'nullable|integer|exists:tenant.classes,id',
         ]);
 
         $rates = $this->reportService->getAttendanceRates(
             $validated['semester_id'],
-            $validated['group_id'] ?? null
+            $validated['classe_id'] ?? null,
+            $this->accessService->visibleStudentUserIds($request->user())
         );
 
         return response()->json($rates);
@@ -43,7 +46,8 @@ class AttendanceReportController extends Controller
 
         $absentees = $this->reportService->getAbsenteesList(
             $validated['semester_id'],
-            $validated['min_absence_rate'] ?? 20.0
+            (float) ($validated['min_absence_rate'] ?? 20.0),
+            $this->accessService->visibleStudentUserIds($request->user())
         );
 
         return response()->json($absentees);
@@ -58,7 +62,10 @@ class AttendanceReportController extends Controller
             'semester_id' => 'required|integer|exists:tenant.semesters,id',
         ]);
 
-        $statistics = $this->reportService->getDetailedStatistics($validated['semester_id']);
+        $statistics = $this->reportService->getDetailedStatistics(
+            $validated['semester_id'],
+            $this->accessService->visibleStudentUserIds($request->user())
+        );
 
         return response()->json($statistics);
     }
@@ -75,13 +82,14 @@ class AttendanceReportController extends Controller
 
         $data = $this->reportService->exportData(
             $validated['semester_id'],
-            $validated['type']
+            $validated['type'],
+            $this->accessService->visibleStudentUserIds($request->user())
         );
 
         return response()->json([
             'data' => $data,
             'export_type' => $validated['type'],
-            'semester_id' => $validated['semester_id'],
+            'semester_id' => (int) $validated['semester_id'],
         ]);
     }
 }

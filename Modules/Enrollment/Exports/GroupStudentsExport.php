@@ -35,7 +35,7 @@ class GroupStudentsExport implements FromCollection, ShouldAutoSize, WithHeading
         return GroupAssignment::on('tenant')
             ->where('group_id', $this->group->id)
             ->with(['student' => function ($q) {
-                $q->select('id', 'matricule', 'firstname', 'lastname', 'email', 'phone', 'birthdate');
+                $q->select('id', 'matricule', 'firstname', 'lastname', 'phone', 'birthdate');
             }])
             ->get()
             ->pluck('student')

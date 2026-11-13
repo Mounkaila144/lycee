@@ -11,7 +11,7 @@ class AcademicYearFactory extends Factory
 
     public function definition(): array
     {
-        $startYear = fake()->numberBetween(2024, 2030);
+        $startYear = fake()->unique()->numberBetween(3000, 8000);
         $endYear = $startYear + 1;
 
         return [

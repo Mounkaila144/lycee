@@ -7,8 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Modules\StructureAcademique\Entities\AcademicPeriod;
 use Modules\StructureAcademique\Entities\AcademicYear;
-use Modules\StructureAcademique\Entities\EvaluationPeriod;
 use Modules\StructureAcademique\Entities\Module as AcademicModule;
 use Modules\UsersGuard\Entities\User;
 
@@ -52,9 +52,12 @@ class ExamSession extends Model
         return $this->belongsTo(AcademicModule::class, 'module_id');
     }
 
+    /**
+     * La colonne evaluation_period_id référence la table academic_periods.
+     */
     public function evaluationPeriod(): BelongsTo
     {
-        return $this->belongsTo(EvaluationPeriod::class);
+        return $this->belongsTo(AcademicPeriod::class, 'evaluation_period_id');
     }
 
     public function academicYear(): BelongsTo

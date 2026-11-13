@@ -59,7 +59,7 @@ class ExceptionManagementService
                 'new_values' => $newValues,
                 'reason' => $reason,
                 'notify_students' => $notifyStudents,
-                'created_by' => auth()->id(),
+                'created_by' => auth('tenant')->id(),
             ]);
         });
 

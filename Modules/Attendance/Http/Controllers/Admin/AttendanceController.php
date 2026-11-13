@@ -7,33 +7,60 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
+use Modules\Attendance\Entities\AttendanceRecord;
 use Modules\Attendance\Entities\AttendanceSession;
+use Modules\Attendance\Http\Requests\StoreAttendanceSessionRequest;
+use Modules\Attendance\Services\AttendanceAccessService;
 use Modules\Attendance\Services\AttendanceService;
+use Modules\StructureAcademique\Entities\Classe;
+use Modules\StructureAcademique\Entities\Semester;
+use Modules\Timetable\Entities\TimetableSlot;
 
 class AttendanceController extends Controller
 {
     public function __construct(
-        private AttendanceService $attendanceService
+        private AttendanceService $attendanceService,
+        private AttendanceAccessService $accessService
     ) {}
 
     /**
-     * Créer session d'appel (Story 01)
+     * Créer session d'appel (Story 01).
+     * Un Professeur ne peut faire l'appel que pour sa classe (professeur principal) ou ses créneaux.
      */
-    public function createSession(Request $request): JsonResponse
+    public function createSession(StoreAttendanceSessionRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'timetable_slot_id' => 'required|integer|exists:tenant.timetable_slots,id',
-            'session_date' => 'required|date',
-            'method' => ['nullable', 'string', Rule::in(['manual', 'mobile', 'qr_code', 'imported'])],
-        ]);
+        if (! $this->accessService->sessionsHaveClasse()) {
+            abort(503, 'Module présences en cours de mise à jour (migration requise). Réessayez plus tard.');
+        }
+
+        $validated = $request->validated();
+        $user = $request->user();
+
+        if (! empty($validated['classe_id'])) {
+            $classe = Classe::query()->findOrFail($validated['classe_id']);
+            if (! $this->accessService->canManageClasse($user, $classe)) {
+                abort(403, 'Vous ne pouvez faire l\'appel que pour vos classes.');
+            }
+        } else {
+            $slot = TimetableSlot::query()->findOrFail($validated['timetable_slot_id']);
+            if (! $this->accessService->canManageTimetableSlot($user, $slot)) {
+                abort(403, 'Vous ne pouvez faire l\'appel que pour vos créneaux.');
+            }
+
+            $validated['classe_id'] = $slot->getAttribute('classe_id');
+            $validated['subject_id'] ??= $slot->getAttribute('subject_id');
+            $validated['start_time'] ??= $slot->start_time ? substr((string) $slot->start_time, 0, 5) : null;
+            $validated['end_time'] ??= $slot->end_time ? substr((string) $slot->end_time, 0, 5) : null;
+        }
 
         $session = $this->attendanceService->createSession(
-            $validated['timetable_slot_id'],
+            $validated,
             Carbon::parse($validated['session_date']),
-            $validated['method'] ?? 'manual'
+            $validated['method'] ?? 'manual',
+            (int) $user->getAuthIdentifier()
         );
 
-        return response()->json($session->load(['timetableSlot', 'records.student']), 201);
+        return response()->json($session->load(['classe', 'subject', 'timetableSlot', 'records.student']), 201);
     }
 
     /**
@@ -47,6 +74,8 @@ class AttendanceController extends Controller
             'status' => ['required', 'string', Rule::in(['present', 'absent', 'late', 'excused'])],
             'arrival_time' => 'nullable|date_format:H:i',
         ]);
+
+        $this->findManageableSession($request, (int) $validated['session_id']);
 
         $record = $this->attendanceService->recordAttendance(
             $validated['session_id'],
@@ -68,10 +97,14 @@ class AttendanceController extends Controller
             'reason' => 'required|string|max:500',
         ]);
 
+        $record = AttendanceRecord::query()->findOrFail($recordId);
+        $this->findManageableSession($request, (int) $record->attendance_session_id);
+
         $record = $this->attendanceService->modifyRecord(
-            $recordId,
+            $record,
             $validated['status'],
-            $validated['reason']
+            $validated['reason'],
+            (int) $request->user()->getAuthIdentifier()
         );
 
         return response()->json($record->load('student'));
@@ -80,19 +113,21 @@ class AttendanceController extends Controller
     /**
      * Feuille d'appel (Story 01)
      */
-    public function getAttendanceSheet(int $sessionId): JsonResponse
+    public function getAttendanceSheet(Request $request, int $sessionId): JsonResponse
     {
-        $sheet = $this->attendanceService->getAttendanceSheet($sessionId);
+        $session = $this->findManageableSession($request, $sessionId);
 
-        return response()->json($sheet);
+        return response()->json($this->attendanceService->getAttendanceSheet($session));
     }
 
     /**
      * Compléter session
      */
-    public function completeSession(int $sessionId): JsonResponse
+    public function completeSession(Request $request, int $sessionId): JsonResponse
     {
-        $session = $this->attendanceService->completeSession($sessionId);
+        $session = $this->findManageableSession($request, $sessionId);
+
+        $session = $this->attendanceService->completeSession($session, (int) $request->user()->getAuthIdentifier());
 
         return response()->json([
             'message' => 'Session complétée avec succès',
@@ -111,6 +146,8 @@ class AttendanceController extends Controller
             'qr_token' => 'required|string',
         ]);
 
+        $this->findManageableSession($request, (int) $validated['session_id']);
+
         $success = $this->attendanceService->recordViaQRCode(
             $validated['session_id'],
             $validated['student_id'],
@@ -124,22 +161,83 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Liste sessions
+     * Liste sessions (un Professeur ne voit que les siennes).
      */
     public function index(Request $request): JsonResponse
     {
-        $query = AttendanceSession::with(['timetableSlot.module', 'creator']);
+        $query = AttendanceSession::with(['timetableSlot.module', 'classe', 'subject', 'creator'])
+            ->withCount([
+                'records',
+                'records as present_count' => fn ($q) => $q->where('status', 'present'),
+                'records as absent_count' => fn ($q) => $q->where('status', 'absent'),
+            ]);
 
-        if ($request->has('semester_id')) {
-            $query->whereHas('timetableSlot', fn ($q) => $q->where('semester_id', $request->semester_id));
+        $user = $request->user();
+        if (! $this->accessService->isSupervisor($user)) {
+            $query->visibleToTeacher(
+                (int) $user->getAuthIdentifier(),
+                $this->accessService->sessionsHaveClasse() ? $this->accessService->teacherClasseIds($user) : []
+            );
         }
 
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
+        if ($request->filled('semester_id')) {
+            $semester = Semester::query()->find($request->integer('semester_id'));
+            if ($semester) {
+                $query->withinSemester($semester);
+            }
         }
 
-        $sessions = $query->orderBy('session_date', 'desc')->paginate(15);
+        if ($request->filled('classe_id') && $this->accessService->sessionsHaveClasse()) {
+            $query->where('classe_id', $request->integer('classe_id'));
+        }
+
+        if ($request->filled('session_date')) {
+            $query->whereDate('session_date', $request->input('session_date'));
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        $sessions = $query->orderBy('session_date', 'desc')
+            ->orderBy('start_time', 'desc')
+            ->paginate($request->integer('per_page', 15));
 
         return response()->json($sessions);
+    }
+
+    /**
+     * Classes pour lesquelles l'utilisateur peut faire l'appel.
+     */
+    public function classes(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $query = Classe::query()->withCount('activeEnrollments')->orderBy('name');
+
+        if (! $this->accessService->isSupervisor($user)) {
+            $query->whereIn('id', $this->accessService->teacherClasseIds($user));
+        }
+
+        if ($request->filled('academic_year_id')) {
+            $query->where('academic_year_id', $request->integer('academic_year_id'));
+        }
+
+        return response()->json([
+            'data' => $query->get(['id', 'name', 'academic_year_id', 'head_teacher_id']),
+        ]);
+    }
+
+    private function findManageableSession(Request $request, int $sessionId): AttendanceSession
+    {
+        $session = AttendanceSession::query()
+            ->with(['classe', 'timetableSlot'])
+            ->findOrFail($sessionId);
+
+        if (! $this->accessService->canManageSession($request->user(), $session)) {
+            abort(403, 'Vous n\'êtes pas autorisé à gérer cette séance d\'appel.');
+        }
+
+        return $session;
     }
 }

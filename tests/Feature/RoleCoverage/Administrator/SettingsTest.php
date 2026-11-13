@@ -142,4 +142,39 @@ class SettingsTest extends TestCase
             ->getJson('/api/admin/settings')
             ->assertForbidden();
     }
+
+    #[Test]
+    public function setting_key_must_be_url_safe(): void
+    {
+        $token = $this->tokenFor('Administrator');
+
+        $this->withToken($token)
+            ->postJson('/api/admin/settings', [
+                'key' => 'school/name with spaces',
+                'value' => 'X',
+                'type' => 'string',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['key']);
+    }
+
+    #[Test]
+    public function unknown_setting_returns_not_found(): void
+    {
+        $token = $this->tokenFor('Administrator');
+
+        $this->withToken($token)
+            ->getJson('/api/admin/settings/does.not.exist')
+            ->assertNotFound();
+    }
+
+    #[Test]
+    public function professeur_cannot_access_settings(): void
+    {
+        $token = $this->tokenFor('Professeur');
+
+        $this->withToken($token)
+            ->getJson('/api/admin/settings')
+            ->assertForbidden();
+    }
 }

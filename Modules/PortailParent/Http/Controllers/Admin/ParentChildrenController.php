@@ -19,7 +19,7 @@ use Modules\PortailParent\Http\Resources\ParentProfileResource;
  * Endpoints :
  *   - GET /api/admin/parent/me                 → profil Parent connecté
  *   - GET /api/admin/parent/me/children        → liste de SES enfants (pivot parent_student)
- *   - GET /api/admin/parent/children/{student} → détail d'UN enfant (ChildPolicy::view)
+ *   - GET /api/admin/parent/children/{studentId} → détail d'UN enfant (ChildPolicy::view)
  */
 class ParentChildrenController extends Controller
 {
@@ -62,8 +62,11 @@ class ParentChildrenController extends Controller
     /**
      * Détail d'un enfant (avec ownership ChildPolicy::view).
      */
-    public function show(Request $request, Student $student): ChildResource
+    public function show(Request $request, int $studentId): ChildResource
     {
+        // Pas de route model binding : il s'exécuterait avant l'initialisation du tenant.
+        $student = Student::query()->findOrFail($studentId);
+
         // Note : on n'utilise pas $this->authorize() car TenantSanctumAuth ne définit
         // pas Auth::user() sur le guard par défaut (il utilise Auth::guard('tenant')).
         // Gate::forUser() permet de cibler explicitement l'utilisateur tenant connecté.

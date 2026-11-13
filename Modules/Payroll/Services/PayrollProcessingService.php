@@ -9,6 +9,7 @@ use Modules\Payroll\Entities\Employee;
 use Modules\Payroll\Entities\PayrollPeriod;
 use Modules\Payroll\Entities\PayrollRecord;
 use Modules\Payroll\Entities\Payslip;
+use Modules\Payroll\Exceptions\PayrollException;
 
 /**
  * Epic 3: Traitement Paie (Stories 10-13)
@@ -49,7 +50,7 @@ class PayrollProcessingService
                 ->first();
 
             if ($existing) {
-                throw new \Exception("La paie pour {$month}/{$year} existe déjà");
+                throw new PayrollException("La paie pour {$month}/{$year} existe déjà");
             }
 
             // Create period
@@ -80,7 +81,7 @@ class PayrollProcessingService
     {
         return DB::connection('tenant')->transaction(function () use ($period, $employees) {
             if (! $period->canBeCalculated()) {
-                throw new \Exception('Cette paie ne peut pas être calculée');
+                throw new PayrollException('Cette paie ne peut pas être calculée');
             }
 
             // Get employees to process
@@ -90,15 +91,23 @@ class PayrollProcessingService
 
             $period->update(['status' => 'in_progress']);
 
+            $processedCount = 0;
+
             foreach ($employees as $employee) {
-                $this->calculateEmployeePayroll($period, $employee);
+                if ($this->calculateEmployeePayroll($period, $employee) !== null) {
+                    $processedCount++;
+                }
+            }
+
+            if ($processedCount === 0) {
+                throw new PayrollException('Aucun employé actif avec un contrat actif : impossible de calculer la paie');
             }
 
             // Update period totals
             $period->updateTotals();
             $period->update([
                 'status' => 'calculated',
-                'calculated_by' => auth()->id(),
+                'calculated_by' => auth('tenant')->id(),
                 'calculated_at' => now(),
             ]);
 
@@ -107,14 +116,13 @@ class PayrollProcessingService
     }
 
     /**
-     * Calculate payroll for a single employee
+     * Calculate payroll for a single employee (null when the employee has no active contract).
      */
-    protected function calculateEmployeePayroll(PayrollPeriod $period, Employee $employee): PayrollRecord
+    protected function calculateEmployeePayroll(PayrollPeriod $period, Employee $employee): ?PayrollRecord
     {
-        // Get active contract
         $contract = $employee->getCurrentContract();
         if (! $contract) {
-            throw new \Exception("Aucun contrat actif pour l'employé {$employee->full_name}");
+            return null;
         }
 
         // Check if record already exists
@@ -351,7 +359,7 @@ class PayrollProcessingService
     {
         return DB::connection('tenant')->transaction(function () use ($period, $userId) {
             if (! $period->canBeValidated()) {
-                throw new \Exception('Cette paie ne peut pas être validée');
+                throw new PayrollException('Cette paie ne peut pas être validée');
             }
 
             $period->update([
@@ -374,7 +382,7 @@ class PayrollProcessingService
     {
         return DB::connection('tenant')->transaction(function () use ($period, $userId) {
             if (! $period->isValidated()) {
-                throw new \Exception('La paie doit être validée avant de générer les bulletins');
+                throw new PayrollException('La paie doit être validée avant de générer les bulletins');
             }
 
             $payslips = collect();
@@ -431,7 +439,7 @@ class PayrollProcessingService
     public function generateBankTransferFile(PayrollPeriod $period): array
     {
         if (! $period->isValidated()) {
-            throw new \Exception('La paie doit être validée avant de générer le fichier de virement');
+            throw new PayrollException('La paie doit être validée avant de générer le fichier de virement');
         }
 
         $transfers = [];
@@ -463,7 +471,7 @@ class PayrollProcessingService
     {
         return DB::connection('tenant')->transaction(function () use ($period, $paymentDate) {
             if (! $period->canBePaid()) {
-                throw new \Exception('Cette paie ne peut pas être marquée comme payée');
+                throw new PayrollException('Cette paie ne peut pas être marquée comme payée');
             }
 
             $period->update([

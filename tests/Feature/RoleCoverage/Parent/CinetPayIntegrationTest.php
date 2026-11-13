@@ -4,8 +4,11 @@ namespace Tests\Feature\RoleCoverage\Parent;
 
 use Illuminate\Support\Facades\Http;
 use Modules\Enrollment\Entities\Student;
+use Modules\Finance\Entities\Invoice;
 use Modules\Finance\Entities\ParentOnlinePayment;
+use Modules\Finance\Entities\Payment;
 use Modules\PortailParent\Entities\ParentModel;
+use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\UsersGuard\Entities\TenantUser;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -72,6 +75,20 @@ class CinetPayIntegrationTest extends TestCase
         return [$user, $child, $user->createToken('test-token')->plainTextToken];
     }
 
+    private function invoiceFor(Student $student, float $total = 100000, float $paid = 0): Invoice
+    {
+        return Invoice::on('tenant')->create([
+            'student_id' => $student->id,
+            'academic_year_id' => (AcademicYear::query()->first() ?? AcademicYear::factory()->create())->id,
+            'invoice_number' => 'INV-TEST-'.uniqid(),
+            'invoice_date' => now()->toDateString(),
+            'due_date' => now()->addMonth()->toDateString(),
+            'total_amount' => $total,
+            'paid_amount' => $paid,
+            'status' => $paid > 0 ? 'partial' : 'pending',
+        ]);
+    }
+
     private function signPayload(array $payload, string $secret = 'test_secret_hmac'): string
     {
         ksort($payload);
@@ -98,25 +115,27 @@ class CinetPayIntegrationTest extends TestCase
         ]);
 
         [, $child, $token] = $this->financialParent();
+        $invoice = $this->invoiceFor($child);
 
         $response = $this->withToken($token)->postJson(
-            "/api/admin/parent/children/{$child->id}/invoices/42/pay",
+            "/api/admin/parent/children/{$child->id}/invoices/{$invoice->id}/pay",
             ['method' => 'mobile_money', 'amount' => 50000, 'phone' => '+22790000000']
         );
 
         $response->assertStatus(201)
-            ->assertJsonPath('data.invoice_id', 42)
+            ->assertJsonPath('data.invoice_id', $invoice->id)
             ->assertJsonPath('data.status', 'pending')
             ->assertJsonPath('data.payment_url', 'https://checkout.cinetpay.com/pay/tok_test_abc')
             ->assertJsonStructure(['data' => ['transaction_id']]);
 
         $this->assertDatabaseHas('parent_online_payments', [
-            'invoice_id' => 42,
+            'invoice_id' => $invoice->id,
             'status' => 'pending',
             'cinetpay_token' => 'tok_test_abc',
         ], 'tenant');
 
-        Http::assertSent(fn ($request) => str_contains($request->url(), 'cinetpay.com/v2/payment'));
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'cinetpay.com/v2/payment')
+            && $request['return_url'] === 'https://app.test/return?payment_id='.$response->json('data.payment_id'));
     }
 
     #[Test]
@@ -127,9 +146,10 @@ class CinetPayIntegrationTest extends TestCase
         ]);
 
         [, $child, $token] = $this->financialParent();
+        $invoice = $this->invoiceFor($child);
 
         $response = $this->withToken($token)->postJson(
-            "/api/admin/parent/children/{$child->id}/invoices/1/pay",
+            "/api/admin/parent/children/{$child->id}/invoices/{$invoice->id}/pay",
             ['method' => 'mobile_money', 'amount' => 1000]
         );
 
@@ -163,12 +183,13 @@ class CinetPayIntegrationTest extends TestCase
     public function webhook_transitions_pending_payment_to_success(): void
     {
         [$user, $child] = $this->financialParent();
+        $invoice = $this->invoiceFor($child, 100000, 50000);
 
         $payment = ParentOnlinePayment::create([
             'transaction_id' => 'uuid-success',
             'parent_user_id' => $user->id,
             'student_id' => $child->id,
-            'invoice_id' => 99,
+            'invoice_id' => $invoice->id,
             'amount' => 25000,
             'currency' => 'XOF',
             'method' => 'mobile_money',
@@ -190,6 +211,95 @@ class CinetPayIntegrationTest extends TestCase
         $this->assertSame('success', $payment->fresh()->status);
         $this->assertSame('CP-TX-2026-001', $payment->fresh()->cinetpay_transaction_id);
         $this->assertNotNull($payment->fresh()->notified_at);
+
+        // L'encaissement est imputé sur la facture (solde mis à jour)
+        $recorded = Payment::on('tenant')->where('invoice_id', $invoice->id)->first();
+        $this->assertNotNull($recorded, 'Le paiement en ligne doit créer un encaissement Finance');
+        $this->assertSame('online', $recorded->payment_method);
+        $this->assertSame('uuid-success', $recorded->reference_number);
+        $this->assertEquals(25000, (float) $recorded->amount);
+        $this->assertEquals(75000, (float) $invoice->fresh()->paid_amount);
+        $this->assertSame('partial', $invoice->fresh()->status);
+    }
+
+    #[Test]
+    public function initiate_rejects_invoice_of_another_student(): void
+    {
+        Http::fake();
+
+        [, $child, $token] = $this->financialParent();
+        $otherInvoice = $this->invoiceFor(Student::factory()->create());
+
+        $this->withToken($token)->postJson(
+            "/api/admin/parent/children/{$child->id}/invoices/{$otherInvoice->id}/pay",
+            ['method' => 'mobile_money', 'amount' => 1000]
+        )
+            ->assertNotFound()
+            ->assertJsonPath('code', 'INVOICE_NOT_FOUND');
+
+        Http::assertNothingSent();
+        $this->assertSame(0, ParentOnlinePayment::on('tenant')->count());
+    }
+
+    #[Test]
+    public function initiate_rejects_amount_above_invoice_balance(): void
+    {
+        Http::fake();
+
+        [, $child, $token] = $this->financialParent();
+        $invoice = $this->invoiceFor($child, 100000, 90000);
+
+        $this->withToken($token)->postJson(
+            "/api/admin/parent/children/{$child->id}/invoices/{$invoice->id}/pay",
+            ['method' => 'mobile_money', 'amount' => 20000]
+        )
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('amount');
+
+        Http::assertNothingSent();
+    }
+
+    #[Test]
+    public function initiate_rejects_fully_paid_invoice(): void
+    {
+        Http::fake();
+
+        [, $child, $token] = $this->financialParent();
+        $invoice = $this->invoiceFor($child, 50000, 50000);
+
+        $this->withToken($token)->postJson(
+            "/api/admin/parent/children/{$child->id}/invoices/{$invoice->id}/pay",
+            ['method' => 'card', 'amount' => 1000]
+        )
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'INVOICE_NOT_PAYABLE');
+    }
+
+    #[Test]
+    public function refused_webhook_does_not_record_invoice_payment(): void
+    {
+        [$user, $child] = $this->financialParent();
+        $invoice = $this->invoiceFor($child);
+
+        $payment = ParentOnlinePayment::create([
+            'transaction_id' => 'uuid-refused-no-pay',
+            'parent_user_id' => $user->id,
+            'student_id' => $child->id,
+            'invoice_id' => $invoice->id,
+            'amount' => 5000,
+            'currency' => 'XOF',
+            'method' => 'mobile_money',
+            'status' => 'pending',
+        ]);
+
+        $payload = ['transaction_id' => $payment->transaction_id, 'cpm_result' => 'REFUSED'];
+
+        $this->postJson('/api/webhooks/cinetpay', $payload, [
+            'x-token' => $this->signPayload($payload),
+        ])->assertOk();
+
+        $this->assertSame(0, Payment::on('tenant')->where('invoice_id', $invoice->id)->count());
+        $this->assertEquals(0, (float) $invoice->fresh()->paid_amount);
     }
 
     #[Test]

@@ -310,7 +310,7 @@ class GroupController extends Controller
         // 2. Are NOT already assigned to a group for this module
         $enrollments = \Modules\Enrollment\Entities\StudentEnrollment::on('tenant')
             ->with(['student' => function ($query) {
-                $query->select('id', 'matricule', 'firstname', 'lastname', 'email', 'status');
+                $query->select('id', 'matricule', 'firstname', 'lastname', 'status');
             }])
             ->where('programme_id', $programId)
             ->where('level', $level)

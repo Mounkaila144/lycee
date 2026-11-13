@@ -8,8 +8,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Enrollment\Entities\Group;
+use Modules\StructureAcademique\Entities\Classe;
 use Modules\StructureAcademique\Entities\Module;
 use Modules\StructureAcademique\Entities\Semester;
+use Modules\StructureAcademique\Entities\Subject;
 use Modules\Timetable\Database\Factories\TimetableSlotFactory;
 use Modules\UsersGuard\Entities\User;
 
@@ -39,8 +41,10 @@ class TimetableSlot extends Model
 
     protected $fillable = [
         'module_id',
+        'subject_id',
         'teacher_id',
         'group_id',
+        'classe_id',
         'room_id',
         'semester_id',
         'day_of_week',
@@ -93,6 +97,16 @@ class TimetableSlot extends Model
         return $this->belongsTo(Group::class);
     }
 
+    public function classe(): BelongsTo
+    {
+        return $this->belongsTo(Classe::class, 'classe_id');
+    }
+
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class, 'subject_id');
+    }
+
     public function room(): BelongsTo
     {
         return $this->belongsTo(Room::class);
@@ -124,6 +138,11 @@ class TimetableSlot extends Model
     public function scopeByGroup($query, int $groupId)
     {
         return $query->where('group_id', $groupId);
+    }
+
+    public function scopeByClasse($query, int $classeId)
+    {
+        return $query->where('classe_id', $classeId);
     }
 
     public function scopeByRoom($query, int $roomId)
@@ -181,7 +200,9 @@ class TimetableSlot extends Model
 
     public function getDisplayNameAttribute(): string
     {
-        return "{$this->module?->code} - {$this->type} ({$this->day_of_week} {$this->time_range})";
+        $code = $this->subject?->code ?? $this->module?->code;
+
+        return "{$code} - {$this->type} ({$this->day_of_week} {$this->time_range})";
     }
 
     /**
@@ -221,7 +242,7 @@ class TimetableSlot extends Model
 
     public function hasRoomConflict(TimetableSlot $other): bool
     {
-        if ($this->room_id !== $other->room_id) {
+        if ($this->room_id === null || $this->room_id !== $other->room_id) {
             return false;
         }
 

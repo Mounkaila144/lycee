@@ -26,7 +26,7 @@ class TimetableGenerationController extends Controller
             'async' => 'nullable|boolean',
         ]);
 
-        $userId = auth()->id();
+        $userId = auth('tenant')->id();
         $strategy = $validated['strategy'] ?? 'balanced';
         $async = $validated['async'] ?? true;
 
@@ -62,7 +62,7 @@ class TimetableGenerationController extends Controller
      */
     public function getResult(Request $request, int $groupId): JsonResponse
     {
-        $userId = auth()->id();
+        $userId = auth('tenant')->id();
         $cacheKey = "timetable_generation:{$userId}:{$groupId}";
 
         $result = Cache::get($cacheKey);
@@ -96,7 +96,7 @@ class TimetableGenerationController extends Controller
             'group_id' => 'required|integer|exists:tenant.groups,id',
         ]);
 
-        $userId = auth()->id();
+        $userId = auth('tenant')->id();
         $cacheKey = "timetable_generation:{$userId}:{$validated['group_id']}";
 
         $result = Cache::get($cacheKey);
@@ -126,8 +126,10 @@ class TimetableGenerationController extends Controller
     /**
      * Récupérer préférences enseignant
      */
-    public function getTeacherPreferences(int $teacherId): JsonResponse
+    public function getTeacherPreferences(Request $request, int $teacherId): JsonResponse
     {
+        $this->ensureCanAccessTeacher($request, $teacherId);
+
         $preferences = TeacherPreference::where('teacher_id', $teacherId)
             ->orderBy('day_of_week')
             ->orderBy('start_time')
@@ -141,6 +143,8 @@ class TimetableGenerationController extends Controller
      */
     public function updateTeacherPreferences(Request $request, int $teacherId): JsonResponse
     {
+        $this->ensureCanAccessTeacher($request, $teacherId);
+
         $validated = $request->validate([
             'preferences' => 'required|array',
             'preferences.*.day_of_week' => ['required', 'string', Rule::in(['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'])],
@@ -172,5 +176,21 @@ class TimetableGenerationController extends Controller
             'message' => 'Préférences mises à jour avec succès',
             'preferences' => $preferences,
         ]);
+    }
+
+    /**
+     * Un Professeur (sans rôle de gestion) ne peut accéder qu'à ses propres préférences.
+     */
+    private function ensureCanAccessTeacher(Request $request, int $teacherId): void
+    {
+        $user = $request->user();
+
+        if ($user->hasAnyRole(['Administrator', 'Manager'], 'tenant')) {
+            return;
+        }
+
+        if ($user->id !== $teacherId) {
+            abort(403, 'Vous ne pouvez gérer que vos propres préférences.');
+        }
     }
 }

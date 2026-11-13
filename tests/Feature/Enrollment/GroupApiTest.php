@@ -9,7 +9,7 @@ use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Module;
 use Modules\StructureAcademique\Entities\Programme;
 use Modules\StructureAcademique\Entities\Semester;
-use Modules\UsersGuard\Entities\User;
+use Modules\UsersGuard\Entities\TenantUser;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Tests\Concerns\InteractsWithTenancy;
@@ -19,7 +19,7 @@ class GroupApiTest extends TestCase
 {
     use InteractsWithTenancy;
 
-    private User $user;
+    private TenantUser $user;
 
     private string $token;
 
@@ -37,7 +37,8 @@ class GroupApiTest extends TestCase
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
 
-        $this->user = User::factory()->create();
+        $this->user = TenantUser::factory()->create();
+        $this->assignRole($this->user, 'Administrator');
         $this->token = $this->user->createToken('test-token')->plainTextToken;
 
         $this->academicYear = AcademicYear::factory()->active()->create();

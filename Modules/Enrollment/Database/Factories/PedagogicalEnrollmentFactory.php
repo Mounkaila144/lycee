@@ -9,6 +9,11 @@ use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Programme;
 use Modules\StructureAcademique\Entities\Semester;
 
+/**
+ * Factory aligned with the `student_enrollments` table used by PedagogicalEnrollment.
+ *
+ * @extends Factory<PedagogicalEnrollment>
+ */
 class PedagogicalEnrollmentFactory extends Factory
 {
     protected $model = PedagogicalEnrollment::class;
@@ -17,52 +22,24 @@ class PedagogicalEnrollmentFactory extends Factory
     {
         return [
             'student_id' => Student::factory(),
-            'program_id' => Programme::factory(),
-            'level' => $this->faker->randomElement(['L1', 'L2', 'L3', 'M1', 'M2']),
+            'programme_id' => Programme::factory(),
+            'level' => $this->faker->randomElement(['6E', '5E', '4E', '3E', '2NDE', '1ERE', 'TLE']),
             'academic_year_id' => AcademicYear::factory(),
-            'semester_id' => null,
-            'status' => PedagogicalEnrollment::STATUS_DRAFT,
-            'total_modules' => $this->faker->numberBetween(5, 10),
-            'total_ects' => $this->faker->numberBetween(25, 35),
-            'modules_check' => false,
-            'groups_check' => false,
-            'options_check' => false,
-            'prerequisites_check' => false,
-            'validated_by' => null,
-            'validated_at' => null,
-            'rejection_reason' => null,
-            'contract_pdf_path' => null,
+            'semester_id' => Semester::factory(),
+            'enrollment_date' => now()->toDateString(),
+            'status' => PedagogicalEnrollment::STATUS_ACTIVE,
+            'notes' => null,
+            'enrolled_by' => null,
         ];
     }
 
-    public function draft(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'status' => PedagogicalEnrollment::STATUS_DRAFT,
-        ]);
-    }
-
-    public function complete(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'status' => PedagogicalEnrollment::STATUS_COMPLETE,
-            'modules_check' => true,
-            'groups_check' => true,
-            'options_check' => true,
-            'prerequisites_check' => true,
-            'total_ects' => 30,
-        ]);
-    }
-
+    /**
+     * Enrollment awaiting validation (status "Actif").
+     */
     public function pending(): static
     {
         return $this->state(fn (array $attributes) => [
             'status' => PedagogicalEnrollment::STATUS_ACTIVE,
-            'modules_check' => true,
-            'groups_check' => true,
-            'options_check' => true,
-            'prerequisites_check' => true,
-            'total_ects' => 30,
         ]);
     }
 
@@ -70,12 +47,6 @@ class PedagogicalEnrollmentFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'status' => PedagogicalEnrollment::STATUS_VALIDATED,
-            'modules_check' => true,
-            'groups_check' => true,
-            'options_check' => true,
-            'prerequisites_check' => true,
-            'total_ects' => 30,
-            'validated_at' => now(),
         ]);
     }
 
@@ -83,8 +54,7 @@ class PedagogicalEnrollmentFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'status' => PedagogicalEnrollment::STATUS_REJECTED,
-            'rejection_reason' => $this->faker->sentence(),
-            'validated_at' => now(),
+            'notes' => $this->faker->sentence(),
         ]);
     }
 

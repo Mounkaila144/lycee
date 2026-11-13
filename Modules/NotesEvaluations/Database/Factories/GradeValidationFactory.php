@@ -18,7 +18,7 @@ class GradeValidationFactory extends Factory
         return [
             'module_id' => Module::factory(),
             'evaluation_id' => ModuleEvaluationConfig::factory(),
-            'academic_year_id' => AcademicYear::factory(),
+            'academic_year_id' => fn (): int => AcademicYear::query()->value('id') ?? AcademicYear::factory()->create()->id,
             'submitted_by' => User::factory(),
             'status' => 'Pending',
             'submitted_at' => now(),

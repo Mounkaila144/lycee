@@ -4,12 +4,30 @@ namespace App\Http\Requests\UsersGuard;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Modules\UsersGuard\Entities\TenantUser;
 
 class UpdateUserRequest extends FormRequest
 {
+    /**
+     * A non-Administrator (Manager) cannot modify an Administrator account,
+     * grant the Administrator role, nor assign direct permissions.
+     */
     public function authorize(): bool
     {
-        return true;
+        $actingUser = $this->user();
+
+        if ($actingUser && method_exists($actingUser, 'hasRole') && $actingUser->hasRole('Administrator')) {
+            return true;
+        }
+
+        $targetUser = TenantUser::find($this->route('user'));
+
+        if ($targetUser && $targetUser->hasRole('Administrator')) {
+            return false;
+        }
+
+        return ! in_array('Administrator', (array) $this->input('roles', []), true)
+            && empty($this->input('permissions'));
     }
 
     public function rules(): array

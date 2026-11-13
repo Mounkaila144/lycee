@@ -44,6 +44,11 @@ class StudentFactory extends Factory
         return $this->state(fn () => ['status' => 'Actif']);
     }
 
+    public function suspended(): self
+    {
+        return $this->state(fn () => ['status' => 'Suspendu']);
+    }
+
     public function excluded(): self
     {
         return $this->state(fn () => ['status' => 'Exclu']);

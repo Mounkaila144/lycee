@@ -162,7 +162,7 @@ class GroupAssignmentService
                     $assignment = GroupAssignment::on('tenant')->create([
                         'student_id' => $student->id, 'group_id' => $targetGroup->id, 'module_id' => $moduleId,
                         'academic_year_id' => $academicYearId, 'assignment_method' => 'Automatic',
-                        'assigned_by' => Auth::id(), 'assignment_reason' => "Auto ({$method})", 'assigned_at' => now(),
+                        'assigned_by' => Auth::guard('tenant')->id(), 'assignment_reason' => "Auto ({$method})", 'assigned_at' => now(),
                     ]);
                     $assignments->push($assignment);
                     $assignedCount++;
@@ -212,7 +212,7 @@ class GroupAssignmentService
             $assignment = GroupAssignment::on('tenant')->create([
                 'student_id' => $studentId, 'group_id' => $groupId, 'module_id' => $group->module_id,
                 'academic_year_id' => $group->academic_year_id, 'assignment_method' => 'Manual',
-                'assigned_by' => Auth::id(), 'assignment_reason' => $reason ?? 'Manual assignment', 'assigned_at' => now(),
+                'assigned_by' => Auth::guard('tenant')->id(), 'assignment_reason' => $reason ?? 'Manual assignment', 'assigned_at' => now(),
             ]);
 
             return ['assignment' => $assignment->load(['student', 'group']), 'error' => null];
@@ -247,7 +247,7 @@ class GroupAssignmentService
             $newAssignment = GroupAssignment::on('tenant')->create([
                 'student_id' => $studentId, 'group_id' => $toGroupId, 'module_id' => $toGroup->module_id,
                 'academic_year_id' => $toGroup->academic_year_id, 'assignment_method' => 'Manual',
-                'assigned_by' => Auth::id(), 'assignment_reason' => $reason ?? 'Group transfer', 'assigned_at' => now(),
+                'assigned_by' => Auth::guard('tenant')->id(), 'assignment_reason' => $reason ?? 'Group transfer', 'assigned_at' => now(),
             ]);
 
             return ['assignment' => $newAssignment->load(['student', 'group']), 'error' => null];

@@ -3,6 +3,7 @@
 namespace Modules\Attendance\Services;
 
 use Carbon\Carbon;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -20,7 +21,8 @@ class JustificationService
         Carbon $dateTo,
         string $type,
         string $reason,
-        $document = null
+        ?UploadedFile $document,
+        int $submittedBy
     ): AbsenceJustification {
         $documentPath = null;
 
@@ -30,37 +32,36 @@ class JustificationService
 
         return AbsenceJustification::create([
             'student_id' => $studentId,
-            'absence_date_from' => $dateFrom,
-            'absence_date_to' => $dateTo,
+            'absence_date_from' => $dateFrom->toDateString(),
+            'absence_date_to' => $dateTo->toDateString(),
             'type' => $type,
             'reason' => $reason,
             'document_path' => $documentPath,
             'status' => 'pending',
-            'submitted_by' => auth()->id(),
+            'submitted_by' => $submittedBy,
         ]);
     }
 
     /**
-     * Valider un justificatif (Story 06)
+     * Valider / refuser un justificatif (Story 06)
      */
     public function validateJustification(
-        int $justificationId,
+        AbsenceJustification $justification,
         string $decision,
-        ?string $notes = null
+        ?string $notes,
+        int $validatorId
     ): AbsenceJustification {
-        $justification = AbsenceJustification::findOrFail($justificationId);
-
-        return DB::connection('tenant')->transaction(function () use ($justification, $decision, $notes) {
+        return DB::connection('tenant')->transaction(function () use ($justification, $decision, $notes, $validatorId) {
             $justification->update([
                 'status' => $decision,
-                'validated_by' => auth()->id(),
+                'validated_by' => $validatorId,
                 'validated_at' => now(),
                 'validation_notes' => $notes,
             ]);
 
             // Si approuvé, mettre à jour les absences correspondantes (Story 07)
             if ($decision === 'approved') {
-                $this->applyJustificationToRecords($justification);
+                $this->applyJustificationToRecords($justification, $validatorId);
             }
 
             return $justification;
@@ -70,30 +71,33 @@ class JustificationService
     /**
      * Appliquer justificatif aux enregistrements (Story 07)
      */
-    private function applyJustificationToRecords(AbsenceJustification $justification): void
+    private function applyJustificationToRecords(AbsenceJustification $justification, int $validatorId): void
     {
         AttendanceRecord::whereHas('session', function ($query) use ($justification) {
             $query->whereBetween('session_date', [
-                $justification->absence_date_from,
-                $justification->absence_date_to,
+                $justification->absence_date_from->toDateString(),
+                $justification->absence_date_to->toDateString(),
             ]);
         })
             ->where('student_id', $justification->student_id)
             ->where('status', 'absent')
             ->update([
-            'status' => 'excused',
-            'modified_by' => auth()->id(),
-            'modification_reason' => 'Justificatif approuvé #'.$justification->id,
-        ]);
+                'status' => 'excused',
+                'modified_by' => $validatorId,
+                'modification_reason' => 'Justificatif approuvé #'.$justification->id,
+            ]);
     }
 
     /**
      * Obtenir justificatifs en attente (Story 06)
+     *
+     * @param  list<int>|null  $studentIds  null = tous les élèves
      */
-    public function getPendingJustifications(): Collection
+    public function getPendingJustifications(?array $studentIds = null): Collection
     {
         return AbsenceJustification::with(['student', 'submitter'])
             ->pending()
+            ->when($studentIds !== null, fn ($query) => $query->whereIn('student_id', $studentIds))
             ->orderBy('created_at', 'desc')
             ->get();
     }
@@ -103,7 +107,7 @@ class JustificationService
      */
     public function getStudentJustifications(int $studentId): Collection
     {
-        return AbsenceJustification::with(['validator'])
+        return AbsenceJustification::with(['submitter', 'validator'])
             ->forStudent($studentId)
             ->orderBy('absence_date_from', 'desc')
             ->get();
@@ -112,10 +116,8 @@ class JustificationService
     /**
      * Télécharger document justificatif
      */
-    public function downloadDocument(int $justificationId): ?string
+    public function downloadDocument(AbsenceJustification $justification): ?string
     {
-        $justification = AbsenceJustification::findOrFail($justificationId);
-
         if (! $justification->document_path) {
             return null;
         }

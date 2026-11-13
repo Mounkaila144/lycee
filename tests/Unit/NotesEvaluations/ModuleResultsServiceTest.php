@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\NotesEvaluations;
 
+use Illuminate\Support\Facades\Artisan;
 use Modules\Enrollment\Entities\Student;
 use Modules\NotesEvaluations\Entities\ModuleGrade;
 use Modules\NotesEvaluations\Services\ModuleResultsService;
@@ -15,7 +16,9 @@ use Tests\TestCase;
 
 class ModuleResultsServiceTest extends TestCase
 {
-    use InteractsWithTenancy;
+    use InteractsWithTenancy {
+        runMigrationsOnce as runBaseMigrationsOnce;
+    }
 
     private ModuleResultsService $service;
 
@@ -35,6 +38,25 @@ class ModuleResultsServiceTest extends TestCase
         $this->user = User::factory()->create();
         $this->module = Module::factory()->create();
         $this->semester = Semester::factory()->create();
+    }
+
+    /**
+     * Run the shared tenant migrations, then the NotesEvaluations tables (not part of the shared set).
+     */
+    protected function runMigrationsOnce(): void
+    {
+        if (self::$migrationsRan) {
+            return;
+        }
+
+        $this->runBaseMigrationsOnce();
+
+        Artisan::call('migrate', [
+            '--database' => 'mysql',
+            '--path' => base_path('Modules/NotesEvaluations/Database/Migrations/tenant'),
+            '--realpath' => true,
+            '--force' => true,
+        ]);
     }
 
     protected function tearDown(): void

@@ -14,9 +14,9 @@ class UpdateAcademicPeriodRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'semester_id' => ['sometimes', 'integer', 'exists:semesters,id'],
+            'semester_id' => ['sometimes', 'integer', 'exists:tenant.semesters,id'],
             'name' => ['sometimes', 'string', 'max:255'],
-            'type' => ['sometimes', 'string', 'in:Jour férié,Vacances,Session examens,Inscription pédagogique,Autre'],
+            'type' => ['sometimes', 'string', 'in:Jour férié,Vacances,Session examens,Inscription pédagogique,Rattrapage,Autre'],
             'start_date' => ['sometimes', 'date'],
             'end_date' => ['sometimes', 'date', 'after_or_equal:start_date'],
             'description' => ['nullable', 'string'],
@@ -27,7 +27,7 @@ class UpdateAcademicPeriodRequest extends FormRequest
     {
         return [
             'semester_id.exists' => 'Le semestre sélectionné n\'existe pas.',
-            'type.in' => 'Le type doit être : Jour férié, Vacances, Session examens, Inscription pédagogique ou Autre.',
+            'type.in' => 'Le type doit être : Jour férié, Vacances, Session examens, Inscription pédagogique, Rattrapage ou Autre.',
             'end_date.after_or_equal' => 'La date de fin doit être après ou égale à la date de début.',
         ];
     }

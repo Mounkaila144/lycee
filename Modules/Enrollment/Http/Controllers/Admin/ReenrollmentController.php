@@ -114,7 +114,7 @@ class ReenrollmentController extends Controller
         try {
             $reenrollment = $this->reenrollmentService->validateReenrollment(
                 $reenrollment,
-                auth()->user()
+                request()->user()
             );
 
             return response()->json([
@@ -138,7 +138,7 @@ class ReenrollmentController extends Controller
         try {
             $reenrollment = $this->reenrollmentService->rejectReenrollment(
                 $reenrollment,
-                auth()->user(),
+                $request->user(),
                 $request->reason
             );
 
@@ -176,7 +176,7 @@ class ReenrollmentController extends Controller
             }
 
             try {
-                $this->reenrollmentService->validateReenrollment($reenrollment, auth()->user());
+                $this->reenrollmentService->validateReenrollment($reenrollment, $request->user());
                 $validated[] = $id;
             } catch (\Exception $e) {
                 $errors[] = "Réinscription {$id}: {$e->getMessage()}";

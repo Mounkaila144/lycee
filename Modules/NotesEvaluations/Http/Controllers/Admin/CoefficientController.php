@@ -184,8 +184,8 @@ class CoefficientController extends Controller
     public function applyTemplate(Request $request, int $moduleId): JsonResponse
     {
         $request->validate([
-            'template_id' => 'required|exists:coefficient_templates,id',
-            'semester_id' => 'required|exists:semesters,id',
+            'template_id' => 'required|exists:tenant.coefficient_templates,id',
+            'semester_id' => 'required|exists:tenant.semesters,id',
         ]);
 
         $module = Module::findOrFail($moduleId);

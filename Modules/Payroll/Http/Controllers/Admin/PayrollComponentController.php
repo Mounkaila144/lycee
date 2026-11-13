@@ -169,7 +169,7 @@ class PayrollComponentController extends Controller
 
         $advance = $this->componentService->approveAdvance(
             $advance,
-            auth()->id(),
+            auth('tenant')->id(),
             $request->input('notes')
         );
 

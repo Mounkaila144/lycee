@@ -5,6 +5,7 @@ namespace Modules\StructureAcademique\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Modules\StructureAcademique\Entities\Classe;
+use Modules\UsersGuard\Entities\TenantUser;
 
 class UpdateClasseRequest extends FormRequest
 {
@@ -38,13 +39,46 @@ class UpdateClasseRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
-            if ($this->head_teacher_id && $this->headTeacherAlreadyAssigned()) {
+            if (! $this->head_teacher_id || ! $this->headTeacherChanged()) {
+                return;
+            }
+
+            if (! $this->headTeacherIsTeacher()) {
+                $validator->errors()->add(
+                    'head_teacher_id',
+                    'Le professeur principal doit avoir le rôle Professeur.'
+                );
+            }
+
+            if ($this->headTeacherAlreadyAssigned()) {
                 $validator->errors()->add(
                     'head_teacher_id',
                     'Cet enseignant est déjà professeur principal d\'une autre classe pour cette année scolaire.'
                 );
             }
         });
+    }
+
+    /**
+     * Le PP n'est revalidé que s'il change : une mise à jour qui renvoie le PP
+     * actuel (ex. modification de la capacité) ne doit pas être bloquée.
+     */
+    private function headTeacherChanged(): bool
+    {
+        $classe = Classe::on('tenant')->find($this->route('classe'));
+
+        return ! $classe || (int) $classe->head_teacher_id !== (int) $this->head_teacher_id;
+    }
+
+    /**
+     * Vérifie que l'utilisateur choisi comme PP a le rôle Professeur
+     */
+    private function headTeacherIsTeacher(): bool
+    {
+        return TenantUser::query()
+            ->whereHas('roles', fn ($query) => $query->where('name', 'Professeur'))
+            ->whereKey($this->head_teacher_id)
+            ->exists();
     }
 
     /**

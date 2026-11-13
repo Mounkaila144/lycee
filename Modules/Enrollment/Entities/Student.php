@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
@@ -47,12 +48,9 @@ class Student extends Model
         'birthplace',
         'sex',
         'nationality',
-        'email',
         'phone',
-        'mobile',
         'address',
         'city',
-        'country',
         'quarter',
         'blood_group',
         'health_notes',
@@ -80,6 +78,18 @@ class Student extends Model
     public function auditLogs(): HasMany
     {
         return $this->hasMany(StudentAuditLog::class);
+    }
+
+    public function classEnrollments(): HasMany
+    {
+        return $this->hasMany(ClassEnrollment::class);
+    }
+
+    public function currentClassEnrollment(): HasOne
+    {
+        return $this->hasOne(ClassEnrollment::class)
+            ->where('status', 'Actif')
+            ->whereHas('academicYear', fn ($query) => $query->where('is_active', true));
     }
 
     public function parents(): BelongsToMany

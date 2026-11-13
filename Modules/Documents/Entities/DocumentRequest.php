@@ -177,6 +177,6 @@ class DocumentRequest extends Model
     {
         $days = $this->isUrgent() ? 2 : 5;
 
-        return $this->request_date->addBusinessDays($days);
+        return $this->request_date->copy()->addWeekdays($days);
     }
 }

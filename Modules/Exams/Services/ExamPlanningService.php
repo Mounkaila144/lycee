@@ -26,6 +26,8 @@ class ExamPlanningService
         DB::connection('tenant')->beginTransaction();
 
         try {
+            $data['created_by'] ??= auth('tenant')->id();
+
             // Calculate duration in minutes
             if (! isset($data['duration_minutes'])) {
                 $start = Carbon::parse($data['start_time']);
@@ -268,7 +270,7 @@ class ExamPlanningService
                     'status' => 'draft',
                     'is_published' => false,
                     'published_at' => null,
-                    'created_by' => auth()->id(),
+                    'created_by' => auth('tenant')->id(),
                 ]
             );
 

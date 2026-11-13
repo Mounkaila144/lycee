@@ -164,4 +164,240 @@ class MessagingTest extends TestCase
             ->getJson('/api/admin/messages')
             ->assertForbidden();
     }
+
+    #[Test]
+    public function eleve_cannot_access_messaging(): void
+    {
+        [, $token] = $this->userWithRole('Élève');
+
+        $this->withToken($token)->getJson('/api/admin/messages')->assertForbidden();
+        $this->withToken($token)->getJson('/api/admin/messages/recipients')->assertForbidden();
+        $this->withToken($token)->postJson('/api/admin/messages', [])->assertForbidden();
+    }
+
+    #[Test]
+    public function caissier_cannot_send_or_read_messages(): void
+    {
+        [$sender] = $this->userWithRole('Parent');
+        [$recipient] = $this->userWithRole('Professeur');
+        [, $token] = $this->userWithRole('Caissier');
+
+        $message = $this->createMessage($sender, $recipient);
+
+        $this->withToken($token)->getJson("/api/admin/messages/{$message->id}")->assertForbidden();
+        $this->withToken($token)->postJson('/api/admin/messages', [
+            'recipient_id' => $recipient->id,
+            'subject' => 'Test',
+            'body' => '...',
+        ])->assertForbidden();
+    }
+
+    #[Test]
+    public function admin_can_send_message_to_teacher_and_read_it_back(): void
+    {
+        [$admin, $adminToken] = $this->userWithRole('Administrator');
+        [$teacher] = $this->userWithRole('Professeur');
+
+        $response = $this->withToken($adminToken)->postJson('/api/admin/messages', [
+            'recipient_id' => $teacher->id,
+            'subject' => 'Réunion pédagogique',
+            'body' => 'Rendez-vous lundi.',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.sender_id', $admin->id)
+            ->assertJsonPath('data.direction', 'sent')
+            ->assertJsonPath('data.recipient.id', $teacher->id);
+
+        $this->withToken($adminToken)
+            ->getJson('/api/admin/messages/'.$response->json('data.id'))
+            ->assertOk()
+            ->assertJsonPath('data.subject', 'Réunion pédagogique');
+    }
+
+    #[Test]
+    public function parent_cannot_send_message_to_unauthorized_roles(): void
+    {
+        [, $parentToken] = $this->userWithRole('Parent');
+        [$otherParent] = $this->userWithRole('Parent');
+        [$cashier] = $this->userWithRole('Caissier');
+        [$student] = $this->userWithRole('Élève');
+
+        foreach ([$otherParent, $cashier, $student] as $recipient) {
+            $this->withToken($parentToken)
+                ->postJson('/api/admin/messages', [
+                    'recipient_id' => $recipient->id,
+                    'subject' => 'Bonjour',
+                    'body' => '...',
+                ])
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('recipient_id');
+        }
+
+        $this->assertSame(0, Message::query()->count());
+    }
+
+    #[Test]
+    public function teacher_cannot_send_message_to_another_teacher(): void
+    {
+        [, $teacherToken] = $this->userWithRole('Professeur');
+        [$otherTeacher] = $this->userWithRole('Professeur');
+
+        $this->withToken($teacherToken)
+            ->postJson('/api/admin/messages', [
+                'recipient_id' => $otherTeacher->id,
+                'subject' => 'Bonjour',
+                'body' => '...',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('recipient_id');
+    }
+
+    #[Test]
+    public function user_cannot_send_message_to_self(): void
+    {
+        [$admin, $adminToken] = $this->userWithRole('Administrator');
+
+        $this->withToken($adminToken)
+            ->postJson('/api/admin/messages', [
+                'recipient_id' => $admin->id,
+                'subject' => 'Moi',
+                'body' => '...',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('recipient_id');
+    }
+
+    #[Test]
+    public function send_validates_required_fields_and_student_context(): void
+    {
+        [, $parentToken] = $this->userWithRole('Parent');
+        [$teacher] = $this->userWithRole('Professeur');
+
+        $this->withToken($parentToken)
+            ->postJson('/api/admin/messages', [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['recipient_id', 'subject', 'body']);
+
+        $this->withToken($parentToken)
+            ->postJson('/api/admin/messages', [
+                'recipient_id' => $teacher->id,
+                'subject' => 'Sujet',
+                'body' => '...',
+                'student_context_id' => 999999,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('student_context_id');
+    }
+
+    #[Test]
+    public function inbox_exposes_participants_direction_and_unread_count(): void
+    {
+        [$parent, $parentToken] = $this->userWithRole('Parent');
+        [$teacher] = $this->userWithRole('Professeur');
+
+        $this->createMessage($parent, $teacher, 'Envoyé');
+        $this->createMessage($teacher, $parent, 'Reçu');
+
+        $response = $this->withToken($parentToken)->getJson('/api/admin/messages');
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.unread_count', 1);
+
+        $bySubject = collect($response->json('data'))->keyBy('subject');
+
+        $this->assertSame('sent', $bySubject['Envoyé']['direction']);
+        $this->assertSame('received', $bySubject['Reçu']['direction']);
+        $this->assertSame($teacher->id, $bySubject['Reçu']['sender']['id']);
+        $this->assertArrayNotHasKey('password', $bySubject['Reçu']['sender']);
+    }
+
+    #[Test]
+    public function teacher_inbox_excludes_other_teachers_conversations(): void
+    {
+        [$parent] = $this->userWithRole('Parent');
+        [$teacherA, $teacherAToken] = $this->userWithRole('Professeur');
+        [$teacherB] = $this->userWithRole('Professeur');
+
+        $this->createMessage($parent, $teacherA, 'Pour A');
+        $this->createMessage($parent, $teacherB, 'Pour B');
+
+        $this->withToken($teacherAToken)
+            ->getJson('/api/admin/messages')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.subject', 'Pour A');
+    }
+
+    #[Test]
+    public function admin_cannot_read_messages_between_other_users(): void
+    {
+        [$parent] = $this->userWithRole('Parent');
+        [$teacher] = $this->userWithRole('Professeur');
+        [, $adminToken] = $this->userWithRole('Administrator');
+
+        $message = $this->createMessage($parent, $teacher);
+
+        $this->withToken($adminToken)->getJson('/api/admin/messages')->assertOk()->assertJsonCount(0, 'data');
+        $this->withToken($adminToken)->getJson("/api/admin/messages/{$message->id}")->assertForbidden();
+    }
+
+    #[Test]
+    public function sender_viewing_message_does_not_mark_it_as_read(): void
+    {
+        [$sender, $senderToken] = $this->userWithRole('Parent');
+        [$recipient] = $this->userWithRole('Professeur');
+
+        $message = $this->createMessage($sender, $recipient);
+
+        $this->withToken($senderToken)
+            ->getJson("/api/admin/messages/{$message->id}")
+            ->assertOk()
+            ->assertJsonPath('data.direction', 'sent');
+
+        $this->assertNull($message->fresh()->read_at);
+    }
+
+    #[Test]
+    public function show_returns_404_for_unknown_message(): void
+    {
+        [, $token] = $this->userWithRole('Parent');
+
+        $this->withToken($token)->getJson('/api/admin/messages/999999')->assertNotFound();
+    }
+
+    #[Test]
+    public function recipients_are_filtered_by_role(): void
+    {
+        [, $parentToken] = $this->userWithRole('Parent');
+        [, $teacherToken] = $this->userWithRole('Professeur');
+        $this->userWithRole('Caissier');
+        $this->userWithRole('Élève');
+        $this->userWithRole('Administrator');
+
+        $parentRoles = collect($this->withToken($parentToken)->getJson('/api/admin/messages/recipients')
+            ->assertOk()->json('data'))->pluck('role')->unique()->sort()->values()->all();
+        $teacherRoles = collect($this->withToken($teacherToken)->getJson('/api/admin/messages/recipients')
+            ->assertOk()->json('data'))->pluck('role')->unique()->sort()->values()->all();
+
+        $this->assertSame(['Administrator', 'Professeur'], $parentRoles);
+        $this->assertSame(['Administrator', 'Parent'], $teacherRoles);
+    }
+
+    #[Test]
+    public function messaging_requires_authentication(): void
+    {
+        $this->getJson('/api/admin/messages')->assertUnauthorized();
+    }
+
+    private function createMessage(TenantUser $sender, TenantUser $recipient, string $subject = 'Sujet'): Message
+    {
+        return Message::create([
+            'sender_id' => $sender->id,
+            'recipient_id' => $recipient->id,
+            'subject' => $subject,
+            'body' => '...',
+        ]);
+    }
 }

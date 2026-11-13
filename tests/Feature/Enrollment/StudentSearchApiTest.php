@@ -3,7 +3,7 @@
 namespace Tests\Feature\Enrollment;
 
 use Modules\Enrollment\Entities\Student;
-use Modules\UsersGuard\Entities\User;
+use Modules\UsersGuard\Entities\TenantUser as User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Tests\Concerns\InteractsWithTenancy;
@@ -26,7 +26,9 @@ class StudentSearchApiTest extends TestCase
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
 
         // Create user and REAL token (TenantSanctumAuth requires Bearer token)
+        $this->seedRolesAndPermissions();
         $this->user = User::factory()->create();
+        $this->assignRole($this->user, 'Administrator');
         $this->token = $this->user->createToken('test-token')->plainTextToken;
     }
 

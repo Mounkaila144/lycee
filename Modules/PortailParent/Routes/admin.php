@@ -16,6 +16,7 @@ use Modules\PortailParent\Http\Controllers\Admin\ParentPaymentController;
  * L'ownership Parent ↔ Enfant est appliqué via ChildPolicy (cf. Policies/ChildPolicy.php).
  */
 Route::prefix('admin/parent')
+    ->where(['studentId' => '[0-9]+', 'invoiceId' => '[0-9]+', 'paymentId' => '[0-9]+'])
     ->middleware(['tenant', 'tenant.auth', 'role:Parent,tenant'])
     ->group(function () {
         // Story Parent 01 — Home & Mes Enfants
@@ -23,27 +24,27 @@ Route::prefix('admin/parent')
             ->name('admin.parent.me');
         Route::get('/me/children', [ParentChildrenController::class, 'children'])
             ->name('admin.parent.me.children');
-        Route::get('/children/{student}', [ParentChildrenController::class, 'show'])
+        Route::get('/children/{studentId}', [ParentChildrenController::class, 'show'])
             ->name('admin.parent.children.show');
 
         // Story Parent 02 — Notes de l'enfant
-        Route::get('/children/{student}/grades', [ChildDataController::class, 'grades'])
+        Route::get('/children/{studentId}/grades', [ChildDataController::class, 'grades'])
             ->name('admin.parent.children.grades');
 
         // Story Parent 03 — Présences de l'enfant
-        Route::get('/children/{student}/attendance', [ChildDataController::class, 'attendance'])
+        Route::get('/children/{studentId}/attendance', [ChildDataController::class, 'attendance'])
             ->name('admin.parent.children.attendance');
 
         // Story Parent 05 — Factures de l'enfant
-        Route::get('/children/{student}/invoices', [ChildDataController::class, 'invoices'])
+        Route::get('/children/{studentId}/invoices', [ChildDataController::class, 'invoices'])
             ->name('admin.parent.children.invoices');
 
         // Story Parent 04 — Emploi du temps de l'enfant
-        Route::get('/children/{student}/timetable', [ChildDataController::class, 'timetable'])
+        Route::get('/children/{studentId}/timetable', [ChildDataController::class, 'timetable'])
             ->name('admin.parent.children.timetable');
 
         // Story Parent 09 — Documents de l'enfant
-        Route::get('/children/{student}/documents', [ChildDataController::class, 'documents'])
+        Route::get('/children/{studentId}/documents', [ChildDataController::class, 'documents'])
             ->name('admin.parent.children.documents');
 
         // Story Parent 08 — Annonces générales (pas d'ownership enfant-spécifique)
@@ -51,7 +52,7 @@ Route::prefix('admin/parent')
             ->name('admin.parent.announcements');
 
         // Story Parent 06 — Paiement en ligne (CinetPay, V2 scaffold)
-        Route::post('/children/{student}/invoices/{invoiceId}/pay', [ParentPaymentController::class, 'initiate'])
+        Route::post('/children/{studentId}/invoices/{invoiceId}/pay', [ParentPaymentController::class, 'initiate'])
             ->name('admin.parent.children.invoices.pay');
         Route::get('/payments/{paymentId}/status', [ParentPaymentController::class, 'status'])
             ->name('admin.parent.payments.status');

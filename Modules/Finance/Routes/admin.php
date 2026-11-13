@@ -12,12 +12,13 @@ use Modules\Finance\Http\Controllers\CinetPayWebhookController;
 /*
  * Story Parent 06 — Webhook public CinetPay.
  *
- * Route NON authentifiée, hors du groupe tenant : CinetPay POST directement.
+ * Route NON authentifiée (CinetPay POST directement sur le domaine du tenant,
+ * d'où le middleware `tenant` pour initialiser la base du lycée).
  * La sécurité est assurée par la vérification HMAC dans le controller.
  * Throttle pour protéger contre les flood.
  */
 Route::post('/webhooks/cinetpay', CinetPayWebhookController::class)
-    ->middleware(['throttle:120,1'])
+    ->middleware(['tenant', 'throttle:120,1'])
     ->name('webhooks.cinetpay');
 
 /*
@@ -51,10 +52,13 @@ Route::prefix('admin/finance')
         Route::prefix('fee-types')->group(function () {
             Route::get('/', [InvoiceController::class, 'getFeeTypes'])
                 ->name('admin.finance.fee-types.index');
-            Route::post('/', [InvoiceController::class, 'storeFeeType'])
-                ->name('admin.finance.fee-types.store');
-            Route::put('/{id}', [InvoiceController::class, 'updateFeeType'])
-                ->name('admin.finance.fee-types.update');
+            // Paramétrage des frais : Caissier EXCLU (lecture seule au guichet)
+            Route::middleware('role:Administrator|Comptable,tenant')->group(function () {
+                Route::post('/', [InvoiceController::class, 'storeFeeType'])
+                    ->name('admin.finance.fee-types.store');
+                Route::put('/{id}', [InvoiceController::class, 'updateFeeType'])
+                    ->name('admin.finance.fee-types.update');
+            });
         });
 
         // Invoices (Stories Agent Comptable 02, 03, 04 + Comptable read)
@@ -139,6 +143,8 @@ Route::prefix('admin/finance')
         Route::prefix('cashier-close')->group(function () {
             Route::get('/', [CashierCloseController::class, 'index'])
                 ->name('admin.finance.cashier-close.index');
+            Route::get('/preview', [CashierCloseController::class, 'preview'])
+                ->name('admin.finance.cashier-close.preview');
             Route::post('/', [CashierCloseController::class, 'store'])
                 ->name('admin.finance.cashier-close.store');
         });

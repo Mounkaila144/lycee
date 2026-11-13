@@ -21,15 +21,17 @@ class StoreTimetableSlotRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'module_id' => ['required', 'integer', 'exists:tenant.modules,id'],
+            'subject_id' => ['required_without:module_id', 'nullable', 'integer', 'exists:tenant.subjects,id'],
+            'module_id' => ['required_without:subject_id', 'nullable', 'integer', 'exists:tenant.modules,id'],
             'teacher_id' => ['required', 'integer', 'exists:tenant.users,id'],
-            'group_id' => ['required', 'integer', 'exists:tenant.groups,id'],
-            'room_id' => ['required', 'integer', 'exists:tenant.rooms,id'],
+            'classe_id' => ['required_without:group_id', 'nullable', 'integer', 'exists:tenant.classes,id'],
+            'group_id' => ['required_without:classe_id', 'nullable', 'integer', 'exists:tenant.groups,id'],
+            'room_id' => ['nullable', 'integer', 'exists:tenant.rooms,id'],
             'semester_id' => ['required', 'integer', 'exists:tenant.semesters,id'],
             'day_of_week' => ['required', 'string', 'in:'.implode(',', TimetableSlot::VALID_DAYS)],
             'start_time' => ['required', 'date_format:H:i'],
             'end_time' => ['required', 'date_format:H:i', 'after:start_time'],
-            'type' => ['required', 'string', 'in:'.implode(',', TimetableSlot::VALID_TYPES)],
+            'type' => ['sometimes', 'string', 'in:'.implode(',', TimetableSlot::VALID_TYPES)],
             'is_recurring' => ['boolean'],
             'specific_date' => ['nullable', 'date', 'after_or_equal:today'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -42,13 +44,16 @@ class StoreTimetableSlotRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'module_id.required' => 'Le module est obligatoire.',
+            'subject_id.required_without' => 'La matière est obligatoire.',
+            'subject_id.exists' => 'La matière sélectionnée n\'existe pas.',
+            'module_id.required_without' => 'Le module est obligatoire.',
             'module_id.exists' => 'Le module sélectionné n\'existe pas.',
             'teacher_id.required' => 'L\'enseignant est obligatoire.',
             'teacher_id.exists' => 'L\'enseignant sélectionné n\'existe pas.',
-            'group_id.required' => 'Le groupe est obligatoire.',
+            'classe_id.required_without' => 'La classe est obligatoire.',
+            'classe_id.exists' => 'La classe sélectionnée n\'existe pas.',
+            'group_id.required_without' => 'Le groupe est obligatoire.',
             'group_id.exists' => 'Le groupe sélectionné n\'existe pas.',
-            'room_id.required' => 'La salle est obligatoire.',
             'room_id.exists' => 'La salle sélectionnée n\'existe pas.',
             'semester_id.required' => 'Le semestre est obligatoire.',
             'semester_id.exists' => 'Le semestre sélectionné n\'existe pas.',
@@ -59,7 +64,6 @@ class StoreTimetableSlotRequest extends FormRequest
             'end_time.required' => 'L\'heure de fin est obligatoire.',
             'end_time.date_format' => 'Le format de l\'heure de fin doit être HH:MM.',
             'end_time.after' => 'L\'heure de fin doit être après l\'heure de début.',
-            'type.required' => 'Le type de séance est obligatoire.',
             'type.in' => 'Le type doit être l\'un des suivants : '.implode(', ', TimetableSlot::VALID_TYPES),
         ];
     }

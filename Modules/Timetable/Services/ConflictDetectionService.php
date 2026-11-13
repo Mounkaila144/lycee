@@ -33,6 +33,7 @@ class ConflictDetectionService
         $this->checkTeacherConflict($slot, $excludeId);
         $this->checkRoomConflict($slot, $excludeId);
         $this->checkGroupConflict($slot, $excludeId);
+        $this->checkClasseConflict($slot, $excludeId);
 
         // Vérifications de type warning
         $this->checkRoomCapacity($slot);
@@ -56,7 +57,7 @@ class ConflictDetectionService
             $query->where('id', '!=', $excludeId);
         }
 
-        $conflictingSlots = $query->with(['module', 'group', 'room'])->get();
+        $conflictingSlots = $query->with(['module', 'subject', 'group', 'classe', 'room'])->get();
 
         foreach ($conflictingSlots as $conflictingSlot) {
             $this->result['hasConflicts'] = true;
@@ -67,7 +68,9 @@ class ConflictDetectionService
                 'details' => [
                     'conflicting_slot_id' => $conflictingSlot->id,
                     'module' => $conflictingSlot->module?->name,
+                    'subject' => $conflictingSlot->subject?->name,
                     'group' => $conflictingSlot->group?->name,
+                    'classe' => $conflictingSlot->classe?->name,
                     'room' => $conflictingSlot->room?->name,
                     'time_range' => $conflictingSlot->time_range,
                 ],
@@ -80,6 +83,10 @@ class ConflictDetectionService
      */
     private function checkRoomConflict(TimetableSlot $slot, ?int $excludeId = null): void
     {
+        if (! $slot->room_id) {
+            return;
+        }
+
         $query = TimetableSlot::query()
             ->where('room_id', $slot->room_id)
             ->where('semester_id', $slot->semester_id)
@@ -90,7 +97,7 @@ class ConflictDetectionService
             $query->where('id', '!=', $excludeId);
         }
 
-        $conflictingSlots = $query->with(['module', 'teacher', 'group'])->get();
+        $conflictingSlots = $query->with(['module', 'subject', 'teacher', 'group', 'classe'])->get();
 
         foreach ($conflictingSlots as $conflictingSlot) {
             $this->result['hasConflicts'] = true;
@@ -101,8 +108,10 @@ class ConflictDetectionService
                 'details' => [
                     'conflicting_slot_id' => $conflictingSlot->id,
                     'module' => $conflictingSlot->module?->name,
+                    'subject' => $conflictingSlot->subject?->name,
                     'teacher' => $conflictingSlot->teacher?->name ?? 'N/A',
                     'group' => $conflictingSlot->group?->name,
+                    'classe' => $conflictingSlot->classe?->name,
                     'time_range' => $conflictingSlot->time_range,
                 ],
             ];
@@ -114,6 +123,10 @@ class ConflictDetectionService
      */
     private function checkGroupConflict(TimetableSlot $slot, ?int $excludeId = null): void
     {
+        if (! $slot->group_id) {
+            return;
+        }
+
         $query = TimetableSlot::query()
             ->where('group_id', $slot->group_id)
             ->where('semester_id', $slot->semester_id)
@@ -144,18 +157,57 @@ class ConflictDetectionService
     }
 
     /**
+     * Vérifie les conflits de classe (une classe ne peut avoir deux cours en même temps)
+     */
+    private function checkClasseConflict(TimetableSlot $slot, ?int $excludeId = null): void
+    {
+        if (! $slot->classe_id) {
+            return;
+        }
+
+        $query = TimetableSlot::query()
+            ->where('classe_id', $slot->classe_id)
+            ->overlapping($slot->day_of_week, $slot->start_time, $slot->end_time, $slot->semester_id);
+
+        if ($excludeId) {
+            $query->where('id', '!=', $excludeId);
+        }
+
+        $conflictingSlots = $query->with(['subject', 'teacher', 'room'])->get();
+
+        foreach ($conflictingSlots as $conflictingSlot) {
+            $this->result['hasConflicts'] = true;
+            $this->result['conflicts'][] = [
+                'type' => 'classe',
+                'severity' => 'error',
+                'message' => "La classe a déjà un cours le {$conflictingSlot->day_of_week} de {$conflictingSlot->time_range}",
+                'details' => [
+                    'conflicting_slot_id' => $conflictingSlot->id,
+                    'subject' => $conflictingSlot->subject?->name,
+                    'teacher' => $conflictingSlot->teacher?->name ?? 'N/A',
+                    'room' => $conflictingSlot->room?->name,
+                    'time_range' => $conflictingSlot->time_range,
+                ],
+            ];
+        }
+    }
+
+    /**
      * Vérifie si la capacité de la salle est suffisante
      */
     private function checkRoomCapacity(TimetableSlot $slot): void
     {
         $room = $slot->room;
         $group = $slot->group;
+        $classe = $slot->classe;
 
-        if (! $room || ! $group) {
+        if (! $room || (! $group && ! $classe)) {
             return;
         }
 
-        $groupSize = $group->current_count ?? $group->capacity_max ?? 0;
+        $groupSize = $group
+            ? ($group->current_count ?? $group->capacity_max ?? 0)
+            : $classe->activeEnrollments()->count();
 
         if ($room->capacity < $groupSize) {
             $this->result['warnings'][] = [
@@ -224,8 +276,10 @@ class ConflictDetectionService
                 // Créer un créneau de test
                 $testSlot = new TimetableSlot([
                     'module_id' => $slot->module_id,
+                    'subject_id' => $slot->subject_id,
                     'teacher_id' => $slot->teacher_id,
                     'group_id' => $slot->group_id,
+                    'classe_id' => $slot->classe_id,
                     'room_id' => $slot->room_id,
                     'semester_id' => $slot->semester_id,
                     'day_of_week' => $day,
@@ -237,6 +291,7 @@ class ConflictDetectionService
                 // Charger les relations nécessaires pour la vérification
                 $testSlot->setRelation('room', $slot->room);
                 $testSlot->setRelation('group', $slot->group);
+                $testSlot->setRelation('classe', $slot->classe);
 
                 $result = $this->detectConflicts($testSlot);
 

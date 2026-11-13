@@ -11,15 +11,16 @@ use Tests\TestCase;
 /**
  * Stories Agent Comptable 01-06 — restrictions fines Finance.
  *
- * Vérifie que Agent Comptable :
- *   ✅ peut créer / modifier / supprimer des factures (Stories 01, 02)
- *   ✅ peut créer un échéancier (Story 03)
- *   ✅ peut calculer les pénalités (Story 04)
- *   ✅ peut déclencher reminders + blocages services (Stories 05, 06)
- *   ❌ ne peut PAS rembourser un paiement (Story Comptable 04)
- *   ❌ ne peut PAS write-off une dette (Story Comptable 06)
+ * Le rôle « Agent Comptable » a été fusionné dans « Comptable »
+ * (RolesAndPermissionsSeeder : ses utilisateurs sont réaffectés à Comptable
+ * et le rôle est supprimé ; les routes Finance ne le citent plus).
  *
- * Et que Caissier est correctement EXCLU des mutations facturation et recouvrement.
+ * Vérifie donc que Comptable couvre le périmètre ex-Agent Comptable :
+ *   ✅ peut lire / créer des factures, génération automatique (Stories 01, 02)
+ *   ✅ peut créer un échéancier (Story 03)
+ *   ✅ peut déclencher reminders + blocages services (Stories 05, 06)
+ * qu'un éventuel rôle résiduel « Agent Comptable » n'ouvre plus aucun accès,
+ * et que Caissier est correctement EXCLU des mutations facturation et recouvrement.
  */
 class AgentComptableFinanceTest extends TestCase
 {
@@ -54,9 +55,9 @@ class AgentComptableFinanceTest extends TestCase
     }
 
     #[Test]
-    public function agent_comptable_can_read_invoices(): void
+    public function comptable_can_read_invoices(): void
     {
-        $token = $this->tokenFor('Agent Comptable');
+        $token = $this->tokenFor('Comptable');
 
         $this->withToken($token)
             ->getJson('/api/admin/finance/invoices')
@@ -64,9 +65,9 @@ class AgentComptableFinanceTest extends TestCase
     }
 
     #[Test]
-    public function agent_comptable_can_create_invoice(): void
+    public function comptable_can_create_invoice(): void
     {
-        $token = $this->tokenFor('Agent Comptable');
+        $token = $this->tokenFor('Comptable');
 
         $response = $this->withToken($token)->postJson('/api/admin/finance/invoices', []);
 
@@ -75,9 +76,9 @@ class AgentComptableFinanceTest extends TestCase
     }
 
     #[Test]
-    public function agent_comptable_can_generate_automated_invoices(): void
+    public function comptable_can_generate_automated_invoices(): void
     {
-        $token = $this->tokenFor('Agent Comptable');
+        $token = $this->tokenFor('Comptable');
 
         $response = $this->withToken($token)
             ->postJson('/api/admin/finance/invoices/generate-automated', []);
@@ -86,9 +87,9 @@ class AgentComptableFinanceTest extends TestCase
     }
 
     #[Test]
-    public function agent_comptable_can_create_payment_plan(): void
+    public function comptable_can_create_payment_plan(): void
     {
-        $token = $this->tokenFor('Agent Comptable');
+        $token = $this->tokenFor('Comptable');
 
         $response = $this->withToken($token)
             ->postJson('/api/admin/finance/collection/payment-plans', []);
@@ -97,9 +98,9 @@ class AgentComptableFinanceTest extends TestCase
     }
 
     #[Test]
-    public function agent_comptable_can_send_reminders(): void
+    public function comptable_can_send_reminders(): void
     {
-        $token = $this->tokenFor('Agent Comptable');
+        $token = $this->tokenFor('Comptable');
 
         $response = $this->withToken($token)
             ->postJson('/api/admin/finance/collection/reminders/send', []);
@@ -108,9 +109,9 @@ class AgentComptableFinanceTest extends TestCase
     }
 
     #[Test]
-    public function agent_comptable_can_block_services(): void
+    public function comptable_can_block_services(): void
     {
-        $token = $this->tokenFor('Agent Comptable');
+        $token = $this->tokenFor('Comptable');
 
         $response = $this->withToken($token)
             ->postJson('/api/admin/finance/collection/blocks', []);
@@ -119,7 +120,7 @@ class AgentComptableFinanceTest extends TestCase
     }
 
     #[Test]
-    public function agent_comptable_cannot_refund_payment(): void
+    public function legacy_agent_comptable_role_cannot_refund_payment(): void
     {
         $token = $this->tokenFor('Agent Comptable');
 
@@ -129,7 +130,7 @@ class AgentComptableFinanceTest extends TestCase
     }
 
     #[Test]
-    public function agent_comptable_cannot_write_off_debt(): void
+    public function legacy_agent_comptable_role_cannot_write_off_debt(): void
     {
         $token = $this->tokenFor('Agent Comptable');
 
@@ -201,9 +202,19 @@ class AgentComptableFinanceTest extends TestCase
     }
 
     #[Test]
+    public function legacy_agent_comptable_role_cannot_read_invoices(): void
+    {
+        $token = $this->tokenFor('Agent Comptable');
+
+        $this->withToken($token)
+            ->getJson('/api/admin/finance/invoices')
+            ->assertForbidden();
+    }
+
+    #[Test]
     public function etudiant_blocked_on_all_finance_routes(): void
     {
-        $token = $this->tokenFor('Étudiant');
+        $token = $this->tokenFor('Élève');
 
         $this->withToken($token)
             ->postJson('/api/admin/finance/invoices', [])

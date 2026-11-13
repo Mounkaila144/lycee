@@ -12,30 +12,36 @@ class ExamReportController extends Controller
 {
     public function __construct(private ExamReportService $reportService) {}
 
-    public function attendanceReport(ExamSession $session): JsonResponse
+    public function attendanceReport(int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
         $report = $this->reportService->generateAttendanceReport($session);
 
         return response()->json($report);
     }
 
-    public function exportAttendance(Request $request, ExamSession $session): JsonResponse
+    public function exportAttendance(Request $request, int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
+
         $format = $request->input('format', 'excel');
         $export = $this->reportService->exportAttendanceReport($session, $format);
 
         return response()->json($export);
     }
 
-    public function incidentReport(ExamSession $session): JsonResponse
+    public function incidentReport(int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
         $report = $this->reportService->generateIncidentReport($session);
 
         return response()->json($report);
     }
 
-    public function exportIncidents(Request $request, ExamSession $session): JsonResponse
+    public function exportIncidents(Request $request, int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
+
         $format = $request->input('format', 'pdf');
         $export = $this->reportService->exportIncidentReport($session, $format);
 

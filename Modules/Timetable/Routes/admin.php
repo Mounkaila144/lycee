@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
 use Modules\Timetable\Http\Controllers\Admin\RoomController;
 use Modules\Timetable\Http\Controllers\Admin\TimetableController;
@@ -17,23 +18,61 @@ use Modules\Timetable\Http\Controllers\Admin\TimetableReportsController;
 | Elles utilisent la base de données tenant (connexion 'tenant')
 */
 
-// RBAC durcissement (Stories Professeur 07, Admin 08, Manager 07) :
-// Admin, Manager et Professeur accèdent. Le Professeur ne voit que SON emploi du temps
-// (ownership `teacher_id = auth()->id()` dans TimetableController — à compléter).
-// Mutations (création/édition créneaux, salles) restent restreintes côté Story Admin 08.
-// Protected admin routes (tenant + auth required)
+// RBAC (Stories Professeur 07, Admin 08, Manager 07) :
+// - Lecture : Administrator, Manager, Professeur. Le Professeur ne voit que SES créneaux
+//   (ownership appliqué dans TimetableController / TimetableGenerationController).
+// - Gestion (créneaux, salles, génération, duplication, exceptions, rapports) : Administrator, Manager.
+// SubstituteBindings est requis (pas de groupe `api`) pour résoudre {room}, {slot}, {exception}.
+$timetableReaders = ['tenant', 'tenant.auth', 'role:Administrator|Manager|Professeur,tenant', SubstituteBindings::class];
+$timetableManagers = ['tenant', 'tenant.auth', 'role:Administrator|Manager,tenant', SubstituteBindings::class];
+
 Route::prefix('api/admin')
-    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Professeur,tenant'])
+    ->middleware($timetableReaders)
+    ->group(function () {
+        Route::prefix('rooms')->name('rooms.')->group(function () {
+            Route::get('/', [RoomController::class, 'index'])->name('index');
+            Route::get('/buildings', [RoomController::class, 'buildings'])->name('buildings');
+            Route::get('/available', [RoomController::class, 'available'])->name('available');
+            Route::get('/{room}', [RoomController::class, 'show'])->name('show')->whereNumber('room');
+        });
+
+        Route::prefix('timetable')->name('timetable.')->group(function () {
+            Route::get('/me', [TimetableController::class, 'myTimetable'])->name('me');
+            Route::get('/slots', [TimetableController::class, 'index'])->name('slots.index');
+            Route::get('/slots/{slot}', [TimetableController::class, 'show'])->name('slots.show')->whereNumber('slot');
+            Route::get('/slots/{slot}/history', [TimetableController::class, 'history'])->name('slots.history')->whereNumber('slot');
+            Route::get('/teachers/{teacherId}', [TimetableController::class, 'byTeacher'])->name('by-teacher');
+            Route::get('/classes/{classeId}', [TimetableController::class, 'byClasse'])->name('by-classe');
+            Route::get('/rooms/{roomId}', [TimetableController::class, 'byRoom'])->name('by-room');
+            Route::get('/exceptions', [TimetableExceptionController::class, 'index'])->name('exceptions.index');
+        });
+
+        // Préférences enseignants (le Professeur ne gère que les siennes)
+        Route::prefix('teachers')->name('teachers.')->group(function () {
+            Route::get('/{teacherId}/preferences', [TimetableGenerationController::class, 'getTeacherPreferences'])->name('preferences.index');
+            Route::put('/{teacherId}/preferences', [TimetableGenerationController::class, 'updateTeacherPreferences'])->name('preferences.update');
+        });
+
+        // Notifications de l'utilisateur connecté (Epic 3 - Stories 10-13)
+        Route::prefix('notifications')->name('notifications.')->group(function () {
+            Route::get('/', [TimetableNotificationController::class, 'index'])->name('index');
+            Route::get('/unread-count', [TimetableNotificationController::class, 'unreadCount'])->name('unread-count');
+            Route::post('/{notification}/read', [TimetableNotificationController::class, 'markAsRead'])->name('mark-read')->whereNumber('notification');
+            Route::post('/read-all', [TimetableNotificationController::class, 'markAllAsRead'])->name('mark-all-read');
+            Route::get('/upcoming-changes', [TimetableNotificationController::class, 'upcomingChanges'])->name('upcoming-changes');
+            Route::get('/settings', [TimetableNotificationController::class, 'getSettings'])->name('settings.show');
+            Route::put('/settings', [TimetableNotificationController::class, 'updateSettings'])->name('settings.update');
+        });
+    });
+
+Route::prefix('api/admin')
+    ->middleware($timetableManagers)
     ->group(function () {
         // Gestion des salles
         Route::prefix('rooms')->name('rooms.')->group(function () {
-            Route::get('/', [RoomController::class, 'index'])->name('index');
             Route::post('/', [RoomController::class, 'store'])->name('store');
-            Route::get('/buildings', [RoomController::class, 'buildings'])->name('buildings');
-            Route::get('/available', [RoomController::class, 'available'])->name('available');
             Route::get('/suggested', [RoomController::class, 'suggested'])->name('suggested');
             Route::get('/stats', [RoomController::class, 'globalStats'])->name('stats');
-            Route::get('/{room}', [RoomController::class, 'show'])->name('show');
             Route::put('/{room}', [RoomController::class, 'update'])->name('update');
             Route::delete('/{room}', [RoomController::class, 'destroy'])->name('destroy');
             Route::get('/{room}/occupation', [RoomController::class, 'occupation'])->name('occupation');
@@ -45,20 +84,15 @@ Route::prefix('api/admin')
         // Gestion des emplois du temps
         Route::prefix('timetable')->name('timetable.')->group(function () {
             // CRUD Créneaux
-            Route::get('/slots', [TimetableController::class, 'index'])->name('slots.index');
             Route::post('/slots', [TimetableController::class, 'store'])->name('slots.store');
-            Route::get('/slots/{slot}', [TimetableController::class, 'show'])->name('slots.show');
             Route::put('/slots/{slot}', [TimetableController::class, 'update'])->name('slots.update');
             Route::delete('/slots/{slot}', [TimetableController::class, 'destroy'])->name('slots.destroy');
-            Route::get('/slots/{slot}/history', [TimetableController::class, 'history'])->name('slots.history');
 
             // Vérification des conflits
             Route::post('/check-conflicts', [TimetableController::class, 'checkConflicts'])->name('check-conflicts');
 
-            // Vues par entité
+            // Vues par entité (gestion)
             Route::get('/groups/{groupId}', [TimetableController::class, 'byGroup'])->name('by-group');
-            Route::get('/teachers/{teacherId}', [TimetableController::class, 'byTeacher'])->name('by-teacher');
-            Route::get('/rooms/{roomId}', [TimetableController::class, 'byRoom'])->name('by-room');
             Route::get('/students/{studentId}', [TimetableController::class, 'byStudent'])->name('by-student');
 
             // Génération automatique
@@ -74,18 +108,11 @@ Route::prefix('api/admin')
 
             // Exceptions
             Route::prefix('exceptions')->name('exceptions.')->group(function () {
-                Route::get('/', [TimetableExceptionController::class, 'index'])->name('index');
                 Route::post('/', [TimetableExceptionController::class, 'store'])->name('store');
                 Route::get('/slots/{slotId}/history', [TimetableExceptionController::class, 'getSlotHistory'])->name('slot-history');
                 Route::get('/upcoming/{semesterId}', [TimetableExceptionController::class, 'getUpcoming'])->name('upcoming');
                 Route::delete('/{exception}', [TimetableExceptionController::class, 'destroy'])->name('destroy');
             });
-        });
-
-        // Préférences enseignants
-        Route::prefix('teachers')->name('teachers.')->group(function () {
-            Route::get('/{teacherId}/preferences', [TimetableGenerationController::class, 'getTeacherPreferences'])->name('preferences.index');
-            Route::put('/{teacherId}/preferences', [TimetableGenerationController::class, 'updateTeacherPreferences'])->name('preferences.update');
         });
 
         // Rapports et statistiques (Stories 14-17)
@@ -96,22 +123,8 @@ Route::prefix('api/admin')
             Route::get('/room-utilization', [TimetableReportsController::class, 'roomUtilization'])->name('room-utilization');
         });
 
-        // Notifications (Epic 3 - Stories 10-13)
+        // Notifications - actions d'administration
         Route::prefix('notifications')->name('notifications.')->group(function () {
-            // User notifications
-            Route::get('/', [TimetableNotificationController::class, 'index'])->name('index');
-            Route::get('/unread-count', [TimetableNotificationController::class, 'unreadCount'])->name('unread-count');
-            Route::post('/{notification}/read', [TimetableNotificationController::class, 'markAsRead'])->name('mark-read');
-            Route::post('/read-all', [TimetableNotificationController::class, 'markAllAsRead'])->name('mark-all-read');
-
-            // Upcoming changes for user
-            Route::get('/upcoming-changes', [TimetableNotificationController::class, 'upcomingChanges'])->name('upcoming-changes');
-
-            // Settings
-            Route::get('/settings', [TimetableNotificationController::class, 'getSettings'])->name('settings.show');
-            Route::put('/settings', [TimetableNotificationController::class, 'updateSettings'])->name('settings.update');
-
-            // Admin actions
             Route::post('/trigger-reminders', [TimetableNotificationController::class, 'triggerReminders'])->name('trigger-reminders');
             Route::get('/statistics', [TimetableNotificationController::class, 'statistics'])->name('statistics');
             Route::delete('/cleanup', [TimetableNotificationController::class, 'cleanup'])->name('cleanup');

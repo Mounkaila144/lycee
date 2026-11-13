@@ -145,7 +145,7 @@ class GradeValidationController extends Controller
     {
         $request->validate([
             'validation_ids' => ['required', 'array', 'min:1'],
-            'validation_ids.*' => ['integer', 'exists:grade_validations,id'],
+            'validation_ids.*' => ['integer', 'exists:tenant.grade_validations,id'],
         ]);
 
         $results = $this->validationService->bulkPublish(

@@ -35,7 +35,7 @@ class SettingsController extends Controller
     public function upsert(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'key' => ['required', 'string', 'max:100'],
+            'key' => ['required', 'string', 'max:100', 'regex:/^[A-Za-z0-9_.\-]+$/'],
             'value' => ['nullable', 'string'],
             'type' => ['required', 'in:string,integer,boolean,json,file'],
             'category' => ['nullable', 'string', 'max:50'],

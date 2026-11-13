@@ -14,7 +14,7 @@ class StoreRetakeGradeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'retake_enrollment_id' => ['required', 'integer', 'exists:retake_enrollments,id'],
+            'retake_enrollment_id' => ['required', 'integer', 'exists:tenant.retake_enrollments,id'],
             'score' => ['nullable', 'numeric', 'min:0', 'max:20'],
             'is_absent' => ['nullable', 'boolean'],
             'comment' => ['nullable', 'string', 'max:500'],

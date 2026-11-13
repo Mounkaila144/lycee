@@ -53,7 +53,7 @@ class RoleRouteProtectionTest extends TestCase
     #[Test]
     public function etudiant_cannot_list_users(): void
     {
-        $token = $this->tokenFor('Étudiant');
+        $token = $this->tokenFor('Élève');
 
         $this->withToken($token)
             ->getJson('/api/admin/users')
@@ -97,11 +97,13 @@ class RoleRouteProtectionTest extends TestCase
     }
 
     #[Test]
-    public function manager_cannot_list_roles(): void
+    public function manager_can_list_roles_but_cannot_manage_them(): void
     {
         $token = $this->tokenFor('Manager');
 
-        $this->withToken($token)->getJson('/api/admin/roles')->assertForbidden();
+        $this->withToken($token)->getJson('/api/admin/roles')->assertOk();
+        $this->withToken($token)->postJson('/api/admin/roles', ['name' => 'Hacker'])->assertForbidden();
+        $this->withToken($token)->getJson('/api/admin/permissions')->assertForbidden();
     }
 
     #[Test]
@@ -121,7 +123,7 @@ class RoleRouteProtectionTest extends TestCase
     #[Test]
     public function etudiant_cannot_access_teachers_endpoint(): void
     {
-        $token = $this->tokenFor('Étudiant');
+        $token = $this->tokenFor('Élève');
 
         $this->withToken($token)->getJson('/api/admin/teachers')->assertForbidden();
     }

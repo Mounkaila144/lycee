@@ -190,7 +190,7 @@ class GroupExportService
         return GroupAssignment::on('tenant')
             ->where('group_id', $group->id)
             ->with(['student' => function ($q) {
-                $q->select('id', 'matricule', 'firstname', 'lastname', 'email', 'phone', 'photo', 'birthdate');
+                $q->select('id', 'matricule', 'firstname', 'lastname', 'phone', 'photo', 'birthdate');
             }])
             ->get()
             ->pluck('student')

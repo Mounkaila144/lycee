@@ -67,16 +67,30 @@ class DocumentTemplate extends Model
     /**
      * Business Logic
      */
+    /**
+     * Replace {{placeholders}} with HTML-escaped scalar values.
+     * Non-scalar values (arrays of grades, history...) are ignored and any
+     * placeholder left unresolved is removed.
+     *
+     * @param  array<string, mixed>  $data
+     */
     public function renderTemplate(array $data): string
     {
-        $template = $this->content_template;
+        $template = (string) $this->content_template;
 
         foreach ($data as $key => $value) {
-            $placeholder = '{{'.$key.'}}';
-            $template = str_replace($placeholder, $value, $template);
+            if ($value !== null && ! is_scalar($value)) {
+                continue;
+            }
+
+            if (is_bool($value)) {
+                $value = $value ? 'Oui' : 'Non';
+            }
+
+            $template = str_replace('{{'.$key.'}}', e((string) $value), $template);
         }
 
-        return $template;
+        return (string) preg_replace('/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/', '', $template);
     }
 
     public function getAvailableVariables(): array

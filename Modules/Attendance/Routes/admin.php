@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\Attendance\Http\Controllers\Admin\AttendanceController;
 use Modules\Attendance\Http\Controllers\Admin\AttendanceMonitoringController;
 use Modules\Attendance\Http\Controllers\Admin\AttendanceReportController;
+use Modules\Attendance\Http\Controllers\Admin\FamilyAttendanceController;
 use Modules\Attendance\Http\Controllers\Admin\JustificationController;
 
 /*
@@ -14,17 +15,17 @@ use Modules\Attendance\Http\Controllers\Admin\JustificationController;
 | Elles utilisent la base de données tenant (connexion 'tenant')
 */
 
-// RBAC durcissement (Stories Professeur 06, Admin 07, Manager 06) :
-// Admin, Manager et Professeur peuvent accéder. Le Professeur ne voit que SES sessions
-// (ownership check `teacher_id = auth()->id()` dans AttendanceController — à compléter).
-// La validation des justificatifs (POST justifications/{id}/validate) doit rester Admin
-// uniquement — restriction fine à appliquer story par story.
-// Protected admin routes (tenant + auth required)
+// RBAC (Stories Professeur 06, Admin 07, Manager 06) :
+// Admin, Manager et Professeur peuvent accéder. Le Professeur ne gère que les séances
+// de SES classes (professeur principal) / créneaux — cf. AttendanceAccessService.
+// La validation des justificatifs (POST justifications/{id}/validate) est réservée
+// à Administrator / Manager (contrôle dans JustificationController).
 Route::prefix('admin')
     ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Professeur,tenant'])
     ->group(function () {
         // Gestion des présences (Stories 01-04)
         Route::prefix('attendance')->name('attendance.')->group(function () {
+            Route::get('/classes', [AttendanceController::class, 'classes'])->name('classes');
             Route::get('/sessions', [AttendanceController::class, 'index'])->name('sessions.index');
             Route::post('/sessions', [AttendanceController::class, 'createSession'])->name('sessions.create');
             Route::get('/sessions/{sessionId}/sheet', [AttendanceController::class, 'getAttendanceSheet'])->name('sessions.sheet');
@@ -61,4 +62,16 @@ Route::prefix('admin')
             Route::get('/statistics', [AttendanceReportController::class, 'getDetailedStatistics'])->name('statistics');
             Route::get('/export', [AttendanceReportController::class, 'exportData'])->name('export');
         });
+    });
+
+// Portail familles : un Parent agit pour SES enfants, un Élève pour lui-même.
+Route::prefix('admin/attendance/my')
+    ->middleware(['tenant', 'tenant.auth', 'role:Parent|Élève,tenant'])
+    ->name('attendance.my.')
+    ->group(function () {
+        Route::get('/students', [FamilyAttendanceController::class, 'students'])->name('students');
+        Route::get('/absences', [FamilyAttendanceController::class, 'absences'])->name('absences');
+        Route::get('/justifications', [FamilyAttendanceController::class, 'justifications'])->name('justifications.index');
+        Route::post('/justifications', [FamilyAttendanceController::class, 'submit'])->name('justifications.submit');
+        Route::get('/justifications/{justificationId}/download', [FamilyAttendanceController::class, 'download'])->name('justifications.download');
     });

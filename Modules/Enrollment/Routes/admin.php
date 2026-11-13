@@ -37,6 +37,14 @@ Route::prefix('admin')
         });
     });
 
+// Liste/recherche des élèves (lecture seule) : ouverte aussi à Comptable et Caissier
+// (Facturation : résolution d'un élève par matricule).
+Route::prefix('admin/enrollment')
+    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Professeur|Comptable|Caissier,tenant'])
+    ->group(function () {
+        Route::get('students', [StudentController::class, 'index'])->name('admin.enrollment.students.index');
+    });
+
 // RBAC durcissement (Stories Admin 05, Manager 04, Professeur 09) :
 // Admin et Manager (CRUD), Professeur (lecture seule, à raffiner par controller).
 // Les actions destructrices (DELETE student, POST status) doivent être restreintes
@@ -46,8 +54,8 @@ Route::prefix('admin/enrollment')
     ->group(function () {
         // Students CRUD (dossiers étudiants - different from UsersGuard /admin/students user accounts)
         Route::prefix('students')->group(function () {
-            Route::get('/', [StudentController::class, 'index'])->name('admin.enrollment.students.index');
-            Route::post('/', [StudentController::class, 'store'])->name('admin.enrollment.students.store');
+            Route::post('/', [StudentController::class, 'store'])->name('admin.enrollment.students.store')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Search and Export (must be before /{student} to avoid conflict)
             Route::get('/search/autocomplete', [StudentController::class, 'autocomplete'])
@@ -67,15 +75,20 @@ Route::prefix('admin/enrollment')
             Route::get('/import/template', [StudentController::class, 'downloadImportTemplate'])
                 ->name('admin.enrollment.students.import-template');
             Route::post('/import/preview', [StudentController::class, 'previewImport'])
-                ->name('admin.enrollment.students.import-preview');
+                ->name('admin.enrollment.students.import-preview')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/import/revalidate-row', [StudentController::class, 'revalidateImportRow'])
-                ->name('admin.enrollment.students.import-revalidate-row');
+                ->name('admin.enrollment.students.import-revalidate-row')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/import/confirm', [StudentController::class, 'confirmImport'])
-                ->name('admin.enrollment.students.import-confirm');
+                ->name('admin.enrollment.students.import-confirm')
+                ->middleware('role:Administrator|Manager,tenant');
 
             Route::get('/{student}', [StudentController::class, 'show'])->name('admin.enrollment.students.show');
-            Route::put('/{student}', [StudentController::class, 'update'])->name('admin.enrollment.students.update');
-            Route::delete('/{student}', [StudentController::class, 'destroy'])->name('admin.enrollment.students.destroy');
+            Route::put('/{student}', [StudentController::class, 'update'])->name('admin.enrollment.students.update')
+                ->middleware('role:Administrator|Manager,tenant');
+            Route::delete('/{student}', [StudentController::class, 'destroy'])->name('admin.enrollment.students.destroy')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Document completeness check
             Route::get('/{student}/check-completeness', [StudentController::class, 'checkCompleteness'])
@@ -87,13 +100,15 @@ Route::prefix('admin/enrollment')
 
             // Document management
             Route::post('/{student}/documents', [StudentController::class, 'uploadDocument'])
-                ->name('admin.enrollment.students.upload-document');
+                ->name('admin.enrollment.students.upload-document')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{student}/documents/{document}', [StudentController::class, 'downloadDocument'])
                 ->name('admin.enrollment.students.download-document');
 
             // Status management
             Route::post('/{student}/status', [StudentController::class, 'changeStatus'])
-                ->name('admin.enrollment.students.change-status');
+                ->name('admin.enrollment.students.change-status')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{student}/status/history', [StudentController::class, 'statusHistory'])
                 ->name('admin.enrollment.students.status-history');
             Route::get('/{student}/status/transitions', [StudentController::class, 'availableTransitions'])
@@ -107,7 +122,8 @@ Route::prefix('admin/enrollment')
         // Enrollments CRUD (inscriptions pédagogiques)
         Route::prefix('enrollments')->group(function () {
             Route::get('/', [EnrollmentController::class, 'index'])->name('admin.enrollment.enrollments.index');
-            Route::post('/', [EnrollmentController::class, 'store'])->name('admin.enrollment.enrollments.store');
+            Route::post('/', [EnrollmentController::class, 'store'])->name('admin.enrollment.enrollments.store')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Available modules for enrollment (must be before /{enrollment})
             Route::get('/available-modules', [EnrollmentController::class, 'availableModules'])
@@ -130,14 +146,18 @@ Route::prefix('admin/enrollment')
                 ->name('admin.enrollment.enrollments.check-prerequisites');
 
             Route::get('/{enrollment}', [EnrollmentController::class, 'show'])->name('admin.enrollment.enrollments.show');
-            Route::put('/{enrollment}', [EnrollmentController::class, 'update'])->name('admin.enrollment.enrollments.update');
-            Route::delete('/{enrollment}', [EnrollmentController::class, 'destroy'])->name('admin.enrollment.enrollments.destroy');
+            Route::put('/{enrollment}', [EnrollmentController::class, 'update'])->name('admin.enrollment.enrollments.update')
+                ->middleware('role:Administrator|Manager,tenant');
+            Route::delete('/{enrollment}', [EnrollmentController::class, 'destroy'])->name('admin.enrollment.enrollments.destroy')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Module management for an enrollment
             Route::post('/{enrollment}/modules', [EnrollmentController::class, 'addModules'])
-                ->name('admin.enrollment.enrollments.add-modules');
+                ->name('admin.enrollment.enrollments.add-modules')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::delete('/{enrollment}/modules', [EnrollmentController::class, 'removeModules'])
-                ->name('admin.enrollment.enrollments.remove-modules');
+                ->name('admin.enrollment.enrollments.remove-modules')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Download enrollment sheet PDF
             Route::get('/{enrollment}/sheet', [EnrollmentController::class, 'downloadEnrollmentSheet'])
@@ -146,18 +166,22 @@ Route::prefix('admin/enrollment')
 
         // Module enrollment status update
         Route::put('/module-enrollments/{moduleEnrollment}', [EnrollmentController::class, 'updateModuleEnrollment'])
-            ->name('admin.enrollment.module-enrollments.update');
+            ->name('admin.enrollment.module-enrollments.update')
+            ->middleware('role:Administrator|Manager,tenant');
 
         // Options CRUD (choix d'options et spécialités)
         Route::prefix('options')->group(function () {
             Route::get('/', [OptionController::class, 'index'])->name('admin.enrollment.options.index');
-            Route::post('/', [OptionController::class, 'store'])->name('admin.enrollment.options.store');
+            Route::post('/', [OptionController::class, 'store'])->name('admin.enrollment.options.store')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Assignment operations (must be before /{option})
             Route::post('/assign', [OptionController::class, 'assign'])
-                ->name('admin.enrollment.options.assign');
+                ->name('admin.enrollment.options.assign')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/assign-manual', [OptionController::class, 'assignManual'])
-                ->name('admin.enrollment.options.assign-manual');
+                ->name('admin.enrollment.options.assign-manual')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Global statistics (must be before /{option})
             Route::get('/statistics/global', [OptionController::class, 'globalStatistics'])
@@ -165,7 +189,8 @@ Route::prefix('admin/enrollment')
 
             // Student choices management (must be before /{option})
             Route::post('/choices', [OptionController::class, 'storeChoice'])
-                ->name('admin.enrollment.options.store-choice');
+                ->name('admin.enrollment.options.store-choice')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/student-choices', [OptionController::class, 'studentChoices'])
                 ->name('admin.enrollment.options.student-choices');
 
@@ -174,8 +199,10 @@ Route::prefix('admin/enrollment')
                 ->name('admin.enrollment.options.check-prerequisites');
 
             Route::get('/{option}', [OptionController::class, 'show'])->name('admin.enrollment.options.show');
-            Route::put('/{option}', [OptionController::class, 'update'])->name('admin.enrollment.options.update');
-            Route::delete('/{option}', [OptionController::class, 'destroy'])->name('admin.enrollment.options.destroy');
+            Route::put('/{option}', [OptionController::class, 'update'])->name('admin.enrollment.options.update')
+                ->middleware('role:Administrator|Manager,tenant');
+            Route::delete('/{option}', [OptionController::class, 'destroy'])->name('admin.enrollment.options.destroy')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Option choices and assignments
             Route::get('/{option}/choices', [OptionController::class, 'choices'])
@@ -188,7 +215,8 @@ Route::prefix('admin/enrollment')
 
         // Option assignment deletion
         Route::delete('/option-assignments/{assignment}', [OptionController::class, 'removeAssignment'])
-            ->name('admin.enrollment.option-assignments.destroy');
+            ->name('admin.enrollment.option-assignments.destroy')
+            ->middleware('role:Administrator|Manager,tenant');
 
         // Pedagogical Enrollment Validation
         Route::prefix('validation')->group(function () {
@@ -197,16 +225,19 @@ Route::prefix('admin/enrollment')
             Route::get('/stats', [EnrollmentValidationController::class, 'stats'])
                 ->name('admin.enrollment.validation.stats');
             Route::post('/batch-validate', [EnrollmentValidationController::class, 'batchValidate'])
-                ->name('admin.enrollment.validation.batch-validate');
+                ->name('admin.enrollment.validation.batch-validate')
+                ->middleware('role:Administrator|Manager,tenant');
 
             Route::get('/{id}', [EnrollmentValidationController::class, 'show'])
                 ->name('admin.enrollment.validation.show');
             Route::get('/{id}/check', [EnrollmentValidationController::class, 'check'])
                 ->name('admin.enrollment.validation.check');
             Route::post('/{id}/validate', [EnrollmentValidationController::class, 'validate'])
-                ->name('admin.enrollment.validation.validate');
+                ->name('admin.enrollment.validation.validate')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{id}/reject', [EnrollmentValidationController::class, 'reject'])
-                ->name('admin.enrollment.validation.reject');
+                ->name('admin.enrollment.validation.reject')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{id}/contract', [EnrollmentValidationController::class, 'downloadContract'])
                 ->name('admin.enrollment.validation.contract');
         });
@@ -214,7 +245,8 @@ Route::prefix('admin/enrollment')
         // Groups CRUD (TD/TP group management)
         Route::prefix('groups')->group(function () {
             Route::get('/', [GroupController::class, 'index'])->name('admin.enrollment.groups.index');
-            Route::post('/', [GroupController::class, 'store'])->name('admin.enrollment.groups.store');
+            Route::post('/', [GroupController::class, 'store'])->name('admin.enrollment.groups.store')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Unassigned students (must be before /{group} to avoid conflict)
             Route::get('/unassigned-students', [GroupController::class, 'unassignedStudents'])
@@ -224,17 +256,22 @@ Route::prefix('admin/enrollment')
             Route::post('/auto-assign/preview', [GroupController::class, 'previewAutoAssign'])
                 ->name('admin.enrollment.groups.auto-assign-preview');
             Route::post('/auto-assign', [GroupController::class, 'autoAssign'])
-                ->name('admin.enrollment.groups.auto-assign');
+                ->name('admin.enrollment.groups.auto-assign')
+                ->middleware('role:Administrator|Manager,tenant');
 
             Route::get('/{group}', [GroupController::class, 'show'])->name('admin.enrollment.groups.show');
-            Route::put('/{group}', [GroupController::class, 'update'])->name('admin.enrollment.groups.update');
-            Route::delete('/{group}', [GroupController::class, 'destroy'])->name('admin.enrollment.groups.destroy');
+            Route::put('/{group}', [GroupController::class, 'update'])->name('admin.enrollment.groups.update')
+                ->middleware('role:Administrator|Manager,tenant');
+            Route::delete('/{group}', [GroupController::class, 'destroy'])->name('admin.enrollment.groups.destroy')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Student assignment
             Route::post('/{group}/assign-student', [GroupController::class, 'assignStudent'])
-                ->name('admin.enrollment.groups.assign-student');
+                ->name('admin.enrollment.groups.assign-student')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{group}/move-student', [GroupController::class, 'moveStudent'])
-                ->name('admin.enrollment.groups.move-student');
+                ->name('admin.enrollment.groups.move-student')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{group}/students', [GroupController::class, 'students'])
                 ->name('admin.enrollment.groups.students');
             Route::get('/{group}/students/export', [GroupController::class, 'exportStudents'])
@@ -245,7 +282,8 @@ Route::prefix('admin/enrollment')
 
         // Group assignment deletion
         Route::delete('/group-assignments/{assignment}', [GroupController::class, 'removeAssignment'])
-            ->name('admin.enrollment.group-assignments.destroy');
+            ->name('admin.enrollment.group-assignments.destroy')
+            ->middleware('role:Administrator|Manager,tenant');
 
         // Student Cards (cartes étudiants)
         Route::prefix('student-cards')->group(function () {
@@ -254,7 +292,8 @@ Route::prefix('admin/enrollment')
 
             // Batch operations (must be before /{id})
             Route::post('/batch-generate', [StudentCardController::class, 'batchGenerate'])
-                ->name('admin.enrollment.student-cards.batch-generate');
+                ->name('admin.enrollment.student-cards.batch-generate')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/verify', [StudentCardController::class, 'verify'])
                 ->name('admin.enrollment.student-cards.verify');
             Route::get('/statistics', [StudentCardController::class, 'statistics'])
@@ -262,20 +301,25 @@ Route::prefix('admin/enrollment')
 
             // Generate card for specific student
             Route::post('/generate/{studentId}', [StudentCardController::class, 'generate'])
-                ->name('admin.enrollment.student-cards.generate');
+                ->name('admin.enrollment.student-cards.generate')
+                ->middleware('role:Administrator|Manager,tenant');
 
             Route::get('/{id}', [StudentCardController::class, 'show'])
                 ->name('admin.enrollment.student-cards.show');
             Route::post('/{id}/duplicate', [StudentCardController::class, 'duplicate'])
-                ->name('admin.enrollment.student-cards.duplicate');
+                ->name('admin.enrollment.student-cards.duplicate')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::patch('/{id}/status', [StudentCardController::class, 'updateStatus'])
-                ->name('admin.enrollment.student-cards.update-status');
+                ->name('admin.enrollment.student-cards.update-status')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::patch('/{id}/print-status', [StudentCardController::class, 'updatePrintStatus'])
-                ->name('admin.enrollment.student-cards.update-print-status');
+                ->name('admin.enrollment.student-cards.update-print-status')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{id}/download', [StudentCardController::class, 'download'])
                 ->name('admin.enrollment.student-cards.download');
             Route::delete('/{id}', [StudentCardController::class, 'destroy'])
-                ->name('admin.enrollment.student-cards.destroy');
+                ->name('admin.enrollment.student-cards.destroy')
+                ->middleware('role:Administrator|Manager,tenant');
         });
 
         // Reenrollment Campaigns (Campagnes de réinscription)
@@ -283,19 +327,24 @@ Route::prefix('admin/enrollment')
             Route::get('/', [ReenrollmentCampaignController::class, 'index'])
                 ->name('admin.enrollment.reenrollment-campaigns.index');
             Route::post('/', [ReenrollmentCampaignController::class, 'store'])
-                ->name('admin.enrollment.reenrollment-campaigns.store');
+                ->name('admin.enrollment.reenrollment-campaigns.store')
+                ->middleware('role:Administrator|Manager,tenant');
 
             Route::get('/{campaign}', [ReenrollmentCampaignController::class, 'show'])
                 ->name('admin.enrollment.reenrollment-campaigns.show');
             Route::put('/{campaign}', [ReenrollmentCampaignController::class, 'update'])
-                ->name('admin.enrollment.reenrollment-campaigns.update');
+                ->name('admin.enrollment.reenrollment-campaigns.update')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::delete('/{campaign}', [ReenrollmentCampaignController::class, 'destroy'])
-                ->name('admin.enrollment.reenrollment-campaigns.destroy');
+                ->name('admin.enrollment.reenrollment-campaigns.destroy')
+                ->middleware('role:Administrator|Manager,tenant');
 
             Route::post('/{campaign}/activate', [ReenrollmentCampaignController::class, 'activate'])
-                ->name('admin.enrollment.reenrollment-campaigns.activate');
+                ->name('admin.enrollment.reenrollment-campaigns.activate')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{campaign}/close', [ReenrollmentCampaignController::class, 'close'])
-                ->name('admin.enrollment.reenrollment-campaigns.close');
+                ->name('admin.enrollment.reenrollment-campaigns.close')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{campaign}/statistics', [ReenrollmentCampaignController::class, 'statistics'])
                 ->name('admin.enrollment.reenrollment-campaigns.statistics');
             Route::get('/{campaign}/eligible-students', [ReenrollmentCampaignController::class, 'eligibleStudents'])
@@ -307,22 +356,26 @@ Route::prefix('admin/enrollment')
             Route::get('/', [ReenrollmentController::class, 'index'])
                 ->name('admin.enrollment.reenrollments.index');
             Route::post('/', [ReenrollmentController::class, 'store'])
-                ->name('admin.enrollment.reenrollments.store');
+                ->name('admin.enrollment.reenrollments.store')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Must be before /{reenrollment}
             Route::post('/check-eligibility', [ReenrollmentController::class, 'checkEligibility'])
                 ->name('admin.enrollment.reenrollments.check-eligibility');
             Route::post('/batch-validate', [ReenrollmentController::class, 'batchValidate'])
-                ->name('admin.enrollment.reenrollments.batch-validate');
+                ->name('admin.enrollment.reenrollments.batch-validate')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/statistics', [ReenrollmentController::class, 'statistics'])
                 ->name('admin.enrollment.reenrollments.statistics');
 
             Route::get('/{reenrollment}', [ReenrollmentController::class, 'show'])
                 ->name('admin.enrollment.reenrollments.show');
             Route::post('/{reenrollment}/validate', [ReenrollmentController::class, 'validate'])
-                ->name('admin.enrollment.reenrollments.validate');
+                ->name('admin.enrollment.reenrollments.validate')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{reenrollment}/reject', [ReenrollmentController::class, 'reject'])
-                ->name('admin.enrollment.reenrollments.reject');
+                ->name('admin.enrollment.reenrollments.reject')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{reenrollment}/confirmation', [ReenrollmentController::class, 'downloadConfirmation'])
                 ->name('admin.enrollment.reenrollments.download-confirmation');
         });
@@ -332,7 +385,8 @@ Route::prefix('admin/enrollment')
             Route::get('/', [TransferController::class, 'index'])
                 ->name('admin.enrollment.transfers.index');
             Route::post('/', [TransferController::class, 'store'])
-                ->name('admin.enrollment.transfers.store');
+                ->name('admin.enrollment.transfers.store')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Must be before /{transfer}
             Route::get('/statistics', [TransferController::class, 'statistics'])
@@ -341,15 +395,20 @@ Route::prefix('admin/enrollment')
             Route::get('/{transfer}', [TransferController::class, 'show'])
                 ->name('admin.enrollment.transfers.show');
             Route::post('/{transfer}/start-review', [TransferController::class, 'startReview'])
-                ->name('admin.enrollment.transfers.start-review');
+                ->name('admin.enrollment.transfers.start-review')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{transfer}/analyze', [TransferController::class, 'analyzeEquivalences'])
-                ->name('admin.enrollment.transfers.analyze');
+                ->name('admin.enrollment.transfers.analyze')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{transfer}/validate', [TransferController::class, 'validate'])
-                ->name('admin.enrollment.transfers.validate');
+                ->name('admin.enrollment.transfers.validate')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{transfer}/integrate', [TransferController::class, 'integrate'])
-                ->name('admin.enrollment.transfers.integrate');
+                ->name('admin.enrollment.transfers.integrate')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{transfer}/reject', [TransferController::class, 'reject'])
-                ->name('admin.enrollment.transfers.reject');
+                ->name('admin.enrollment.transfers.reject')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{transfer}/certificate', [TransferController::class, 'downloadCertificate'])
                 ->name('admin.enrollment.transfers.download-certificate');
 
@@ -357,9 +416,11 @@ Route::prefix('admin/enrollment')
             Route::get('/{transfer}/equivalences', [EquivalenceController::class, 'index'])
                 ->name('admin.enrollment.transfers.equivalences.index');
             Route::post('/{transfer}/equivalences', [EquivalenceController::class, 'store'])
-                ->name('admin.enrollment.transfers.equivalences.store');
+                ->name('admin.enrollment.transfers.equivalences.store')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{transfer}/equivalences/batch-validate', [EquivalenceController::class, 'batchValidate'])
-                ->name('admin.enrollment.transfers.equivalences.batch-validate');
+                ->name('admin.enrollment.transfers.equivalences.batch-validate')
+                ->middleware('role:Administrator|Manager,tenant');
         });
 
         // Equivalences (standalone operations)
@@ -367,13 +428,17 @@ Route::prefix('admin/enrollment')
             Route::get('/{equivalence}', [EquivalenceController::class, 'show'])
                 ->name('admin.enrollment.equivalences.show');
             Route::put('/{equivalence}', [EquivalenceController::class, 'update'])
-                ->name('admin.enrollment.equivalences.update');
+                ->name('admin.enrollment.equivalences.update')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::delete('/{equivalence}', [EquivalenceController::class, 'destroy'])
-                ->name('admin.enrollment.equivalences.destroy');
+                ->name('admin.enrollment.equivalences.destroy')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{equivalence}/validate', [EquivalenceController::class, 'validate'])
-                ->name('admin.enrollment.equivalences.validate');
+                ->name('admin.enrollment.equivalences.validate')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{equivalence}/reject', [EquivalenceController::class, 'reject'])
-                ->name('admin.enrollment.equivalences.reject');
+                ->name('admin.enrollment.equivalences.reject')
+                ->middleware('role:Administrator|Manager,tenant');
         });
 
         // Module Exemptions (Dispenses de modules)
@@ -381,7 +446,8 @@ Route::prefix('admin/enrollment')
             Route::get('/', [ExemptionController::class, 'index'])
                 ->name('admin.enrollment.exemptions.index');
             Route::post('/', [ExemptionController::class, 'store'])
-                ->name('admin.enrollment.exemptions.store');
+                ->name('admin.enrollment.exemptions.store')
+                ->middleware('role:Administrator|Manager,tenant');
 
             // Must be before /{exemption}
             Route::get('/pending', [ExemptionController::class, 'pending'])
@@ -394,9 +460,11 @@ Route::prefix('admin/enrollment')
             Route::post('/{exemption}/teacher-review', [ExemptionController::class, 'teacherReview'])
                 ->name('admin.enrollment.exemptions.teacher-review');
             Route::post('/{exemption}/validate', [ExemptionController::class, 'validate'])
-                ->name('admin.enrollment.exemptions.validate');
+                ->name('admin.enrollment.exemptions.validate')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{exemption}/revoke', [ExemptionController::class, 'revoke'])
-                ->name('admin.enrollment.exemptions.revoke');
+                ->name('admin.enrollment.exemptions.revoke')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{exemption}/certificate', [ExemptionController::class, 'downloadCertificate'])
                 ->name('admin.enrollment.exemptions.download-certificate');
         });
@@ -422,15 +490,18 @@ Route::prefix('admin/enrollment')
             Route::get('/alerts', [EnrollmentStatisticsController::class, 'alerts'])
                 ->name('admin.enrollment.statistics.alerts');
             Route::post('/clear-cache', [EnrollmentStatisticsController::class, 'clearCache'])
-                ->name('admin.enrollment.statistics.clear-cache');
+                ->name('admin.enrollment.statistics.clear-cache')
+                ->middleware('role:Administrator|Manager,tenant');
         });
 
         // Reports (Rapports)
         Route::prefix('reports')->group(function () {
             Route::post('/executive-summary', [EnrollmentStatisticsController::class, 'generateExecutiveSummary'])
-                ->name('admin.enrollment.reports.executive-summary');
+                ->name('admin.enrollment.reports.executive-summary')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/dashboard', [EnrollmentStatisticsController::class, 'generateDashboard'])
-                ->name('admin.enrollment.reports.dashboard');
+                ->name('admin.enrollment.reports.dashboard')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/export/excel', [EnrollmentStatisticsController::class, 'exportExcel'])
                 ->name('admin.enrollment.reports.export-excel');
             Route::get('/download', [EnrollmentStatisticsController::class, 'downloadReport'])
@@ -442,7 +513,8 @@ Route::prefix('admin/enrollment')
             Route::get('/templates', [GroupExportController::class, 'templates'])
                 ->name('admin.enrollment.group-exports.templates');
             Route::post('/batch', [GroupExportController::class, 'batchExport'])
-                ->name('admin.enrollment.group-exports.batch');
+                ->name('admin.enrollment.group-exports.batch')
+                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{group}/pdf', [GroupExportController::class, 'exportPdf'])
                 ->name('admin.enrollment.group-exports.pdf');
             Route::get('/{group}/excel', [GroupExportController::class, 'exportExcel'])

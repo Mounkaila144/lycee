@@ -20,7 +20,6 @@ use Modules\Enrollment\Http\Resources\StudentResource;
 use Modules\Enrollment\Services\CsvImportService;
 use Modules\Enrollment\Services\MatriculeGeneratorService;
 use Modules\Enrollment\Services\StudentStatusService;
-use Modules\StructureAcademique\Entities\Programme;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class StudentController extends Controller
@@ -360,12 +359,12 @@ class StudentController extends Controller
         $limit = min($request->input('limit', 10), 20);
 
         $students = Student::on('tenant')
-            ->select(['id', 'matricule', 'firstname', 'lastname', 'email', 'status'])
+            ->select(['id', 'matricule', 'firstname', 'lastname', 'status'])
             ->where(function ($q) use ($query) {
                 $q->where('matricule', 'like', "{$query}%")
                     ->orWhere('matricule', 'like', "%{$query}%")
                     ->orWhereRaw("CONCAT(firstname, ' ', lastname) LIKE ?", ["%{$query}%"])
-                    ->orWhere('email', 'like', "{$query}%");
+                    ->orWhereRaw("CONCAT(lastname, ' ', firstname) LIKE ?", ["%{$query}%"]);
             })
             ->orderByRaw('CASE
                 WHEN matricule LIKE ? THEN 1
@@ -380,7 +379,6 @@ class StudentController extends Controller
                 'id' => $student->id,
                 'matricule' => $student->matricule,
                 'full_name' => $student->full_name,
-                'email' => $student->email,
                 'status' => $student->status,
                 'label' => "{$student->matricule} - {$student->full_name}",
             ]),
@@ -576,13 +574,7 @@ class StudentController extends Controller
             ], 422);
         }
 
-        // Get default programme if specified
-        $defaultProgramme = null;
-        if ($request->has('programme_id')) {
-            $defaultProgramme = Programme::on('tenant')->find($request->input('programme_id'));
-        }
-
-        $result = $this->csvImportService->import($validRows, $defaultProgramme);
+        $result = $this->csvImportService->import($validRows);
 
         return response()->json([
             'message' => $result['imported_count'].' étudiant(s) importé(s) avec succès',

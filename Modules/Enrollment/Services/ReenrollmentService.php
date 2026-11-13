@@ -10,6 +10,7 @@ use Modules\Enrollment\Entities\Reenrollment;
 use Modules\Enrollment\Entities\ReenrollmentCampaign;
 use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Entities\StudentModuleEnrollment;
+use Modules\UsersGuard\Entities\TenantUser;
 use Modules\UsersGuard\Entities\User;
 
 class ReenrollmentService
@@ -252,7 +253,7 @@ class ReenrollmentService
     /**
      * Validate a reenrollment request (admin)
      */
-    public function validateReenrollment(Reenrollment $reenrollment, User $validator): Reenrollment
+    public function validateReenrollment(Reenrollment $reenrollment, User|TenantUser $validator): Reenrollment
     {
         if (! $reenrollment->canBeValidated()) {
             throw new \Exception('Reenrollment cannot be validated in current status');
@@ -309,7 +310,7 @@ class ReenrollmentService
     /**
      * Reject a reenrollment request
      */
-    public function rejectReenrollment(Reenrollment $reenrollment, User $validator, string $reason): Reenrollment
+    public function rejectReenrollment(Reenrollment $reenrollment, User|TenantUser $validator, string $reason): Reenrollment
     {
         if (! $reenrollment->canBeRejected()) {
             throw new \Exception('Reenrollment cannot be rejected in current status');

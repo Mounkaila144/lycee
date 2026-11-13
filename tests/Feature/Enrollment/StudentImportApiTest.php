@@ -4,13 +4,16 @@ namespace Tests\Feature\Enrollment;
 
 use Illuminate\Http\UploadedFile;
 use Modules\Enrollment\Entities\Student;
-use Modules\StructureAcademique\Entities\Programme;
-use Modules\UsersGuard\Entities\User;
+use Modules\UsersGuard\Entities\TenantUser as User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Tests\Concerns\InteractsWithTenancy;
 use Tests\TestCase;
 
+/**
+ * Import CSV des élèves (secondaire) : colonnes obligatoires nom, prenom,
+ * date_naissance, sexe. Doublons détectés sur nom + prénom + date de naissance.
+ */
 class StudentImportApiTest extends TestCase
 {
     use InteractsWithTenancy;
@@ -19,32 +22,22 @@ class StudentImportApiTest extends TestCase
 
     private string $token;
 
-    private Programme $programme;
-
     protected function setUp(): void
     {
         parent::setUp();
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
 
+        $this->seedRolesAndPermissions();
         $this->user = User::factory()->create();
+        $this->assignRole($this->user, 'Administrator');
         $this->token = $this->user->createToken('test-token')->plainTextToken;
-
-        $this->programme = Programme::factory()->create([
-            'code' => 'LINF',
-            'libelle' => 'Licence Informatique',
-        ]);
     }
 
     protected function tearDown(): void
     {
         $this->tearDownTenancy();
         parent::tearDown();
-    }
-
-    private function authGetJson(string $uri): \Illuminate\Testing\TestResponse
-    {
-        return $this->withToken($this->token)->getJson($uri);
     }
 
     private function authGet(string $uri): \Illuminate\Testing\TestResponse
@@ -63,7 +56,8 @@ class StudentImportApiTest extends TestCase
     }
 
     /**
-     * Create a CSV content string
+     * @param  array<int, string>  $headers
+     * @param  array<int, array<int, string>>  $rows
      */
     private function createCsvContent(array $headers, array $rows): string
     {
@@ -75,15 +69,35 @@ class StudentImportApiTest extends TestCase
         return implode("\n", $lines);
     }
 
-    /**
-     * Create a temporary CSV file
-     */
     private function createCsvFile(string $content, string $filename = 'test.csv'): UploadedFile
     {
         return UploadedFile::fake()->createWithContent($filename, $content);
     }
 
-    // ==================== TEMPLATE DOWNLOAD TESTS ====================
+    private function previewCsv(array $headers, array $rows): \Illuminate\Testing\TestResponse
+    {
+        return $this->authPost('/api/admin/enrollment/students/import/preview', [
+            'file' => $this->createCsvFile($this->createCsvContent($headers, $rows)),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validRow(int $rowNumber, array $overrides = []): array
+    {
+        return array_merge([
+            'row_number' => $rowNumber,
+            'nom' => 'Dupont',
+            'prenom' => 'Jean',
+            'date_naissance' => '15/03/2010',
+            'sexe' => 'M',
+            'is_valid' => true,
+            'errors' => [],
+        ], $overrides);
+    }
+
+    // ==================== TEMPLATE ====================
 
     #[Test]
     public function it_can_download_import_template(): void
@@ -93,44 +107,36 @@ class StudentImportApiTest extends TestCase
         $response->assertOk();
         $response->assertHeader('content-disposition');
         $this->assertStringContainsString('template_import_etudiants.csv', $response->headers->get('content-disposition'));
+
+        $content = (string) file_get_contents($response->baseResponse->getFile()->getPathname());
+        $this->assertStringContainsString('nom;prenom;date_naissance;sexe', $content);
+        $this->assertStringNotContainsString('email', $content);
+        $this->assertStringNotContainsString('programme', $content);
     }
 
     #[Test]
     public function it_requires_authentication_for_template_download(): void
     {
-        $response = $this->get('/api/admin/enrollment/students/import/template');
-
-        $response->assertStatus(401);
+        $this->getJson('/api/admin/enrollment/students/import/template')->assertStatus(401);
     }
 
-    // ==================== PREVIEW TESTS ====================
+    // ==================== PREVIEW ====================
 
     #[Test]
-    public function it_can_preview_valid_csv_file(): void
+    public function it_can_preview_valid_csv_file_without_email(): void
     {
-        $csvContent = $this->createCsvContent(
-            ['nom', 'prenom', 'date_naissance', 'sexe', 'email'],
+        $response = $this->previewCsv(
+            ['nom', 'prenom', 'date_naissance', 'sexe'],
             [
-                ['Dupont', 'Jean', '15/03/2005', 'M', 'jean.dupont@test.com'],
-                ['Martin', 'Marie', '20/05/2004', 'F', 'marie.martin@test.com'],
+                ['Dupont', 'Jean', '15/03/2010', 'M'],
+                ['Martin', 'Marie', '20/05/2011', 'F'],
             ]
         );
-
-        $file = $this->createCsvFile($csvContent);
-
-        $response = $this->authPost('/api/admin/enrollment/students/import/preview', [
-            'file' => $file,
-        ]);
 
         $response->assertOk();
         $response->assertJsonStructure([
             'message',
-            'data' => [
-                'rows',
-                'valid_count',
-                'error_count',
-                'headers',
-            ],
+            'data' => ['rows', 'valid_count', 'error_count', 'headers'],
         ]);
 
         $this->assertEquals(2, $response->json('data.valid_count'));
@@ -140,183 +146,86 @@ class StudentImportApiTest extends TestCase
     #[Test]
     public function it_detects_missing_required_columns(): void
     {
-        $csvContent = $this->createCsvContent(
-            ['nom', 'prenom'], // Missing date_naissance, sexe, email
-            [
-                ['Dupont', 'Jean'],
-            ]
-        );
-
-        $file = $this->createCsvFile($csvContent);
-
-        $response = $this->authPost('/api/admin/enrollment/students/import/preview', [
-            'file' => $file,
-        ]);
+        $response = $this->previewCsv(['nom', 'prenom'], [['Dupont', 'Jean']]);
 
         $response->assertStatus(422);
         $response->assertJsonPath('errors.headers.0', fn ($error) => str_contains($error, 'Colonnes obligatoires manquantes'));
+        $this->assertStringNotContainsString('email', $response->json('errors.headers.0'));
     }
 
     #[Test]
-    public function it_detects_invalid_email_format(): void
+    public function it_detects_duplicate_students_in_file(): void
     {
-        $csvContent = $this->createCsvContent(
-            ['nom', 'prenom', 'date_naissance', 'sexe', 'email'],
+        $response = $this->previewCsv(
+            ['nom', 'prenom', 'date_naissance', 'sexe'],
             [
-                ['Dupont', 'Jean', '15/03/2005', 'M', 'invalid-email'],
+                ['Dupont', 'Jean', '15/03/2010', 'M'],
+                ['dupont', 'jean', '2010-03-15', 'M'],
             ]
         );
 
-        $file = $this->createCsvFile($csvContent);
-
-        $response = $this->authPost('/api/admin/enrollment/students/import/preview', [
-            'file' => $file,
-        ]);
-
         $response->assertOk();
-        $this->assertEquals(0, $response->json('data.valid_count'));
-        $this->assertEquals(1, $response->json('data.error_count'));
-
-        $row = $response->json('data.rows.0');
-        $this->assertFalse($row['is_valid']);
-        $this->assertContains('Format d\'email invalide', $row['errors']);
-    }
-
-    #[Test]
-    public function it_detects_duplicate_emails_in_file(): void
-    {
-        $csvContent = $this->createCsvContent(
-            ['nom', 'prenom', 'date_naissance', 'sexe', 'email'],
-            [
-                ['Dupont', 'Jean', '15/03/2005', 'M', 'same@test.com'],
-                ['Martin', 'Marie', '20/05/2004', 'F', 'same@test.com'],
-            ]
-        );
-
-        $file = $this->createCsvFile($csvContent);
-
-        $response = $this->authPost('/api/admin/enrollment/students/import/preview', [
-            'file' => $file,
-        ]);
-
-        $response->assertOk();
-        // First row is valid, second has duplicate
         $this->assertEquals(1, $response->json('data.valid_count'));
         $this->assertEquals(1, $response->json('data.error_count'));
-
-        $secondRow = $response->json('data.rows.1');
-        $this->assertFalse($secondRow['is_valid']);
+        $this->assertFalse($response->json('data.rows.1.is_valid'));
     }
 
     #[Test]
-    public function it_detects_email_already_exists_in_database(): void
+    public function it_detects_student_already_in_database(): void
     {
-        // Create existing student
-        Student::factory()->create(['email' => 'existing@test.com']);
-
-        $csvContent = $this->createCsvContent(
-            ['nom', 'prenom', 'date_naissance', 'sexe', 'email'],
-            [
-                ['Dupont', 'Jean', '15/03/2005', 'M', 'existing@test.com'],
-            ]
-        );
-
-        $file = $this->createCsvFile($csvContent);
-
-        $response = $this->authPost('/api/admin/enrollment/students/import/preview', [
-            'file' => $file,
+        Student::factory()->withMatricule('2026-0007')->create([
+            'firstname' => 'Jean',
+            'lastname' => 'Dupont',
+            'birthdate' => '2010-03-15',
         ]);
+
+        $response = $this->previewCsv(
+            ['nom', 'prenom', 'date_naissance', 'sexe'],
+            [['Dupont', 'Jean', '15/03/2010', 'M']]
+        );
 
         $response->assertOk();
         $this->assertEquals(0, $response->json('data.valid_count'));
-        $this->assertEquals(1, $response->json('data.error_count'));
-
         $row = $response->json('data.rows.0');
         $this->assertFalse($row['is_valid']);
+        $this->assertTrue(collect($row['errors'])->contains(fn ($e) => str_contains($e, '2026-0007')));
     }
 
     #[Test]
     public function it_detects_invalid_date_format(): void
     {
-        $csvContent = $this->createCsvContent(
-            ['nom', 'prenom', 'date_naissance', 'sexe', 'email'],
-            [
-                ['Dupont', 'Jean', 'invalid-date', 'M', 'jean@test.com'],
-            ]
+        $response = $this->previewCsv(
+            ['nom', 'prenom', 'date_naissance', 'sexe'],
+            [['Dupont', 'Jean', 'invalid-date', 'M']]
         );
-
-        $file = $this->createCsvFile($csvContent);
-
-        $response = $this->authPost('/api/admin/enrollment/students/import/preview', [
-            'file' => $file,
-        ]);
 
         $response->assertOk();
         $row = $response->json('data.rows.0');
         $this->assertFalse($row['is_valid']);
-        $this->assertTrue(
-            collect($row['errors'])->contains(fn ($e) => str_contains($e, 'date'))
-        );
+        $this->assertTrue(collect($row['errors'])->contains(fn ($e) => str_contains($e, 'date')));
     }
 
     #[Test]
     public function it_detects_invalid_sex_value(): void
     {
-        $csvContent = $this->createCsvContent(
-            ['nom', 'prenom', 'date_naissance', 'sexe', 'email'],
-            [
-                ['Dupont', 'Jean', '15/03/2005', 'X', 'jean@test.com'],
-            ]
+        $response = $this->previewCsv(
+            ['nom', 'prenom', 'date_naissance', 'sexe'],
+            [['Dupont', 'Jean', '15/03/2010', 'O']]
         );
-
-        $file = $this->createCsvFile($csvContent);
-
-        $response = $this->authPost('/api/admin/enrollment/students/import/preview', [
-            'file' => $file,
-        ]);
 
         $response->assertOk();
         $row = $response->json('data.rows.0');
         $this->assertFalse($row['is_valid']);
-        $this->assertContains('Sexe invalide (utilisez M, F ou O)', $row['errors']);
+        $this->assertContains('Sexe invalide (utilisez M ou F)', $row['errors']);
     }
 
     #[Test]
-    public function it_validates_programme_code_exists(): void
+    public function it_ignores_legacy_programme_column(): void
     {
-        $csvContent = $this->createCsvContent(
+        $response = $this->previewCsv(
             ['nom', 'prenom', 'date_naissance', 'sexe', 'email', 'programme'],
-            [
-                ['Dupont', 'Jean', '15/03/2005', 'M', 'jean@test.com', 'INVALID'],
-            ]
+            [['Dupont', 'Jean', '15/03/2010', 'M', 'jean@test.com', 'INCONNU']]
         );
-
-        $file = $this->createCsvFile($csvContent);
-
-        $response = $this->authPost('/api/admin/enrollment/students/import/preview', [
-            'file' => $file,
-        ]);
-
-        $response->assertOk();
-        $row = $response->json('data.rows.0');
-        $this->assertFalse($row['is_valid']);
-    }
-
-    #[Test]
-    public function it_accepts_valid_programme_code(): void
-    {
-        $csvContent = $this->createCsvContent(
-            ['nom', 'prenom', 'date_naissance', 'sexe', 'email', 'programme'],
-            [
-                ['Dupont', 'Jean', '15/03/2005', 'M', 'jean@test.com', 'LINF'],
-            ]
-        );
-
-        $file = $this->createCsvFile($csvContent);
-
-        $response = $this->authPost('/api/admin/enrollment/students/import/preview', [
-            'file' => $file,
-        ]);
 
         $response->assertOk();
         $this->assertEquals(1, $response->json('data.valid_count'));
@@ -325,153 +234,97 @@ class StudentImportApiTest extends TestCase
     #[Test]
     public function it_requires_authentication_for_preview(): void
     {
-        $csvContent = $this->createCsvContent(
-            ['nom', 'prenom', 'date_naissance', 'sexe', 'email'],
-            [['Dupont', 'Jean', '15/03/2005', 'M', 'jean@test.com']]
-        );
+        $file = $this->createCsvFile($this->createCsvContent(
+            ['nom', 'prenom', 'date_naissance', 'sexe'],
+            [['Dupont', 'Jean', '15/03/2010', 'M']]
+        ));
 
-        $file = $this->createCsvFile($csvContent);
-
-        $response = $this->post('/api/admin/enrollment/students/import/preview', [
-            'file' => $file,
-        ]);
-
-        $response->assertStatus(401);
+        $this->postJson('/api/admin/enrollment/students/import/preview', ['file' => $file])
+            ->assertStatus(401);
     }
 
-    // ==================== CONFIRM IMPORT TESTS ====================
+    // ==================== CONFIRM ====================
 
     #[Test]
     public function it_can_import_valid_rows(): void
     {
-        $rows = [
-            [
-                'row_number' => 2,
-                'nom' => 'Dupont',
-                'prenom' => 'Jean',
-                'date_naissance' => '15/03/2005',
-                'sexe' => 'M',
-                'email' => 'jean.dupont@test.com',
-                'is_valid' => true,
-                'errors' => [],
-            ],
-            [
-                'row_number' => 3,
-                'nom' => 'Martin',
-                'prenom' => 'Marie',
-                'date_naissance' => '20/05/2004',
-                'sexe' => 'F',
-                'email' => 'marie.martin@test.com',
-                'is_valid' => true,
-                'errors' => [],
-            ],
-        ];
-
         $response = $this->authPostJson('/api/admin/enrollment/students/import/confirm', [
-            'rows' => $rows,
+            'rows' => [
+                $this->validRow(2),
+                $this->validRow(3, ['nom' => 'Martin', 'prenom' => 'Marie', 'date_naissance' => '20/05/2011', 'sexe' => 'F']),
+            ],
         ]);
 
         $response->assertStatus(201);
         $response->assertJsonPath('data.imported_count', 2);
 
-        // Verify students were created
-        $this->assertDatabaseHas('students', [
-            'email' => 'jean.dupont@test.com',
-            'firstname' => 'Jean',
-            'lastname' => 'Dupont',
-        ], 'tenant');
-
-        $this->assertDatabaseHas('students', [
-            'email' => 'marie.martin@test.com',
-            'firstname' => 'Marie',
-            'lastname' => 'Martin',
-        ], 'tenant');
+        $this->assertDatabaseHas('students', ['firstname' => 'Jean', 'lastname' => 'Dupont', 'birthdate' => '2010-03-15'], 'tenant');
+        $this->assertDatabaseHas('students', ['firstname' => 'Marie', 'lastname' => 'Martin', 'sex' => 'F'], 'tenant');
     }
 
     #[Test]
     public function it_generates_matricules_for_imported_students(): void
     {
-        $rows = [
-            [
-                'row_number' => 2,
-                'nom' => 'Dupont',
-                'prenom' => 'Jean',
-                'date_naissance' => '15/03/2005',
-                'sexe' => 'M',
-                'email' => 'jean@test.com',
-                'programme' => 'LINF',
-                'is_valid' => true,
-                'errors' => [],
-            ],
-        ];
-
         $response = $this->authPostJson('/api/admin/enrollment/students/import/confirm', [
-            'rows' => $rows,
+            'rows' => [$this->validRow(2), $this->validRow(3, ['prenom' => 'Paul'])],
         ]);
 
         $response->assertStatus(201);
 
-        $importedStudent = $response->json('data.imported_students.0');
-        $this->assertNotEmpty($importedStudent['matricule']);
-        $this->assertStringContainsString('LINF', $importedStudent['matricule']);
+        $first = $response->json('data.imported_students.0.matricule');
+        $second = $response->json('data.imported_students.1.matricule');
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{4}$/', $first);
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{4}$/', $second);
+        $this->assertNotSame($first, $second);
     }
 
     #[Test]
     public function it_skips_invalid_rows_during_import(): void
     {
-        $rows = [
-            [
-                'row_number' => 2,
-                'nom' => 'Dupont',
-                'prenom' => 'Jean',
-                'date_naissance' => '15/03/2005',
-                'sexe' => 'M',
-                'email' => 'jean@test.com',
-                'is_valid' => true,
-                'errors' => [],
-            ],
-            [
-                'row_number' => 3,
-                'nom' => 'Martin',
-                'prenom' => 'Marie',
-                'date_naissance' => 'invalid-date',
-                'sexe' => 'F',
-                'email' => 'marie@test.com',
-                'is_valid' => false,
-                'errors' => ['Date invalide'],
-            ],
-        ];
-
         $response = $this->authPostJson('/api/admin/enrollment/students/import/confirm', [
-            'rows' => $rows,
+            'rows' => [
+                $this->validRow(2),
+                $this->validRow(3, ['nom' => 'Martin', 'prenom' => 'Marie', 'date_naissance' => 'invalid-date', 'is_valid' => false, 'errors' => ['Date invalide']]),
+            ],
         ]);
 
         $response->assertStatus(201);
         $response->assertJsonPath('data.imported_count', 1);
+        $this->assertDatabaseHas('students', ['lastname' => 'Dupont'], 'tenant');
+        $this->assertDatabaseMissing('students', ['lastname' => 'Martin'], 'tenant');
+    }
 
-        // Only valid student should be created
-        $this->assertDatabaseHas('students', ['email' => 'jean@test.com'], 'tenant');
-        $this->assertDatabaseMissing('students', ['email' => 'marie@test.com'], 'tenant');
+    #[Test]
+    public function it_revalidates_rows_server_side_even_if_client_marks_them_valid(): void
+    {
+        Student::factory()->create([
+            'firstname' => 'Jean',
+            'lastname' => 'Dupont',
+            'birthdate' => '2010-03-15',
+        ]);
+
+        $response = $this->authPostJson('/api/admin/enrollment/students/import/confirm', [
+            'rows' => [
+                $this->validRow(2),
+                $this->validRow(3, ['nom' => 'Sani', 'sexe' => 'X']),
+                $this->validRow(4, ['nom' => 'Moussa', 'prenom' => 'Aïcha', 'sexe' => 'F']),
+                $this->validRow(5, ['nom' => 'Moussa', 'prenom' => 'Aïcha', 'sexe' => 'F']),
+            ],
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('data.imported_count', 1);
+        $this->assertCount(3, $response->json('data.errors'));
+        $this->assertSame(1, Student::on('tenant')->where('lastname', 'Moussa')->count());
+        $this->assertSame(1, Student::on('tenant')->where('lastname', 'Dupont')->count());
+        $this->assertDatabaseMissing('students', ['lastname' => 'Sani'], 'tenant');
     }
 
     #[Test]
     public function it_returns_error_when_no_valid_rows(): void
     {
-        $rows = [
-            [
-                'row_number' => 2,
-                'nom' => 'Dupont',
-                'prenom' => 'Jean',
-                'date_naissance' => 'invalid',
-                'sexe' => 'M',
-                'email' => 'invalid',
-                'is_valid' => false,
-                'errors' => ['Erreurs multiples'],
-            ],
-        ];
-
         $response = $this->authPostJson('/api/admin/enrollment/students/import/confirm', [
-            'rows' => $rows,
+            'rows' => [$this->validRow(2, ['date_naissance' => 'invalid', 'is_valid' => false, 'errors' => ['Erreurs multiples']])],
         ]);
 
         $response->assertStatus(422);
@@ -481,166 +334,126 @@ class StudentImportApiTest extends TestCase
     #[Test]
     public function it_requires_authentication_for_confirm(): void
     {
-        $rows = [
-            [
-                'row_number' => 2,
-                'nom' => 'Dupont',
-                'prenom' => 'Jean',
-                'date_naissance' => '15/03/2005',
-                'sexe' => 'M',
-                'email' => 'jean@test.com',
-                'is_valid' => true,
-                'errors' => [],
-            ],
-        ];
+        $this->postJson('/api/admin/enrollment/students/import/confirm', ['rows' => [$this->validRow(2)]])
+            ->assertStatus(401);
+    }
 
-        $response = $this->postJson('/api/admin/enrollment/students/import/confirm', [
-            'rows' => $rows,
-        ]);
+    #[Test]
+    public function professeur_cannot_import_students(): void
+    {
+        $teacher = User::factory()->create();
+        $this->assignRole($teacher, 'Professeur');
+        $teacherToken = $teacher->createToken('test-token')->plainTextToken;
 
-        $response->assertStatus(401);
+        $this->withToken($teacherToken)
+            ->postJson('/api/admin/enrollment/students/import/confirm', ['rows' => [$this->validRow(2)]])
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('students', ['lastname' => 'Dupont'], 'tenant');
     }
 
     #[Test]
     public function it_sets_default_values_for_imported_students(): void
     {
-        $rows = [
-            [
-                'row_number' => 2,
-                'nom' => 'Dupont',
-                'prenom' => 'Jean',
-                'date_naissance' => '15/03/2005',
-                'sexe' => 'M',
-                'email' => 'jean@test.com',
-                'is_valid' => true,
-                'errors' => [],
-            ],
-        ];
+        $this->authPostJson('/api/admin/enrollment/students/import/confirm', [
+            'rows' => [$this->validRow(2)],
+        ])->assertStatus(201);
 
-        $response = $this->authPostJson('/api/admin/enrollment/students/import/confirm', [
-            'rows' => $rows,
-        ]);
-
-        $response->assertStatus(201);
-
-        $student = Student::on('tenant')->where('email', 'jean@test.com')->first();
+        $student = Student::on('tenant')->where('lastname', 'Dupont')->first();
         $this->assertEquals('Actif', $student->status);
-        $this->assertEquals('Niger', $student->nationality);
-        $this->assertEquals('Niger', $student->country);
+        $this->assertEquals('Nigérienne', $student->nationality);
+        $this->assertEquals('Niamey', $student->city);
     }
 
     #[Test]
     public function it_handles_optional_fields(): void
     {
-        $rows = [
-            [
-                'row_number' => 2,
-                'nom' => 'Dupont',
-                'prenom' => 'Jean',
-                'date_naissance' => '15/03/2005',
-                'sexe' => 'M',
-                'email' => 'jean@test.com',
+        $this->authPostJson('/api/admin/enrollment/students/import/confirm', [
+            'rows' => [$this->validRow(2, [
                 'telephone' => '+22790123456',
-                'mobile' => '+22796123456',
                 'adresse' => '123 Rue Example',
-                'ville' => 'Niamey',
+                'ville' => 'Zinder',
+                'quartier' => 'Birni',
+                'nationalite' => 'Nigérienne',
+                'lieu_naissance' => 'Maradi',
+                'email' => 'ignored@test.com',
                 'pays' => 'Niger',
-                'nationalite' => 'Nigérien',
-                'lieu_naissance' => 'Niamey',
-                'is_valid' => true,
-                'errors' => [],
-            ],
-        ];
+            ])],
+        ])->assertStatus(201);
 
-        $response = $this->authPostJson('/api/admin/enrollment/students/import/confirm', [
-            'rows' => $rows,
-        ]);
-
-        $response->assertStatus(201);
-
-        $student = Student::on('tenant')->where('email', 'jean@test.com')->first();
+        $student = Student::on('tenant')->where('lastname', 'Dupont')->first();
         $this->assertEquals('+22790123456', $student->phone);
-        $this->assertEquals('+22796123456', $student->mobile);
         $this->assertEquals('123 Rue Example', $student->address);
-        $this->assertEquals('Niamey', $student->city);
-        $this->assertEquals('Niamey', $student->birthplace);
+        $this->assertEquals('Zinder', $student->city);
+        $this->assertEquals('Birni', $student->quarter);
+        $this->assertEquals('Maradi', $student->birthplace);
     }
 
-    // ==================== REVALIDATE ROW TESTS ====================
+    #[Test]
+    public function it_uses_mobile_as_phone_fallback(): void
+    {
+        $this->authPostJson('/api/admin/enrollment/students/import/confirm', [
+            'rows' => [$this->validRow(2, ['mobile' => '+22796123456'])],
+        ])->assertStatus(201);
+
+        $this->assertDatabaseHas('students', ['lastname' => 'Dupont', 'phone' => '+22796123456'], 'tenant');
+    }
+
+    // ==================== REVALIDATE ROW ====================
 
     #[Test]
     public function it_can_revalidate_corrected_row(): void
     {
-        $row = [
-            'row_number' => 2,
-            'nom' => 'Dupont',
-            'prenom' => 'Jean',
-            'date_naissance' => '15/03/2005',
-            'sexe' => 'M',
-            'email' => 'jean.dupont@test.com', // Now valid
-            'is_valid' => false,
-            'errors' => ['Email invalide'],
-        ];
-
-        $allRows = [$row];
+        $row = $this->validRow(2, ['is_valid' => false, 'errors' => ['Sexe invalide']]);
 
         $response = $this->authPostJson('/api/admin/enrollment/students/import/revalidate-row', [
             'row' => $row,
-            'all_rows' => $allRows,
+            'all_rows' => [$row],
         ]);
 
         $response->assertOk();
-        $revalidated = $response->json('data');
-        $this->assertTrue($revalidated['is_valid']);
-        $this->assertEmpty($revalidated['errors']);
+        $this->assertTrue($response->json('data.is_valid'));
+        $this->assertEmpty($response->json('data.errors'));
     }
 
     #[Test]
     public function it_detects_errors_in_revalidation(): void
     {
-        $row = [
-            'row_number' => 2,
-            'nom' => 'Dupont',
-            'prenom' => 'Jean',
-            'date_naissance' => '15/03/2005',
-            'sexe' => 'X', // Invalid
-            'email' => 'jean@test.com',
-            'is_valid' => true,
-            'errors' => [],
-        ];
-
-        $allRows = [$row];
+        $row = $this->validRow(2, ['sexe' => 'X']);
 
         $response = $this->authPostJson('/api/admin/enrollment/students/import/revalidate-row', [
             'row' => $row,
-            'all_rows' => $allRows,
+            'all_rows' => [$row],
         ]);
 
         $response->assertOk();
-        $revalidated = $response->json('data');
-        $this->assertFalse($revalidated['is_valid']);
-        $this->assertNotEmpty($revalidated['errors']);
+        $this->assertFalse($response->json('data.is_valid'));
+        $this->assertNotEmpty($response->json('data.errors'));
+    }
+
+    #[Test]
+    public function it_detects_duplicate_with_other_rows_in_revalidation(): void
+    {
+        $first = $this->validRow(2);
+        $second = $this->validRow(3);
+
+        $response = $this->authPostJson('/api/admin/enrollment/students/import/revalidate-row', [
+            'row' => $second,
+            'all_rows' => [$first, $second],
+        ]);
+
+        $response->assertOk();
+        $this->assertFalse($response->json('data.is_valid'));
     }
 
     #[Test]
     public function it_requires_authentication_for_revalidate(): void
     {
-        $row = [
-            'row_number' => 2,
-            'nom' => 'Test',
-            'prenom' => 'Test',
-            'date_naissance' => '15/03/2005',
-            'sexe' => 'M',
-            'email' => 'test@test.com',
-            'is_valid' => true,
-            'errors' => [],
-        ];
+        $row = $this->validRow(2);
 
-        $response = $this->postJson('/api/admin/enrollment/students/import/revalidate-row', [
+        $this->postJson('/api/admin/enrollment/students/import/revalidate-row', [
             'row' => $row,
             'all_rows' => [$row],
-        ]);
-
-        $response->assertStatus(401);
+        ])->assertStatus(401);
     }
 }

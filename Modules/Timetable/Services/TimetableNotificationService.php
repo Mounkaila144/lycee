@@ -194,7 +194,7 @@ class TimetableNotificationService
             'new_values' => $newValues,
             'reason' => $reason,
             'notify_students' => $notify,
-            'created_by' => auth()->id(),
+            'created_by' => auth('tenant')->id(),
         ]);
 
         // Notification will be triggered by observer if notify is true

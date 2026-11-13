@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Modules\Payroll\Entities\PayrollPeriod;
 use Modules\Payroll\Entities\SocialDeclaration;
+use Modules\Payroll\Exceptions\PayrollException;
 
 /**
  * Epic 4: Déclarations Sociales (Stories 14-17)
@@ -48,7 +49,7 @@ class SocialDeclarationService
     {
         return DB::connection('tenant')->transaction(function () use ($period, $type) {
             if (! $period->isValidated()) {
-                throw new \Exception('La paie doit être validée avant de générer les déclarations');
+                throw new PayrollException('La paie doit être validée avant de générer les déclarations');
             }
 
             // Check if declaration already exists
@@ -121,7 +122,7 @@ class SocialDeclarationService
                 ->get();
 
             if ($periods->isEmpty()) {
-                throw new \Exception("Aucune paie validée pour l'année {$year}");
+                throw new PayrollException("Aucune paie validée pour l'année {$year}");
             }
 
             // Aggregate data from all periods
@@ -162,7 +163,7 @@ class SocialDeclarationService
     {
         return DB::connection('tenant')->transaction(function () use ($declaration, $userId, $notes) {
             if (! $declaration->canBeValidated()) {
-                throw new \Exception('Cette déclaration ne peut pas être validée');
+                throw new PayrollException('Cette déclaration ne peut pas être validée');
             }
 
             $declaration->update([
@@ -186,7 +187,7 @@ class SocialDeclarationService
     ): SocialDeclaration {
         return DB::connection('tenant')->transaction(function () use ($declaration, $reference, $response) {
             if (! $declaration->canBeSubmitted()) {
-                throw new \Exception('Cette déclaration ne peut pas être soumise');
+                throw new PayrollException('Cette déclaration ne peut pas être soumise');
             }
 
             $declaration->update([
@@ -211,7 +212,7 @@ class SocialDeclarationService
     ): SocialDeclaration {
         return DB::connection('tenant')->transaction(function () use ($declaration, $amount, $method, $reference) {
             if (! $declaration->canBePaid()) {
-                throw new \Exception('Cette déclaration ne peut pas être payée');
+                throw new PayrollException('Cette déclaration ne peut pas être payée');
             }
 
             $declaration->update([

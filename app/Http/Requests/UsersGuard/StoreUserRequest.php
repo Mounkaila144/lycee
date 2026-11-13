@@ -6,9 +6,20 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class StoreUserRequest extends FormRequest
 {
+    /**
+     * Only an Administrator may grant the Administrator role or direct permissions.
+     * A Manager can create users but must not be able to escalate privileges.
+     */
     public function authorize(): bool
     {
-        return true;
+        $actingUser = $this->user();
+
+        if ($actingUser && method_exists($actingUser, 'hasRole') && $actingUser->hasRole('Administrator')) {
+            return true;
+        }
+
+        return ! in_array('Administrator', (array) $this->input('roles', []), true)
+            && empty($this->input('permissions'));
     }
 
     public function rules(): array

@@ -15,7 +15,7 @@ class ImportGradesRequest extends FormRequest
     {
         return [
             'file' => ['required', 'file', 'mimes:xlsx,xls', 'max:5120'],
-            'evaluation_id' => ['required', 'integer', 'exists:module_evaluation_configs,id'],
+            'evaluation_id' => ['required', 'integer', 'exists:tenant.module_evaluation_configs,id'],
             'import_mode' => ['required', 'in:add,update,overwrite'],
             'async' => ['boolean'],
         ];

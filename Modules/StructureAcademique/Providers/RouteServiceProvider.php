@@ -37,5 +37,10 @@ class RouteServiceProvider extends ServiceProvider
             ->middleware('api')
             ->namespace($this->moduleNamespace)
             ->group(module_path('StructureAcademique', '/Routes/admin.php'));
+
+        Route::prefix('api')
+            ->middleware('api')
+            ->namespace($this->moduleNamespace)
+            ->group(module_path('StructureAcademique', '/Routes/teacher.php'));
     }
 }

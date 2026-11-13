@@ -109,7 +109,7 @@ class GradesImport implements SkipsEmptyRows, ToCollection, WithBatchInserts, Wi
                 return;
             }
 
-            if ($existingGrade->isPublished() && $this->importMode !== 'overwrite') {
+            if ($existingGrade->isPublished()) {
                 throw new \Exception('Note déjà publiée, modification non autorisée');
             }
 

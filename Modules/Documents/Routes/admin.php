@@ -4,8 +4,18 @@ use Illuminate\Support\Facades\Route;
 use Modules\Documents\Http\Controllers\Admin\CardController;
 use Modules\Documents\Http\Controllers\Admin\CertificateController;
 use Modules\Documents\Http\Controllers\Admin\DiplomaController;
+use Modules\Documents\Http\Controllers\Admin\DocumentController;
 use Modules\Documents\Http\Controllers\Admin\TranscriptController;
 use Modules\Documents\Http\Controllers\Admin\VerificationController;
+
+// Consultation / téléchargement des documents émis : staff + Élève (ses documents)
+// + Parent (documents de ses enfants). Ownership appliqué par DocumentPolicy.
+Route::prefix('admin/documents')->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager|Élève|Parent,tenant'])
+    ->controller(DocumentController::class)
+    ->group(function () {
+        Route::get('/students/{student}', 'studentDocuments')->whereNumber('student');
+        Route::get('/files/{document}/download', 'download')->whereNumber('document');
+    });
 
 // RBAC durcissement (Stories Admin 10, Manager 08) : Admin, Manager et autres rôles
 // finance accèdent (les Profs/Étudiants ont leurs propres endpoints frontend).

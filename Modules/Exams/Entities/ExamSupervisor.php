@@ -5,7 +5,7 @@ namespace Modules\Exams\Entities;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Modules\UsersGuard\Entities\Teacher;
+use Modules\UsersGuard\Entities\User;
 
 class ExamSupervisor extends Model
 {
@@ -43,9 +43,12 @@ class ExamSupervisor extends Model
         return $this->belongsTo(ExamRoomAssignment::class, 'exam_room_assignment_id');
     }
 
+    /**
+     * La colonne teacher_id référence la table users (enseignant = utilisateur Professeur).
+     */
     public function teacher(): BelongsTo
     {
-        return $this->belongsTo(Teacher::class);
+        return $this->belongsTo(User::class, 'teacher_id');
     }
 
     // Scopes

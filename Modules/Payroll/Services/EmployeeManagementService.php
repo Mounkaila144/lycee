@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Modules\Payroll\Entities\ContractAmendment;
 use Modules\Payroll\Entities\Employee;
 use Modules\Payroll\Entities\EmploymentContract;
+use Modules\Payroll\Exceptions\PayrollException;
 
 /**
  * Epic 1: Gestion Employés (Stories 01-04)
@@ -65,7 +66,7 @@ class EmployeeManagementService
 
             // Validate contract dates
             if (isset($contractData['end_date']) && $contractData['end_date'] <= $contractData['start_date']) {
-                throw new \Exception('La date de fin doit être postérieure à la date de début');
+                throw new PayrollException('La date de fin doit être postérieure à la date de début');
             }
 
             // Create contract
@@ -82,7 +83,7 @@ class EmployeeManagementService
     {
         return DB::connection('tenant')->transaction(function () use ($contract) {
             if ($contract->status !== 'draft') {
-                throw new \Exception('Seuls les contrats en brouillon peuvent être activés');
+                throw new PayrollException('Seuls les contrats en brouillon peuvent être activés');
             }
 
             // Deactivate other active contracts for the same employee
@@ -116,7 +117,7 @@ class EmployeeManagementService
     ): ContractAmendment {
         return DB::connection('tenant')->transaction(function () use ($contract, $amendmentType, $newValues, $options) {
             if (! $contract->canBeAmended()) {
-                throw new \Exception('Ce contrat ne peut pas être modifié');
+                throw new PayrollException('Ce contrat ne peut pas être modifié');
             }
 
             // Get previous values
@@ -184,7 +185,7 @@ class EmployeeManagementService
     ): EmploymentContract {
         return DB::connection('tenant')->transaction(function () use ($contract, $terminationDate, $reason) {
             if (! $contract->isActive()) {
-                throw new \Exception('Seuls les contrats actifs peuvent être résiliés');
+                throw new PayrollException('Seuls les contrats actifs peuvent être résiliés');
             }
 
             // Update contract
@@ -215,7 +216,7 @@ class EmployeeManagementService
     ): EmploymentContract {
         return DB::connection('tenant')->transaction(function () use ($contract, $newStartDate, $newEndDate, $options) {
             if (! $contract->canBeRenewed()) {
-                throw new \Exception('Ce contrat ne peut pas être renouvelé');
+                throw new PayrollException('Ce contrat ne peut pas être renouvelé');
             }
 
             // Create new contract

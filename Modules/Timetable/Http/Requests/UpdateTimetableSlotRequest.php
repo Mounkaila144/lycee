@@ -21,10 +21,12 @@ class UpdateTimetableSlotRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'module_id' => ['sometimes', 'required', 'integer', 'exists:tenant.modules,id'],
+            'subject_id' => ['sometimes', 'nullable', 'integer', 'exists:tenant.subjects,id'],
+            'module_id' => ['sometimes', 'nullable', 'integer', 'exists:tenant.modules,id'],
             'teacher_id' => ['sometimes', 'required', 'integer', 'exists:tenant.users,id'],
-            'group_id' => ['sometimes', 'required', 'integer', 'exists:tenant.groups,id'],
-            'room_id' => ['sometimes', 'required', 'integer', 'exists:tenant.rooms,id'],
+            'classe_id' => ['sometimes', 'nullable', 'integer', 'exists:tenant.classes,id'],
+            'group_id' => ['sometimes', 'nullable', 'integer', 'exists:tenant.groups,id'],
+            'room_id' => ['sometimes', 'nullable', 'integer', 'exists:tenant.rooms,id'],
             'semester_id' => ['sometimes', 'required', 'integer', 'exists:tenant.semesters,id'],
             'day_of_week' => ['sometimes', 'required', 'string', 'in:'.implode(',', TimetableSlot::VALID_DAYS)],
             'start_time' => ['sometimes', 'required', 'date_format:H:i'],
@@ -42,6 +44,8 @@ class UpdateTimetableSlotRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'subject_id.exists' => 'La matière sélectionnée n\'existe pas.',
+            'classe_id.exists' => 'La classe sélectionnée n\'existe pas.',
             'module_id.exists' => 'Le module sélectionné n\'existe pas.',
             'teacher_id.exists' => 'L\'enseignant sélectionné n\'existe pas.',
             'group_id.exists' => 'Le groupe sélectionné n\'existe pas.',

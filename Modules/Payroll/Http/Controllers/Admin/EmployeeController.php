@@ -223,7 +223,7 @@ class EmployeeController extends Controller
 
         $amendment = $this->employeeService->approveAmendment(
             $amendment,
-            auth()->id(),
+            auth('tenant')->id(),
             $request->input('notes')
         );
 

@@ -4,13 +4,15 @@ namespace Modules\StructureAcademique\Http\Controllers\Admin;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Controller;
+use Modules\Enrollment\Http\Resources\StudentResource;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Classe;
 use Modules\StructureAcademique\Http\Requests\StoreClasseRequest;
 use Modules\StructureAcademique\Http\Requests\UpdateClasseRequest;
 use Modules\StructureAcademique\Http\Resources\ClasseResource;
-use Modules\UsersGuard\Entities\User;
+use Modules\UsersGuard\Entities\TenantUser;
 
 class ClasseController extends Controller
 {
@@ -21,6 +23,7 @@ class ClasseController extends Controller
     {
         $classes = Classe::on('tenant')
             ->with(['level.cycle', 'series', 'headTeacher', 'academicYear'])
+            ->withCount(['activeEnrollments as students_count'])
             ->when($request->cycle_id, fn ($q, $cycleId) => $q->whereHas('level', fn ($q2) => $q2->where('cycle_id', $cycleId)))
             ->when($request->level_id, fn ($q, $levelId) => $q->where('level_id', $levelId))
             ->when($request->series_id, fn ($q, $seriesId) => $q->where('series_id', $seriesId))
@@ -66,7 +69,7 @@ class ClasseController extends Controller
 
         return response()->json([
             'message' => 'Classe créée avec succès.',
-            'data' => new ClasseResource($classe->load(['level.cycle', 'series', 'headTeacher', 'academicYear'])),
+            'data' => new ClasseResource($classe->load(['level.cycle', 'series', 'headTeacher', 'academicYear'])->loadCount(['activeEnrollments as students_count'])),
         ], 201);
     }
 
@@ -77,9 +80,37 @@ class ClasseController extends Controller
     {
         $classe = Classe::on('tenant')
             ->with(['level.cycle', 'series', 'headTeacher', 'academicYear'])
+            ->withCount(['activeEnrollments as students_count'])
             ->findOrFail($classe);
 
         return new ClasseResource($classe);
+    }
+
+    /**
+     * Liste des élèves actifs affectés à une classe pour son année scolaire.
+     */
+    public function students(Request $request, int $classe): AnonymousResourceCollection
+    {
+        $classe = Classe::on('tenant')->findOrFail($classe);
+        $perPage = min(max($request->integer('per_page', 50), 1), 100);
+
+        $students = $classe->students()
+            ->wherePivot('academic_year_id', $classe->academic_year_id)
+            ->wherePivot('status', 'Actif')
+            ->wherePivotNull('deleted_at')
+            ->when($request->search, function ($query, string $search) {
+                $query->where(function ($studentQuery) use ($search) {
+                    $studentQuery
+                        ->where('matricule', 'like', "%{$search}%")
+                        ->orWhere('firstname', 'like', "%{$search}%")
+                        ->orWhere('lastname', 'like', "%{$search}%");
+                });
+            })
+            ->orderBy('lastname')
+            ->orderBy('firstname')
+            ->paginate($perPage);
+
+        return StudentResource::collection($students);
     }
 
     /**
@@ -103,7 +134,7 @@ class ClasseController extends Controller
 
         return response()->json([
             'message' => 'Classe modifiée avec succès.',
-            'data' => new ClasseResource($classe->load(['level.cycle', 'series', 'headTeacher', 'academicYear'])),
+            'data' => new ClasseResource($classe->load(['level.cycle', 'series', 'headTeacher', 'academicYear'])->loadCount(['activeEnrollments as students_count'])),
         ]);
     }
 
@@ -124,6 +155,7 @@ class ClasseController extends Controller
             ->whereNull('deleted_at');
 
         $totalClasses = $classesQuery->count();
+        $totalCapacity = (int) $classesQuery->sum('max_capacity');
 
         // Count by cycle
         $classesByCycle = \DB::connection('tenant')
@@ -150,6 +182,7 @@ class ClasseController extends Controller
         return response()->json([
             'data' => [
                 'total_classes' => $totalClasses,
+                'total_capacity' => $totalCapacity,
                 'classes_by_cycle' => $classesByCycle,
                 'classes_by_level' => $classesByLevel,
             ],
@@ -181,9 +214,12 @@ class ClasseController extends Controller
             $usedTeacherIds = $usedTeacherIds->reject(fn ($id) => $id === $currentPp);
         }
 
-        $teachers = User::on('tenant')
+        $teachers = TenantUser::query()
+            ->whereHas('roles', fn ($query) => $query->where('name', 'Professeur'))
             ->whereNotIn('id', $usedTeacherIds)
             ->where('is_active', true)
+            ->orderBy('lastname')
+            ->orderBy('firstname')
             ->get(['id', 'firstname', 'lastname', 'email']);
 
         return response()->json([
@@ -191,7 +227,7 @@ class ClasseController extends Controller
                 'id' => $t->id,
                 'firstname' => $t->firstname,
                 'lastname' => $t->lastname,
-                'name' => $t->name,
+                'name' => trim("{$t->firstname} {$t->lastname}"),
                 'email' => $t->email,
             ]),
         ]);
@@ -211,6 +247,7 @@ class ClasseController extends Controller
 
         $classes = Classe::on('tenant')
             ->with(['level.cycle', 'series'])
+            ->withCount(['activeEnrollments as students_count'])
             ->where('academic_year_id', $yearId)
             ->whereNull('head_teacher_id')
             ->orderByRaw('(SELECT order_index FROM levels WHERE levels.id = classes.level_id)')
@@ -234,6 +271,7 @@ class ClasseController extends Controller
             $hasStudents = \DB::connection('tenant')
                 ->table('class_enrollments')
                 ->where('classe_id', $classe->id)
+                ->whereNull('deleted_at')
                 ->exists();
 
             if ($hasStudents) {

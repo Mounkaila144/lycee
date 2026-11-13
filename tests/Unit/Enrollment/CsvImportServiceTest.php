@@ -73,7 +73,8 @@ class CsvImportServiceTest extends TestCase
         $this->assertStringContainsString('prenom', $template);
         $this->assertStringContainsString('date_naissance', $template);
         $this->assertStringContainsString('sexe', $template);
-        $this->assertStringContainsString('email', $template);
+        $this->assertStringContainsString('quartier', $template);
+        $this->assertStringNotContainsString('email', $template);
     }
 
     #[Test]
@@ -83,14 +84,9 @@ class CsvImportServiceTest extends TestCase
 
         $lines = explode("\n", trim($template));
         $this->assertCount(2, $lines);
-
-        // Check example values
-        $this->assertStringContainsString('Dupont', $template);
-        $this->assertStringContainsString('Jean', $template);
-        $this->assertStringContainsString('jean.dupont@email.com', $template);
+        $this->assertStringContainsString('Issoufou', $template);
+        $this->assertStringContainsString('Amina', $template);
     }
-
-    // ==================== PARSING TESTS ====================
 
     #[Test]
     public function it_parses_valid_csv_with_semicolon_delimiter(): void
@@ -158,37 +154,36 @@ class CsvImportServiceTest extends TestCase
     // ==================== VALIDATION TESTS ====================
 
     #[Test]
-    public function it_validates_email_format(): void
+    public function it_does_not_require_email_column(): void
     {
-        $content = "nom;prenom;date_naissance;sexe;email\nDupont;Jean;15/03/2005;M;invalid-email";
+        $content = "nom;prenom;date_naissance;sexe\nDupont;Jean;15/03/2005;M";
         $file = $this->createCsvFile($content);
 
         $result = $this->service->parseAndValidate($file);
 
-        $this->assertEquals(0, $result['valid_count']);
-        $this->assertEquals(1, $result['error_count']);
-        $this->assertContains('Format d\'email invalide', $result['rows'][0]['errors']);
+        $this->assertEmpty($result['errors']);
+        $this->assertEquals(1, $result['valid_count']);
     }
 
     #[Test]
-    public function it_validates_email_uniqueness_in_file(): void
+    public function it_detects_duplicate_students_in_file(): void
     {
-        $content = "nom;prenom;date_naissance;sexe;email\nDupont;Jean;15/03/2005;M;same@test.com\nMartin;Marie;20/05/2004;F;same@test.com";
+        $content = "nom;prenom;date_naissance;sexe\nDupont;Jean;15/03/2005;M\nDUPONT;Jean;2005-03-15;M\nMartin;Marie;20/05/2004;F";
         $file = $this->createCsvFile($content);
 
         $result = $this->service->parseAndValidate($file);
 
-        // First row valid, second has duplicate
         $this->assertTrue($result['rows'][0]['is_valid']);
         $this->assertFalse($result['rows'][1]['is_valid']);
+        $this->assertTrue($result['rows'][2]['is_valid']);
     }
 
     #[Test]
-    public function it_validates_email_uniqueness_in_database(): void
+    public function it_detects_existing_student_in_database(): void
     {
-        Student::factory()->create(['email' => 'existing@test.com']);
+        Student::factory()->create(['firstname' => 'Jean', 'lastname' => 'Dupont', 'birthdate' => '2005-03-15']);
 
-        $content = "nom;prenom;date_naissance;sexe;email\nDupont;Jean;15/03/2005;M;existing@test.com";
+        $content = "nom;prenom;date_naissance;sexe\nDupont;Jean;15/03/2005;M";
         $file = $this->createCsvFile($content);
 
         $result = $this->service->parseAndValidate($file);
@@ -229,10 +224,8 @@ class CsvImportServiceTest extends TestCase
     #[Test]
     public function it_validates_sex_values(): void
     {
-        $validSexValues = ['M', 'F', 'O'];
-
-        foreach ($validSexValues as $sex) {
-            $content = "nom;prenom;date_naissance;sexe;email\nDupont;Jean;15/03/2005;{$sex};jean_{$sex}@test.com";
+        foreach (['M', 'F', 'm', 'f'] as $index => $sex) {
+            $content = "nom;prenom;date_naissance;sexe\nDupont{$index};Jean;15/03/2005;{$sex}";
             $file = $this->createCsvFile($content);
 
             $result = $this->service->parseAndValidate($file);
@@ -247,13 +240,13 @@ class CsvImportServiceTest extends TestCase
     #[Test]
     public function it_rejects_invalid_sex_value(): void
     {
-        $content = "nom;prenom;date_naissance;sexe;email\nDupont;Jean;15/03/2005;X;jean@test.com";
+        $content = "nom;prenom;date_naissance;sexe\nDupont;Jean;15/03/2005;O";
         $file = $this->createCsvFile($content);
 
         $result = $this->service->parseAndValidate($file);
 
         $this->assertFalse($result['rows'][0]['is_valid']);
-        $this->assertContains('Sexe invalide (utilisez M, F ou O)', $result['rows'][0]['errors']);
+        $this->assertContains('Sexe invalide (utilisez M ou F)', $result['rows'][0]['errors']);
     }
 
     #[Test]
@@ -268,17 +261,15 @@ class CsvImportServiceTest extends TestCase
     }
 
     #[Test]
-    public function it_rejects_invalid_programme_code(): void
+    public function it_ignores_unknown_programme_code(): void
     {
-        $content = "nom;prenom;date_naissance;sexe;email;programme\nDupont;Jean;15/03/2005;M;jean@test.com;INVALID";
+        $content = "nom;prenom;date_naissance;sexe;programme\nDupont;Jean;15/03/2005;M;INVALID";
         $file = $this->createCsvFile($content);
 
         $result = $this->service->parseAndValidate($file);
 
-        $this->assertFalse($result['rows'][0]['is_valid']);
+        $this->assertTrue($result['rows'][0]['is_valid']);
     }
-
-    // ==================== IMPORT TESTS ====================
 
     #[Test]
     public function it_imports_valid_rows(): void
@@ -296,11 +287,11 @@ class CsvImportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->import($validatedRows, $this->programme);
+        $result = $this->service->import($validatedRows);
 
         $this->assertEquals(1, $result['imported_count']);
         $this->assertCount(1, $result['imported_students']);
-        $this->assertDatabaseHas('students', ['email' => 'jean@test.com'], 'tenant');
+        $this->assertDatabaseHas('students', ['lastname' => 'Dupont', 'firstname' => 'Jean'], 'tenant');
     }
 
     #[Test]
@@ -319,10 +310,9 @@ class CsvImportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->import($validatedRows, $this->programme);
+        $result = $this->service->import($validatedRows);
 
-        $this->assertNotEmpty($result['imported_students'][0]['matricule']);
-        $this->assertStringContainsString('LINF', $result['imported_students'][0]['matricule']);
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{4}$/', $result['imported_students'][0]['matricule']);
     }
 
     #[Test]
@@ -351,7 +341,7 @@ class CsvImportServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->service->import($validatedRows, $this->programme);
+        $result = $this->service->import($validatedRows);
 
         $this->assertEquals(1, $result['imported_count']);
     }
@@ -372,12 +362,12 @@ class CsvImportServiceTest extends TestCase
             ],
         ];
 
-        $this->service->import($validatedRows, $this->programme);
+        $this->service->import($validatedRows);
 
-        $student = Student::on('tenant')->where('email', 'jean@test.com')->first();
+        $student = Student::on('tenant')->where('lastname', 'Dupont')->first();
         $this->assertEquals('Actif', $student->status);
-        $this->assertEquals('Niger', $student->nationality);
-        $this->assertEquals('Niger', $student->country);
+        $this->assertEquals('Nigérienne', $student->nationality);
+        $this->assertEquals('Niamey', $student->city);
     }
 
     #[Test]
@@ -399,9 +389,9 @@ class CsvImportServiceTest extends TestCase
             ],
         ];
 
-        $this->service->import($validatedRows, $this->programme);
+        $this->service->import($validatedRows);
 
-        $student = Student::on('tenant')->where('email', 'jean@test.com')->first();
+        $student = Student::on('tenant')->where('lastname', 'Dupont')->first();
         $this->assertEquals('+22790123456', $student->phone);
         $this->assertEquals('Niamey', $student->city);
         $this->assertEquals('Zinder', $student->birthplace);

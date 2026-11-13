@@ -9,7 +9,6 @@ use Modules\Documents\Entities\DocumentTemplate;
 use Modules\Enrollment\Entities\Student;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Semester;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 /**
  * Service for Epic 1: Génération Relevés (Stories 01-05)
@@ -35,9 +34,7 @@ class TranscriptService
         AcademicYear $academicYear,
         bool $isProvisional = false
     ): Document {
-        $template = DocumentTemplate::active()
-            ->ofType($isProvisional ? 'transcript_provisional' : 'transcript_semester')
-            ->first();
+        $template = DefaultDocumentTemplates::resolve($isProvisional ? 'transcript_provisional' : 'transcript_semester');
 
         if (! $template) {
             throw new \Exception('No active transcript template found');
@@ -69,14 +66,15 @@ class TranscriptService
             'verification_code' => $verificationCode,
         ];
 
-        // Render HTML
-        $html = $template->renderTemplate($data);
+        $qrCode = $this->verificationService->storeQrCode($verificationCode, $documentNumber);
+        $qrCodePath = $qrCode['path'];
 
-        // Generate PDF
+        $html = $template->renderTemplate($data + [
+            'school_name' => config('app.name'),
+            'qr_code_data_uri' => $qrCode['data_uri'],
+        ]);
+
         $pdfPath = $this->generatePdf($html, $documentNumber, $template);
-
-        // Generate QR code
-        $qrCodePath = $this->generateQrCode($verificationCode, $documentNumber);
 
         // Create document record
         $document = Document::create([
@@ -92,7 +90,7 @@ class TranscriptService
             'qr_code_path' => $qrCodePath,
             'status' => 'issued',
             'metadata' => $statistics,
-            'issued_by' => auth()->id(),
+            'issued_by' => request()->user()?->id,
         ]);
 
         return $document;
@@ -105,9 +103,7 @@ class TranscriptService
         Student $student,
         ?AcademicYear $academicYear = null
     ): Document {
-        $template = DocumentTemplate::active()
-            ->ofType('transcript_global')
-            ->first();
+        $template = DefaultDocumentTemplates::resolve('transcript_global');
 
         if (! $template) {
             throw new \Exception('No active global transcript template found');
@@ -136,14 +132,15 @@ class TranscriptService
             'verification_code' => $verificationCode,
         ];
 
-        // Render HTML
-        $html = $template->renderTemplate($data);
+        $qrCode = $this->verificationService->storeQrCode($verificationCode, $documentNumber);
+        $qrCodePath = $qrCode['path'];
 
-        // Generate PDF
+        $html = $template->renderTemplate($data + [
+            'school_name' => config('app.name'),
+            'qr_code_data_uri' => $qrCode['data_uri'],
+        ]);
+
         $pdfPath = $this->generatePdf($html, $documentNumber, $template);
-
-        // Generate QR code
-        $qrCodePath = $this->generateQrCode($verificationCode, $documentNumber);
 
         // Create document record
         $document = Document::create([
@@ -158,7 +155,7 @@ class TranscriptService
             'qr_code_path' => $qrCodePath,
             'status' => 'issued',
             'metadata' => $statistics,
-            'issued_by' => auth()->id(),
+            'issued_by' => request()->user()?->id,
         ]);
 
         return $document;
@@ -290,7 +287,7 @@ class TranscriptService
     private function generateDocumentNumber(string $prefix, ?AcademicYear $academicYear): string
     {
         $year = $academicYear?->name ?? date('Y');
-        $sequence = Document::where('document_number', 'like', "{$prefix}-{$year}-%")->count() + 1;
+        $sequence = Document::withTrashed()->where('document_number', 'like', "{$prefix}-{$year}-%")->count() + 1;
 
         return sprintf('%s-%s-%05d', $prefix, $year, $sequence);
     }
@@ -311,21 +308,6 @@ class TranscriptService
 
         $filename = "transcripts/{$documentNumber}.pdf";
         Storage::disk('tenant')->put($filename, $pdf->output());
-
-        return $filename;
-    }
-
-    /**
-     * Generate QR Code
-     */
-    private function generateQrCode(string $verificationCode, string $documentNumber): string
-    {
-        $qrCode = QrCode::format('png')
-            ->size(300)
-            ->generate($verificationCode);
-
-        $filename = "qr_codes/{$documentNumber}.png";
-        Storage::disk('tenant')->put($filename, $qrCode);
 
         return $filename;
     }

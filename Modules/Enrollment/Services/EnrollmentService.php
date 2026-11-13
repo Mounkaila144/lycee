@@ -52,7 +52,7 @@ class EnrollmentService
                 'group_id' => $groupId,
                 'enrollment_date' => now(),
                 'status' => 'Actif',
-                'enrolled_by' => Auth::id(),
+                'enrolled_by' => Auth::guard('tenant')->id(),
             ]);
 
             // Collect all modules to enroll
@@ -95,7 +95,7 @@ class EnrollmentService
                     'enrollment_date' => now(),
                     'status' => 'Inscrit',
                     'is_optional' => $moduleData['is_optional'],
-                    'enrolled_by' => Auth::id(),
+                    'enrolled_by' => Auth::guard('tenant')->id(),
                 ]);
                 $moduleEnrollments->push($moduleEnrollment);
             }
@@ -220,7 +220,7 @@ class EnrollmentService
                 'enrollment_date' => now(),
                 'status' => 'Inscrit',
                 'is_optional' => $module->type === 'Optionnel',
-                'enrolled_by' => Auth::id(),
+                'enrolled_by' => Auth::guard('tenant')->id(),
             ]);
 
             $addedEnrollments->push($moduleEnrollment);

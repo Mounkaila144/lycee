@@ -331,6 +331,16 @@ class GradeEntryController extends Controller
             ], 403);
         }
 
+        $existingGrade = Grade::where('student_id', $data['student_id'])
+            ->where('evaluation_id', $data['evaluation_id'])
+            ->first();
+
+        if ($existingGrade?->isPublished()) {
+            return response()->json([
+                'message' => 'Note publiée - modification nécessite une demande de correction.',
+            ], 422);
+        }
+
         $isAbsent = $data['is_absent'] ?? false;
         $score = $isAbsent ? null : ($data['score'] ?? null);
 

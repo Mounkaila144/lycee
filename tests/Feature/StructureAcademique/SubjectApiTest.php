@@ -6,6 +6,7 @@ use Modules\StructureAcademique\Database\Seeders\CycleAndLevelSeeder;
 use Modules\StructureAcademique\Database\Seeders\SubjectSeeder;
 use Modules\StructureAcademique\Entities\Level;
 use Modules\StructureAcademique\Entities\Subject;
+use Modules\UsersGuard\Entities\TenantUser;
 use Modules\UsersGuard\Entities\User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -25,9 +26,13 @@ class SubjectApiTest extends TestCase
         parent::setUp();
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
+        // Rôles créés avant toute lecture : la transaction tenant doit les voir.
+        $this->seedRolesAndPermissions();
 
         $this->user = User::factory()->create();
-        $this->token = $this->user->createToken('test-token')->plainTextToken;
+        $tenantUser = TenantUser::findOrFail($this->user->id);
+        $this->assignRole($tenantUser, 'Administrator');
+        $this->token = $tenantUser->createToken('test-token')->plainTextToken;
     }
 
     protected function tearDown(): void

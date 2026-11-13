@@ -2,6 +2,8 @@
 
 namespace Modules\Documents\Services;
 
+use chillerlan\QRCode\QRCode;
+use chillerlan\QRCode\QROptions;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Modules\Documents\Entities\Document;
@@ -122,6 +124,10 @@ class DocumentVerificationService
         // Apply filters
         if (isset($filters['document_type'])) {
             $query->where('document_type', $filters['document_type']);
+        }
+
+        if (isset($filters['document_category']) && in_array($filters['document_category'], ['certificate', 'transcript', 'diploma'], true)) {
+            $query->where('document_type', 'like', $filters['document_category'].'%');
         }
 
         if (isset($filters['student_id'])) {
@@ -365,6 +371,41 @@ class DocumentVerificationService
     public function generateVerificationCode(): string
     {
         return strtoupper(Str::random(32));
+    }
+
+    /**
+     * Render a QR code (PNG binary) encoding the given content.
+     */
+    public function renderQrCodePng(string $content): string
+    {
+        $options = new QROptions([
+            'outputType' => QRCode::OUTPUT_IMAGE_PNG,
+            'eccLevel' => QRCode::ECC_M,
+            'scale' => 6,
+            'imageBase64' => false,
+            'addQuietzone' => true,
+            'quietzoneSize' => 2,
+        ]);
+
+        return (new QRCode($options))->render($content);
+    }
+
+    /**
+     * Render the QR code and store it on the tenant disk.
+     *
+     * @return array{path: string, data_uri: string}
+     */
+    public function storeQrCode(string $verificationCode, string $documentNumber): array
+    {
+        $png = $this->renderQrCodePng($verificationCode);
+        $path = "qr_codes/{$documentNumber}.png";
+
+        Storage::disk('tenant')->put($path, $png);
+
+        return [
+            'path' => $path,
+            'data_uri' => 'data:image/png;base64,'.base64_encode($png),
+        ];
     }
 
     /**

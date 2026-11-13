@@ -16,8 +16,8 @@ class ExamIncidentController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'exam_session_id' => 'required|exists:exam_sessions,id',
-            'student_id' => 'nullable|exists:students,id',
+            'exam_session_id' => 'required|exists:tenant.exam_sessions,id',
+            'student_id' => 'nullable|exists:tenant.students,id',
             'type' => 'required|in:cheating,disturbance,technical,medical,other',
             'title' => 'required|string|max:255',
             'description' => 'required|string',
@@ -31,8 +31,10 @@ class ExamIncidentController extends Controller
         return response()->json($incident, 201);
     }
 
-    public function update(Request $request, ExamIncident $incident): JsonResponse
+    public function update(Request $request, int $incident): JsonResponse
     {
+        $incident = ExamIncident::query()->findOrFail($incident);
+
         $validated = $request->validate([
             'description' => 'sometimes|string',
             'action_taken' => 'nullable|string',
@@ -44,8 +46,10 @@ class ExamIncidentController extends Controller
         return response()->json($incident->fresh());
     }
 
-    public function updateStatus(Request $request, ExamIncident $incident): JsonResponse
+    public function updateStatus(Request $request, int $incident): JsonResponse
     {
+        $incident = ExamIncident::query()->findOrFail($incident);
+
         $validated = $request->validate([
             'status' => 'required|in:reported,under_review,resolved,escalated',
             'resolution_notes' => 'nullable|string',
@@ -56,8 +60,10 @@ class ExamIncidentController extends Controller
         return response()->json($incident);
     }
 
-    public function addEvidence(Request $request, ExamIncident $incident): JsonResponse
+    public function addEvidence(Request $request, int $incident): JsonResponse
     {
+        $incident = ExamIncident::query()->findOrFail($incident);
+
         $validated = $request->validate([
             'evidence_path' => 'required|string',
         ]);
@@ -67,8 +73,10 @@ class ExamIncidentController extends Controller
         return response()->json($incident);
     }
 
-    public function escalate(Request $request, ExamIncident $incident): JsonResponse
+    public function escalate(Request $request, int $incident): JsonResponse
     {
+        $incident = ExamIncident::query()->findOrFail($incident);
+
         $validated = $request->validate([
             'reason' => 'required|string',
         ]);
@@ -78,15 +86,17 @@ class ExamIncidentController extends Controller
         return response()->json($incident);
     }
 
-    public function sessionIncidents(ExamSession $session): JsonResponse
+    public function sessionIncidents(int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
         $incidents = $session->incidents()->with(['student', 'reporter', 'reviewer'])->get();
 
         return response()->json($incidents);
     }
 
-    public function summary(ExamSession $session): JsonResponse
+    public function summary(int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
         $summary = $this->supervisionService->getIncidentsSummary($session);
 
         return response()->json($summary);

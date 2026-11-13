@@ -119,6 +119,8 @@ class AdministratorAccessTest extends TestCase
             'lastname' => 'Test',
             'birthdate' => '2010-01-01',
             'sex' => 'M',
+            'email' => 'admin.test.student@example.com',
+            'mobile' => '+227 90 00 00 00',
         ]);
 
         $response->assertStatus(201);
@@ -238,5 +240,25 @@ class AdministratorAccessTest extends TestCase
         $this->withToken($token)
             ->getJson('/api/admin/parent/me')
             ->assertForbidden();
+    }
+
+    /**
+     * Widgets du tableau de bord (/admin/dashboard, RoleDashboard).
+     */
+    #[Test]
+    public function admin_can_load_dashboard_widgets(): void
+    {
+        $token = $this->adminToken();
+
+        foreach ([
+            '/api/admin/academic-years/active',
+            '/api/admin/enrollment/students/statistics/summary',
+            '/api/admin/classes/stats',
+            '/api/admin/finance/reports/dashboard',
+        ] as $uri) {
+            $status = $this->withToken($token)->getJson($uri)->getStatusCode();
+
+            $this->assertNotContains($status, [401, 403, 500], "Widget dashboard {$uri} doit être accessible à l'Administrator (reçu {$status})");
+        }
     }
 }

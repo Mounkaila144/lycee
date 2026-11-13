@@ -10,7 +10,6 @@ use Modules\Documents\Entities\DocumentTemplate;
 use Modules\Enrollment\Entities\Student;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Programme;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 /**
  * Service for Epic 2: Diplômes (Stories 06-10)
@@ -510,9 +509,7 @@ class DiplomaService
      */
     private function generateQrCode(string $verificationCode, string $documentNumber): string
     {
-        $qrCode = QrCode::format('png')
-            ->size(300)
-            ->generate($verificationCode);
+        $qrCode = $this->verificationService->renderQrCodePng($verificationCode);
 
         $filename = "qr_codes/{$documentNumber}.png";
         Storage::disk('tenant')->put($filename, $qrCode);

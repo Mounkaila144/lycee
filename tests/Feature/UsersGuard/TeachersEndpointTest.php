@@ -2,9 +2,7 @@
 
 namespace Tests\Feature\UsersGuard;
 
-use Laravel\Sanctum\Sanctum;
 use Modules\UsersGuard\Entities\TenantUser;
-use Modules\UsersGuard\Entities\User;
 use Spatie\Permission\Models\Role;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Tests\Concerns\InteractsWithTenancy;
@@ -14,7 +12,9 @@ class TeachersEndpointTest extends TestCase
 {
     use InteractsWithTenancy;
 
-    protected User $user;
+    protected TenantUser $user;
+
+    private string $token;
 
     protected function setUp(): void
     {
@@ -27,9 +27,10 @@ class TeachersEndpointTest extends TestCase
         // Create permissions manually (instead of using seeder which calls tenancy()->initialize())
         $this->createPermissionsAndRoles();
 
-        // Create authenticated user
-        $this->user = $this->createUser();
-        Sanctum::actingAs($this->user);
+        // Create authenticated admin user with a real token (TenantSanctumAuth)
+        $this->user = $this->createTenantUser(['firstname' => 'Auth', 'lastname' => 'Admin']);
+        $this->user->assignRole('Administrator');
+        $this->token = $this->user->createToken('test-token')->plainTextToken;
     }
 
     /**
@@ -94,17 +95,11 @@ class TeachersEndpointTest extends TestCase
     }
 
     /**
-     * Helper to create a user without factory
+     * Make an authenticated JSON GET request
      */
-    private function createUser(array $attributes = []): User
+    private function authGetJson(string $uri): \Illuminate\Testing\TestResponse
     {
-        return User::create(array_merge([
-            'username' => 'testuser-'.uniqid(),
-            'email' => 'test-'.uniqid().'@example.com',
-            'password' => bcrypt('password'),
-            'firstname' => 'Test',
-            'lastname' => 'User',
-        ], $attributes));
+        return $this->withToken($this->token)->getJson($uri);
     }
 
     /**
@@ -153,7 +148,7 @@ class TeachersEndpointTest extends TestCase
         $manager = $this->createTenantUser(['firstname' => 'Manager', 'lastname' => 'User']);
         $manager->assignRole('Manager');
 
-        $response = $this->getJson('/api/admin/teachers');
+        $response = $this->authGetJson('/api/admin/teachers');
 
         $response->assertStatus(200)
             ->assertJsonCount(2, 'data')
@@ -185,7 +180,7 @@ class TeachersEndpointTest extends TestCase
         ]);
         $inactiveTeacher->assignRole('Professeur');
 
-        $response = $this->getJson('/api/admin/teachers');
+        $response = $this->authGetJson('/api/admin/teachers');
 
         $response->assertStatus(200)
             ->assertJsonCount(1, 'data')
@@ -225,31 +220,31 @@ class TeachersEndpointTest extends TestCase
         $smith->assignRole('Professeur');
 
         // Search by lastname
-        $response = $this->getJson('/api/admin/teachers?search=Dupont');
+        $response = $this->authGetJson('/api/admin/teachers?search=Dupont');
         $response->assertStatus(200)
             ->assertJsonCount(1, 'data')
             ->assertJsonFragment(['lastname' => 'Dupont']);
 
         // Search by firstname
-        $response = $this->getJson('/api/admin/teachers?search=Marie');
+        $response = $this->authGetJson('/api/admin/teachers?search=Marie');
         $response->assertStatus(200)
             ->assertJsonCount(1, 'data')
             ->assertJsonFragment(['firstname' => 'Marie']);
 
         // Search by email
-        $response = $this->getJson('/api/admin/teachers?search=j.smith');
+        $response = $this->authGetJson('/api/admin/teachers?search=j.smith');
         $response->assertStatus(200)
             ->assertJsonCount(1, 'data')
             ->assertJsonFragment(['email' => 'j.smith@university.ne']);
 
         // Search by username
-        $response = $this->getJson('/api/admin/teachers?search=prof.martin');
+        $response = $this->authGetJson('/api/admin/teachers?search=prof.martin');
         $response->assertStatus(200)
             ->assertJsonCount(1, 'data')
             ->assertJsonFragment(['username' => 'prof.martin']);
 
         // Partial search
-        $response = $this->getJson('/api/admin/teachers?search=prof');
+        $response = $this->authGetJson('/api/admin/teachers?search=prof');
         $response->assertStatus(200)
             ->assertJsonCount(3, 'data'); // All 3 teachers have 'prof' in username
     }
@@ -266,21 +261,21 @@ class TeachersEndpointTest extends TestCase
         }
 
         // Default pagination (15 per page)
-        $response = $this->getJson('/api/admin/teachers');
+        $response = $this->authGetJson('/api/admin/teachers');
         $response->assertStatus(200)
             ->assertJsonCount(15, 'data')
             ->assertJsonPath('meta.per_page', 15)
             ->assertJsonPath('meta.total', 25);
 
         // Custom per_page
-        $response = $this->getJson('/api/admin/teachers?per_page=10');
+        $response = $this->authGetJson('/api/admin/teachers?per_page=10');
         $response->assertStatus(200)
             ->assertJsonCount(10, 'data')
             ->assertJsonPath('meta.per_page', 10)
             ->assertJsonPath('meta.total', 25);
 
         // Second page
-        $response = $this->getJson('/api/admin/teachers?per_page=10&page=2');
+        $response = $this->authGetJson('/api/admin/teachers?per_page=10&page=2');
         $response->assertStatus(200)
             ->assertJsonCount(10, 'data')
             ->assertJsonPath('meta.current_page', 2);
@@ -303,7 +298,7 @@ class TeachersEndpointTest extends TestCase
         $otherTenantTeacher->assignRole('Professeur');
 
         // Query teachers for current tenant
-        $response = $this->getJson('/api/admin/teachers');
+        $response = $this->authGetJson('/api/admin/teachers');
 
         $response->assertStatus(200);
 
@@ -323,7 +318,7 @@ class TeachersEndpointTest extends TestCase
         ]);
         $teacher->assignRole('Professeur');
 
-        $response = $this->getJson('/api/admin/teachers');
+        $response = $this->authGetJson('/api/admin/teachers');
 
         $response->assertStatus(200)
             ->assertJsonStructure([
@@ -354,9 +349,6 @@ class TeachersEndpointTest extends TestCase
 
     public function test_teachers_endpoint_requires_authentication(): void
     {
-        // Clear authentication
-        Sanctum::actingAs(null);
-
         $response = $this->getJson('/api/admin/teachers');
 
         $response->assertStatus(401);

@@ -5,12 +5,14 @@ namespace Modules\Attendance\Http\Controllers\Admin;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Modules\Attendance\Services\AttendanceAccessService;
 use Modules\Attendance\Services\AttendanceMonitoringService;
 
 class AttendanceMonitoringController extends Controller
 {
     public function __construct(
-        private AttendanceMonitoringService $monitoringService
+        private AttendanceMonitoringService $monitoringService,
+        private AttendanceAccessService $accessService
     ) {}
 
     /**
@@ -22,6 +24,8 @@ class AttendanceMonitoringController extends Controller
             'student_id' => 'required|integer|exists:tenant.users,id',
             'semester_id' => 'required|integer|exists:tenant.semesters,id',
         ]);
+
+        $this->ensureCanViewStudent($request, (int) $validated['student_id']);
 
         $alert = $this->monitoringService->checkThresholdsForStudent(
             $validated['student_id'],
@@ -39,6 +43,10 @@ class AttendanceMonitoringController extends Controller
      */
     public function triggerAlerts(Request $request): JsonResponse
     {
+        if (! $this->accessService->isSupervisor($request->user())) {
+            abort(403, 'Seule l\'administration peut déclencher les alertes globales.');
+        }
+
         $validated = $request->validate([
             'semester_id' => 'required|integer|exists:tenant.semesters,id',
         ]);
@@ -60,7 +68,10 @@ class AttendanceMonitoringController extends Controller
             'semester_id' => 'required|integer|exists:tenant.semesters,id',
         ]);
 
-        $alerts = $this->monitoringService->getActiveAlerts($validated['semester_id']);
+        $alerts = $this->monitoringService->getActiveAlerts(
+            $validated['semester_id'],
+            $this->accessService->visibleStudentUserIds($request->user())
+        );
 
         return response()->json($alerts);
     }
@@ -73,6 +84,8 @@ class AttendanceMonitoringController extends Controller
         $validated = $request->validate([
             'semester_id' => 'required|integer|exists:tenant.semesters,id',
         ]);
+
+        $this->ensureCanViewStudent($request, $studentId);
 
         $history = $this->monitoringService->getStudentHistory(
             $studentId,
@@ -91,11 +104,20 @@ class AttendanceMonitoringController extends Controller
             'semester_id' => 'required|integer|exists:tenant.semesters,id',
         ]);
 
+        $this->ensureCanViewStudent($request, $studentId);
+
         $stats = $this->monitoringService->calculateStudentStats(
             $studentId,
             $validated['semester_id']
         );
 
         return response()->json($stats);
+    }
+
+    private function ensureCanViewStudent(Request $request, int $studentId): void
+    {
+        if (! $this->accessService->canViewStudent($request->user(), $studentId)) {
+            abort(403, 'Vous ne pouvez pas consulter le suivi de cet élève.');
+        }
     }
 }

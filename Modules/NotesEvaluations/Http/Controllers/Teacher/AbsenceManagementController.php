@@ -10,6 +10,7 @@ use Modules\NotesEvaluations\Entities\ReplacementEvaluation;
 use Modules\NotesEvaluations\Http\Resources\GradeResource;
 use Modules\NotesEvaluations\Services\AbsencePolicyService;
 use Modules\StructureAcademique\Entities\ModuleEvaluationConfig;
+use Modules\StructureAcademique\Entities\TeacherModuleAssignment;
 
 class AbsenceManagementController extends Controller
 {
@@ -20,8 +21,12 @@ class AbsenceManagementController extends Controller
     /**
      * List absences for an evaluation
      */
-    public function index(ModuleEvaluationConfig $evaluation): JsonResponse
+    public function index(Request $request, ModuleEvaluationConfig $evaluation): JsonResponse
     {
+        if (! $this->isAssignedToEvaluation($request, $evaluation)) {
+            return $this->notAssignedResponse();
+        }
+
         $absences = GradeAbsence::with(['grade.student', 'justification'])
             ->whereHas('grade', fn ($q) => $q->where('evaluation_id', $evaluation->id))
             ->get();
@@ -51,6 +56,10 @@ class AbsenceManagementController extends Controller
      */
     public function markAbsent(Request $request, ModuleEvaluationConfig $evaluation): JsonResponse
     {
+        if (! $this->isAssignedToEvaluation($request, $evaluation)) {
+            return $this->notAssignedResponse();
+        }
+
         $validated = $request->validate([
             'student_ids' => 'required|array|min:1',
             'student_ids.*' => 'required|integer|exists:tenant.students,id',
@@ -76,8 +85,12 @@ class AbsenceManagementController extends Controller
     /**
      * Get absence policy for evaluation's module
      */
-    public function policy(ModuleEvaluationConfig $evaluation): JsonResponse
+    public function policy(Request $request, ModuleEvaluationConfig $evaluation): JsonResponse
     {
+        if (! $this->isAssignedToEvaluation($request, $evaluation)) {
+            return $this->notAssignedResponse();
+        }
+
         return response()->json([
             'data' => $this->absenceService->getPolicy($evaluation),
         ]);
@@ -86,8 +99,12 @@ class AbsenceManagementController extends Controller
     /**
      * Get absence statistics for an evaluation
      */
-    public function statistics(ModuleEvaluationConfig $evaluation): JsonResponse
+    public function statistics(Request $request, ModuleEvaluationConfig $evaluation): JsonResponse
     {
+        if (! $this->isAssignedToEvaluation($request, $evaluation)) {
+            return $this->notAssignedResponse();
+        }
+
         return response()->json([
             'data' => $this->absenceService->getAbsenceStatistics($evaluation),
         ]);
@@ -96,8 +113,12 @@ class AbsenceManagementController extends Controller
     /**
      * List replacement evaluations for an evaluation
      */
-    public function replacements(ModuleEvaluationConfig $evaluation): JsonResponse
+    public function replacements(Request $request, ModuleEvaluationConfig $evaluation): JsonResponse
     {
+        if (! $this->isAssignedToEvaluation($request, $evaluation)) {
+            return $this->notAssignedResponse();
+        }
+
         $replacements = ReplacementEvaluation::with(['student', 'grade'])
             ->where('original_evaluation_id', $evaluation->id)
             ->orderBy('scheduled_at')
@@ -127,6 +148,10 @@ class AbsenceManagementController extends Controller
      */
     public function scheduleReplacement(Request $request, ModuleEvaluationConfig $evaluation): JsonResponse
     {
+        if (! $this->isAssignedToEvaluation($request, $evaluation)) {
+            return $this->notAssignedResponse();
+        }
+
         $validated = $request->validate([
             'student_id' => 'required|integer|exists:tenant.students,id',
             'scheduled_at' => 'required|date|after:now',
@@ -165,6 +190,10 @@ class AbsenceManagementController extends Controller
      */
     public function cancelReplacement(Request $request, ReplacementEvaluation $replacement): JsonResponse
     {
+        if (! $this->isAssignedToEvaluation($request, $replacement->originalEvaluation)) {
+            return $this->notAssignedResponse();
+        }
+
         if (! $replacement->isScheduled()) {
             return response()->json([
                 'message' => 'Cette évaluation ne peut plus être annulée.',
@@ -187,6 +216,10 @@ class AbsenceManagementController extends Controller
      */
     public function recordReplacementGrade(Request $request, ReplacementEvaluation $replacement): JsonResponse
     {
+        if (! $this->isAssignedToEvaluation($request, $replacement->originalEvaluation)) {
+            return $this->notAssignedResponse();
+        }
+
         if (! $replacement->isScheduled()) {
             return response()->json([
                 'message' => 'Cette évaluation n\'est pas en attente de note.',
@@ -229,5 +262,27 @@ class AbsenceManagementController extends Controller
             'message' => 'Note de remplacement enregistrée.',
             'data' => new GradeResource($grade),
         ]);
+    }
+
+    /**
+     * Whether the authenticated teacher is actively assigned to the evaluation's module.
+     */
+    private function isAssignedToEvaluation(Request $request, ?ModuleEvaluationConfig $evaluation): bool
+    {
+        if (! $evaluation) {
+            return false;
+        }
+
+        return TeacherModuleAssignment::byTeacher($request->user()->id)
+            ->byModule($evaluation->module_id)
+            ->active()
+            ->exists();
+    }
+
+    private function notAssignedResponse(): JsonResponse
+    {
+        return response()->json([
+            'message' => "Vous n'êtes pas affecté à ce module.",
+        ], 403);
     }
 }

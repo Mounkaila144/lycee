@@ -28,6 +28,22 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
         ]);
+
+        // Tenancy (then tenant auth) must run BEFORE implicit route model binding,
+        // otherwise {student}, {exam_session}… are resolved on the tenant connection
+        // before a database is selected ("No database selected").
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            prepend: \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
+        );
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            prepend: \Stancl\Tenancy\Middleware\InitializeTenancyByRequestData::class,
+        );
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            prepend: \App\Http\Middleware\TenantSanctumAuth::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // Force JSON responses for API routes

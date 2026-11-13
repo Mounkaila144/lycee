@@ -13,8 +13,10 @@ class ExamManagementController extends Controller
 {
     public function __construct(private ExamManagementService $managementService) {}
 
-    public function updateMaterials(Request $request, ExamSession $session): JsonResponse
+    public function updateMaterials(Request $request, int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
+
         $validated = $request->validate([
             'materials' => 'required|array',
         ]);
@@ -24,8 +26,10 @@ class ExamManagementController extends Controller
         return response()->json($session);
     }
 
-    public function updateInstructions(Request $request, ExamSession $session): JsonResponse
+    public function updateInstructions(Request $request, int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
+
         $validated = $request->validate([
             'instructions' => 'required|string',
         ]);
@@ -35,11 +39,13 @@ class ExamManagementController extends Controller
         return response()->json($session);
     }
 
-    public function assignStudents(Request $request, ExamSession $session): JsonResponse
+    public function assignStudents(Request $request, int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
+
         $validated = $request->validate([
             'student_ids' => 'required|array',
-            'student_ids.*' => 'exists:students,id',
+            'student_ids.*' => 'exists:tenant.students,id',
         ]);
 
         $sheets = $this->managementService->assignStudents($session, $validated['student_ids']);
@@ -47,17 +53,20 @@ class ExamManagementController extends Controller
         return response()->json($sheets, 201);
     }
 
-    public function autoAssign(ExamSession $session): JsonResponse
+    public function autoAssign(int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
         $sheets = $this->managementService->autoAssignStudentsFromModule($session);
 
         return response()->json($sheets, 201);
     }
 
-    public function reassignStudent(Request $request, ExamAttendanceSheet $sheet): JsonResponse
+    public function reassignStudent(Request $request, int $sheet): JsonResponse
     {
+        $sheet = ExamAttendanceSheet::query()->findOrFail($sheet);
+
         $validated = $request->validate([
-            'room_assignment_id' => 'required|exists:exam_room_assignments,id',
+            'room_assignment_id' => 'required|exists:tenant.exam_room_assignments,id',
             'seat_number' => 'nullable|string',
         ]);
 
@@ -70,22 +79,25 @@ class ExamManagementController extends Controller
         return response()->json($sheet);
     }
 
-    public function removeStudent(ExamAttendanceSheet $sheet): JsonResponse
+    public function removeStudent(int $sheet): JsonResponse
     {
+        $sheet = ExamAttendanceSheet::query()->findOrFail($sheet);
         $this->managementService->removeStudent($sheet);
 
         return response()->json(null, 204);
     }
 
-    public function eligibleStudents(ExamSession $session): JsonResponse
+    public function eligibleStudents(int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
         $students = $this->managementService->getEligibleStudents($session);
 
         return response()->json($students);
     }
 
-    public function preparationChecklist(ExamSession $session): JsonResponse
+    public function preparationChecklist(int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
         $checklist = $this->managementService->generatePreparationChecklist($session);
 
         return response()->json($checklist);

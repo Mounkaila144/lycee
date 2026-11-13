@@ -2,13 +2,15 @@
 
 namespace Modules\StructureAcademique\Entities;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Modules\StructureAcademique\Database\Factories\ModuleEvaluationConfigFactory;
 
 class ModuleEvaluationConfig extends Model
 {
-    use SoftDeletes;
+    use HasFactory, SoftDeletes;
 
     protected $connection = 'tenant';
 
@@ -20,6 +22,11 @@ class ModuleEvaluationConfig extends Model
     public function resolveRouteBinding($value, $field = null): ?self
     {
         return static::on('tenant')->where($field ?? $this->getRouteKeyName(), $value)->first();
+    }
+
+    protected static function newFactory(): ModuleEvaluationConfigFactory
+    {
+        return ModuleEvaluationConfigFactory::new();
     }
 
     protected $fillable = [

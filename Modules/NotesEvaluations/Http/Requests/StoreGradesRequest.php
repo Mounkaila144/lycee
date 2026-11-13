@@ -15,8 +15,8 @@ class StoreGradesRequest extends FormRequest
     {
         return [
             'grades' => ['required', 'array', 'min:1', 'max:500'],
-            'grades.*.student_id' => ['required', 'integer', 'exists:students,id'],
-            'grades.*.evaluation_id' => ['required', 'integer', 'exists:module_evaluation_configs,id'],
+            'grades.*.student_id' => ['required', 'integer', 'exists:tenant.students,id'],
+            'grades.*.evaluation_id' => ['required', 'integer', 'exists:tenant.module_evaluation_configs,id'],
             'grades.*.score' => ['nullable', 'numeric', 'min:0', 'max:20'],
             'grades.*.is_absent' => ['boolean'],
             'grades.*.comment' => ['nullable', 'string', 'max:200'],

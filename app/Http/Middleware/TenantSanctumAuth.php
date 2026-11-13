@@ -15,7 +15,7 @@ class TenantSanctumAuth
         // Récupérer le token du header Authorization
         $token = $request->bearerToken();
 
-        if (! $token) {
+        if (! $token || ! str_contains($token, '|')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthenticated.',
@@ -57,8 +57,13 @@ class TenantSanctumAuth
 
         // Définir l'utilisateur authentifié sur la requête ET sur le guard tenant,
         // pour que les middlewares Spatie (role/permission) puissent le retrouver via Auth::guard('tenant').
+        if (method_exists($user, 'withAccessToken')) {
+            $user->withAccessToken($accessToken);
+        }
+
         $request->setUserResolver(fn () => $user);
         Auth::guard($guard)->setUser($user);
+        Auth::shouldUse($guard);
 
         // Mettre à jour last_used_at
         $accessToken->forceFill(['last_used_at' => now()])->save();

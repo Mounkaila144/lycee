@@ -2,13 +2,15 @@
 
 namespace Tests\Feature\StructureAcademique;
 
+use Modules\Enrollment\Entities\ClassEnrollment;
+use Modules\Enrollment\Entities\Student;
 use Modules\StructureAcademique\Database\Seeders\CycleAndLevelSeeder;
 use Modules\StructureAcademique\Database\Seeders\SeriesSeeder;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Classe;
-use Modules\StructureAcademique\Entities\Cycle;
 use Modules\StructureAcademique\Entities\Level;
 use Modules\StructureAcademique\Entities\Series;
+use Modules\UsersGuard\Entities\TenantUser;
 use Modules\UsersGuard\Entities\User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -30,9 +32,13 @@ class ClasseApiTest extends TestCase
         parent::setUp();
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
+        // Rôles créés avant toute lecture : la transaction tenant doit les voir.
+        $this->seedRolesAndPermissions();
 
         $this->user = User::factory()->create();
-        $this->token = $this->user->createToken('test-token')->plainTextToken;
+        $tenantUser = TenantUser::findOrFail($this->user->id);
+        $this->assignRole($tenantUser, 'Administrator');
+        $this->token = $tenantUser->createToken('test-token')->plainTextToken;
 
         // Seed base data
         (new CycleAndLevelSeeder)->run();
@@ -45,6 +51,14 @@ class ClasseApiTest extends TestCase
     {
         $this->tearDownTenancy();
         parent::tearDown();
+    }
+
+    private function createTeacher(): User
+    {
+        $teacher = User::factory()->create();
+        $this->assignRole(TenantUser::findOrFail($teacher->id), 'Professeur');
+
+        return $teacher;
     }
 
     private function authGetJson(string $uri): \Illuminate\Testing\TestResponse
@@ -272,6 +286,77 @@ class ClasseApiTest extends TestCase
         ]);
     }
 
+    #[Test]
+    public function it_can_list_active_students_for_a_class(): void
+    {
+        $level6e = Level::on('tenant')->where('code', '6E')->first();
+        $classe = Classe::on('tenant')->create([
+            'academic_year_id' => $this->activeYear->id,
+            'level_id' => $level6e->id,
+            'section' => 'A',
+            'name' => '6ème A',
+        ]);
+        $otherClasse = Classe::on('tenant')->create([
+            'academic_year_id' => $this->activeYear->id,
+            'level_id' => $level6e->id,
+            'section' => 'B',
+            'name' => '6ème B',
+        ]);
+
+        $firstStudent = Student::factory()->withMatricule('MAT-001')->create([
+            'firstname' => 'Aicha',
+            'lastname' => 'Abdou',
+        ]);
+        $secondStudent = Student::factory()->withMatricule('MAT-002')->create([
+            'firstname' => 'Moussa',
+            'lastname' => 'Garba',
+        ]);
+        $otherClassStudent = Student::factory()->withMatricule('MAT-003')->create();
+        $finishedStudent = Student::factory()->withMatricule('MAT-004')->create();
+
+        ClassEnrollment::on('tenant')->create([
+            'student_id' => $firstStudent->id,
+            'classe_id' => $classe->id,
+            'academic_year_id' => $this->activeYear->id,
+            'enrolled_at' => '2025-10-01',
+            'assignment_type' => 'Nouvelle inscription',
+            'status' => 'Actif',
+        ]);
+        ClassEnrollment::on('tenant')->create([
+            'student_id' => $secondStudent->id,
+            'classe_id' => $classe->id,
+            'academic_year_id' => $this->activeYear->id,
+            'enrolled_at' => '2025-10-01',
+            'assignment_type' => 'Nouvelle inscription',
+            'status' => 'Actif',
+        ]);
+        ClassEnrollment::on('tenant')->create([
+            'student_id' => $otherClassStudent->id,
+            'classe_id' => $otherClasse->id,
+            'academic_year_id' => $this->activeYear->id,
+            'enrolled_at' => '2025-10-01',
+            'assignment_type' => 'Nouvelle inscription',
+            'status' => 'Actif',
+        ]);
+        ClassEnrollment::on('tenant')->create([
+            'student_id' => $finishedStudent->id,
+            'classe_id' => $classe->id,
+            'academic_year_id' => $this->activeYear->id,
+            'enrolled_at' => '2025-10-01',
+            'assignment_type' => 'Nouvelle inscription',
+            'status' => 'Terminé',
+        ]);
+
+        $response = $this->authGetJson("/api/admin/classes/{$classe->id}/students");
+
+        $response->assertOk();
+        $response->assertJsonCount(2, 'data');
+        $response->assertJsonPath('data.0.matricule', 'MAT-001');
+        $response->assertJsonPath('data.0.class_enrollment.classe_id', $classe->id);
+        $response->assertJsonMissing(['matricule' => 'MAT-003']);
+        $response->assertJsonMissing(['matricule' => 'MAT-004']);
+    }
+
     // =============================================
     // Show
     // =============================================
@@ -339,7 +424,7 @@ class ClasseApiTest extends TestCase
     #[Test]
     public function it_can_assign_head_teacher(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
         $classe = Classe::on('tenant')->create([
             'academic_year_id' => $this->activeYear->id,

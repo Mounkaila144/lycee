@@ -86,6 +86,11 @@ class ConfirmImportRequest extends FormRequest
                 'string',
                 'max:255',
             ],
+            'rows.*.quartier' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
             'rows.*.lieu_naissance' => [
                 'nullable',
                 'string',

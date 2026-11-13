@@ -13,6 +13,8 @@ class AbsenceJustification extends Model
 
     protected $connection = 'tenant';
 
+    protected $table = 'attendance_justifications';
+
     protected $fillable = [
         'student_id',
         'absence_date_from',

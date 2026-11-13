@@ -20,6 +20,16 @@ use Modules\Finance\Services\PaymentService;
  */
 class PaymentController extends Controller
 {
+    /**
+     * Columns of the recording user exposed in payment payloads (no tokens / secrets).
+     */
+    private const RECORDED_BY_COLUMNS = 'id,username,firstname,lastname';
+
+    /**
+     * @var list<string>
+     */
+    private const SORTABLE_COLUMNS = ['payment_date', 'amount', 'receipt_number', 'created_at', 'id'];
+
     public function __construct(
         private PaymentService $paymentService,
         private BillingService $billingService
@@ -31,7 +41,7 @@ class PaymentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Payment::on('tenant')
-            ->with(['invoice', 'student', 'recordedBy']);
+            ->with(['invoice', 'student', 'recordedBy:'.self::RECORDED_BY_COLUMNS]);
 
         // Filters
         if ($invoiceId = $request->input('invoice_id')) {
@@ -51,15 +61,29 @@ class PaymentController extends Controller
             $query->dateRange(Carbon::parse($startDate), Carbon::parse($endDate));
         }
 
-        // Search by receipt number
+        // Search by receipt / reference number, or by student matricule / name
         if ($search = $request->input('search')) {
-            $query->where('receipt_number', 'like', "%{$search}%");
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('receipt_number', 'like', "%{$search}%")
+                    ->orWhere('reference_number', 'like', "%{$search}%")
+                    ->orWhereHas('student', function ($studentQuery) use ($search) {
+                        $studentQuery->where('matricule', 'like', "%{$search}%")
+                            ->orWhere('firstname', 'like', "%{$search}%")
+                            ->orWhere('lastname', 'like', "%{$search}%");
+                    });
+            });
         }
 
-        // Sort
-        $sortBy = $request->input('sort_by', 'payment_date');
-        $sortOrder = $request->input('sort_order', 'desc');
-        $query->orderBy($sortBy, $sortOrder);
+        if ($request->boolean('mine')) {
+            $query->where('recorded_by', $request->user()?->id);
+        }
+
+        // Sort (whitelist to avoid SQL errors on unknown columns)
+        $sortBy = in_array($request->input('sort_by'), self::SORTABLE_COLUMNS, true)
+            ? $request->input('sort_by')
+            : 'payment_date';
+        $sortOrder = strtolower((string) $request->input('sort_order')) === 'asc' ? 'asc' : 'desc';
+        $query->orderBy($sortBy, $sortOrder)->orderBy('id', $sortOrder);
 
         $perPage = $request->input('per_page', 15);
         $payments = $query->paginate($perPage);
@@ -160,7 +184,7 @@ class PaymentController extends Controller
     public function show(int $id): JsonResponse
     {
         $payment = Payment::on('tenant')
-            ->with(['invoice.items', 'student', 'recordedBy'])
+            ->with(['invoice.items', 'student', 'recordedBy:'.self::RECORDED_BY_COLUMNS])
             ->findOrFail($id);
 
         return response()->json(['data' => $payment]);
@@ -172,7 +196,7 @@ class PaymentController extends Controller
     public function getReceipt(int $id): JsonResponse
     {
         $payment = Payment::on('tenant')
-            ->with(['invoice', 'student', 'recordedBy'])
+            ->with(['invoice', 'student', 'recordedBy:'.self::RECORDED_BY_COLUMNS])
             ->findOrFail($id);
 
         $receiptData = $this->paymentService->generateReceiptData($payment);
@@ -306,7 +330,7 @@ class PaymentController extends Controller
         }
 
         $discount->update([
-            'approved_by' => auth()->id(),
+            'approved_by' => auth('tenant')->id() ?? auth()->id(),
             'approved_at' => now(),
         ]);
 

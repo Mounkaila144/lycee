@@ -263,7 +263,7 @@ class BillingService
             'reason' => $options['reason'] ?? null,
             'valid_from' => $options['valid_from'] ?? now(),
             'valid_until' => $options['valid_until'] ?? null,
-            'approved_by' => ! $needsApproval ? Auth::id() : null,
+            'approved_by' => ! $needsApproval ? (Auth::guard('tenant')->id() ?? Auth::id()) : null,
             'approved_at' => ! $needsApproval ? now() : null,
         ]);
 

@@ -14,12 +14,14 @@ class ExamSupervisionController extends Controller
 {
     public function __construct(private ExamSupervisionService $supervisionService) {}
 
-    public function assignSupervisors(Request $request, ExamSession $session): JsonResponse
+    public function assignSupervisors(Request $request, int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
+
         $validated = $request->validate([
             'supervisors' => 'required|array',
-            'supervisors.*.teacher_id' => 'required|exists:teachers,id',
-            'supervisors.*.room_assignment_id' => 'nullable|exists:exam_room_assignments,id',
+            'supervisors.*.teacher_id' => 'required|exists:tenant.users,id',
+            'supervisors.*.room_assignment_id' => 'nullable|exists:tenant.exam_room_assignments,id',
             'supervisors.*.role' => 'nullable|in:principal,assistant,reserve',
         ]);
 
@@ -28,17 +30,20 @@ class ExamSupervisionController extends Controller
         return response()->json($supervisors, 201);
     }
 
-    public function markPresent(ExamSupervisor $supervisor): JsonResponse
+    public function markPresent(int $supervisor): JsonResponse
     {
+        $supervisor = ExamSupervisor::query()->findOrFail($supervisor);
         $supervisor = $this->supervisionService->markSupervisorPresent($supervisor);
 
         return response()->json($supervisor);
     }
 
-    public function replaceSupervisor(Request $request, ExamSupervisor $supervisor): JsonResponse
+    public function replaceSupervisor(Request $request, int $supervisor): JsonResponse
     {
+        $supervisor = ExamSupervisor::query()->findOrFail($supervisor);
+
         $validated = $request->validate([
-            'replacement_teacher_id' => 'required|exists:teachers,id',
+            'replacement_teacher_id' => 'required|exists:tenant.users,id',
         ]);
 
         $replacement = $this->supervisionService->replaceSupervisor($supervisor, $validated['replacement_teacher_id']);
@@ -57,8 +62,10 @@ class ExamSupervisionController extends Controller
         return response()->json($schedule);
     }
 
-    public function recordAttendance(Request $request, ExamAttendanceSheet $sheet): JsonResponse
+    public function recordAttendance(Request $request, int $sheet): JsonResponse
     {
+        $sheet = ExamAttendanceSheet::query()->findOrFail($sheet);
+
         $validated = $request->validate([
             'status' => 'required|in:present,absent,late,excluded',
             'notes' => 'nullable|string',
@@ -69,22 +76,25 @@ class ExamSupervisionController extends Controller
         return response()->json($sheet);
     }
 
-    public function recordSubmission(ExamAttendanceSheet $sheet): JsonResponse
+    public function recordSubmission(int $sheet): JsonResponse
     {
+        $sheet = ExamAttendanceSheet::query()->findOrFail($sheet);
         $sheet = $this->supervisionService->recordSubmission($sheet);
 
         return response()->json($sheet);
     }
 
-    public function verifySheet(ExamAttendanceSheet $sheet): JsonResponse
+    public function verifySheet(Request $request, int $sheet): JsonResponse
     {
-        $sheet = $this->supervisionService->verifyAttendanceSheet($sheet, auth()->id());
+        $sheet = ExamAttendanceSheet::query()->findOrFail($sheet);
+        $sheet = $this->supervisionService->verifyAttendanceSheet($sheet, (int) $request->user()->id);
 
         return response()->json($sheet);
     }
 
-    public function attendanceStats(ExamSession $session): JsonResponse
+    public function attendanceStats(int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
         $stats = $this->supervisionService->getAttendanceStatistics($session);
 
         return response()->json($stats);

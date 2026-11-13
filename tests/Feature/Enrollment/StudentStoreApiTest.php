@@ -76,7 +76,7 @@ class StudentStoreApiTest extends TestCase
                 'message',
                 'data' => ['id', 'firstname', 'lastname', 'birthdate', 'sex', 'matricule', 'status'],
             ])
-            ->assertJsonPath('data.matricule', null)
+            ->assertJsonPath('data.matricule', fn (?string $matricule) => (bool) preg_match('/^\d{4}-\d{4}$/', (string) $matricule))
             ->assertJsonPath('data.status', 'Actif')
             ->assertJsonPath('data.nationality', 'Nigérienne')
             ->assertJsonPath('data.city', 'Niamey');
@@ -84,7 +84,6 @@ class StudentStoreApiTest extends TestCase
         $this->assertDatabaseHas('students', [
             'firstname' => 'Aïssa',
             'lastname' => 'Maïga',
-            'matricule' => null,
             'status' => 'Actif',
         ], 'tenant');
     }

@@ -28,10 +28,11 @@ class EnrollmentValidationController extends Controller
             ->when($request->academic_year_id, fn ($q, $yearId) => $q->where('academic_year_id', $yearId))
             ->when($request->programme_id, fn ($q, $programId) => $q->where('programme_id', $programId))
             ->when($request->level, fn ($q, $level) => $q->where('level', $level))
-            ->when($request->search, fn ($q, $search) => $q->whereHas('student', fn ($sq) => $sq->where('firstname', 'like', "%{$search}%")
+            ->when($request->search, fn ($q, $search) => $q->whereHas('student', fn ($sq) => $sq->where(fn ($nested) => $nested
+                ->where('firstname', 'like', "%{$search}%")
                 ->orWhere('lastname', 'like', "%{$search}%")
                 ->orWhere('matricule', 'like', "%{$search}%")
-            ))
+            )))
             ->with(['student', 'programme', 'academicYear', 'semester', 'moduleEnrollments'])
             ->latest()
             ->paginate($request->per_page ?? 15);
@@ -122,7 +123,7 @@ class EnrollmentValidationController extends Controller
             DB::connection('tenant')->transaction(function () use ($enrollment, $request) {
                 $notes = $enrollment->notes;
                 if ($request->validation_notes) {
-                    $notes = ($notes ? $notes . "\n\n" : '') . "[Validation] " . $request->validation_notes;
+                    $notes = ($notes ? $notes."\n\n" : '').'[Validation] '.$request->validation_notes;
                 }
 
                 $enrollment->update([
@@ -163,7 +164,7 @@ class EnrollmentValidationController extends Controller
 
         try {
             $notes = $enrollment->notes;
-            $notes = ($notes ? $notes . "\n\n" : '') . "[Rejet] " . $request->rejection_reason;
+            $notes = ($notes ? $notes."\n\n" : '').'[Rejet] '.$request->rejection_reason;
 
             $enrollment->update([
                 'status' => 'Rejeté',

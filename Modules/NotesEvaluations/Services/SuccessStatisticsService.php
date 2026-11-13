@@ -4,6 +4,7 @@ namespace Modules\NotesEvaluations\Services;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Modules\NotesEvaluations\Entities\ModuleGrade;
 use Modules\NotesEvaluations\Entities\SemesterResult;
 
@@ -134,6 +135,10 @@ class SuccessStatisticsService
      */
     public function getProgrammeStatistics(int $semesterId): Collection
     {
+        if (! Schema::connection('tenant')->hasColumn('students', 'programme_id')) {
+            return collect();
+        }
+
         return DB::connection('tenant')
             ->table('semester_results')
             ->join('students', 'semester_results.student_id', '=', 'students.id')
@@ -141,7 +146,7 @@ class SuccessStatisticsService
             ->where('semester_results.semester_id', $semesterId)
             ->select(
                 'programmes.id as programme_id',
-                'programmes.name as programme_name',
+                'programmes.libelle as programme_name',
                 'programmes.code as programme_code',
                 DB::raw('COUNT(*) as total'),
                 DB::raw('AVG(semester_results.average) as avg_average'),
@@ -151,7 +156,7 @@ class SuccessStatisticsService
                 DB::raw('AVG(semester_results.acquired_credits) as avg_credits'),
                 DB::raw('AVG(semester_results.total_credits) as total_credits')
             )
-            ->groupBy('programmes.id', 'programmes.name', 'programmes.code')
+            ->groupBy('programmes.id', 'programmes.libelle', 'programmes.code')
             ->get()
             ->map(function ($row) {
                 return [
@@ -249,14 +254,13 @@ class SuccessStatisticsService
             ->select(
                 'semesters.id as semester_id',
                 'semesters.name as semester_name',
-                'semesters.order as semester_order',
                 DB::raw('COUNT(*) as total'),
                 DB::raw('AVG(semester_results.average) as avg_average'),
                 DB::raw('SUM(CASE WHEN semester_results.final_status IN ("admitted", "admitted_with_debts") THEN 1 ELSE 0 END) as admitted'),
                 DB::raw('AVG(semester_results.acquired_credits) as avg_credits')
             )
-            ->groupBy('semesters.id', 'semesters.name', 'semesters.order')
-            ->orderBy('semesters.order')
+            ->groupBy('semesters.id', 'semesters.name')
+            ->orderBy('semesters.id')
             ->get()
             ->map(function ($row) {
                 return [

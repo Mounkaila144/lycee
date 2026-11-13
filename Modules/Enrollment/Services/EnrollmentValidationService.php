@@ -8,6 +8,7 @@ use Modules\Enrollment\Entities\PedagogicalEnrollment;
 use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Entities\StudentModuleEnrollment;
 use Modules\StructureAcademique\Entities\Module;
+use Modules\UsersGuard\Entities\TenantUser;
 use Modules\UsersGuard\Entities\User;
 
 class EnrollmentValidationService
@@ -73,7 +74,7 @@ class EnrollmentValidationService
     /**
      * Validate a pedagogical enrollment
      */
-    public function validateEnrollment(PedagogicalEnrollment $enrollment, User $validator): PedagogicalEnrollment
+    public function validateEnrollment(PedagogicalEnrollment $enrollment, User|TenantUser $validator): PedagogicalEnrollment
     {
         if (! $enrollment->canBeValidated()) {
             throw new \Exception("Enrollment cannot be validated in current status: {$enrollment->status}");
@@ -108,7 +109,7 @@ class EnrollmentValidationService
     /**
      * Reject a pedagogical enrollment
      */
-    public function rejectEnrollment(PedagogicalEnrollment $enrollment, User $validator, string $reason): PedagogicalEnrollment
+    public function rejectEnrollment(PedagogicalEnrollment $enrollment, User|TenantUser $validator, string $reason): PedagogicalEnrollment
     {
         if (! $enrollment->canBeRejected()) {
             throw new \Exception("Enrollment cannot be rejected in current status: {$enrollment->status}");
@@ -127,7 +128,7 @@ class EnrollmentValidationService
     /**
      * Batch validate multiple enrollments
      */
-    public function batchValidate(array $enrollmentIds, User $validator): array
+    public function batchValidate(array $enrollmentIds, User|TenantUser $validator): array
     {
         $results = [
             'validated' => [],

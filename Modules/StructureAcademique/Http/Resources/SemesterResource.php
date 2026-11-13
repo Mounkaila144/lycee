@@ -18,6 +18,8 @@ class SemesterResource extends JsonResource
             'start_date' => $this->start_date?->format('Y-m-d'),
             'end_date' => $this->end_date?->format('Y-m-d'),
             'is_active' => $this->is_active,
+            'is_closed' => $this->closed_at !== null,
+            'closed_at' => $this->closed_at?->toIso8601String(),
 
             // Métadonnées
             'is_current' => $this->start_date && $this->end_date

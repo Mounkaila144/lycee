@@ -56,7 +56,7 @@ class AuthLoginPayloadTest extends TestCase
     }
 
     #[Test]
-    public function professeur_login_returns_teacher_home_route(): void
+    public function professeur_login_returns_dashboard_home_route(): void
     {
         $user = TenantUser::factory()->create([
             'application' => 'admin',
@@ -67,21 +67,21 @@ class AuthLoginPayloadTest extends TestCase
         $payload = $this->loginPayload($user);
 
         $this->assertSame('Professeur', $payload['primary_role']);
-        $this->assertSame('/admin/teacher/home', $payload['home_route']);
+        $this->assertSame('/admin/dashboard', $payload['home_route']);
     }
 
     #[Test]
-    public function etudiant_login_returns_student_home_route(): void
+    public function eleve_login_returns_student_home_route(): void
     {
         $user = TenantUser::factory()->create([
             'application' => 'admin',
             'password' => bcrypt('password'),
         ]);
-        $this->assignRole($user, 'Étudiant');
+        $this->assignRole($user, 'Élève');
 
         $payload = $this->loginPayload($user);
 
-        $this->assertSame('Étudiant', $payload['primary_role']);
+        $this->assertSame('Élève', $payload['primary_role']);
         $this->assertSame('/admin/student/home', $payload['home_route']);
     }
 
@@ -145,7 +145,7 @@ class AuthLoginPayloadTest extends TestCase
         $payload = $this->loginPayload($user);
 
         $this->assertSame('Professeur', $payload['primary_role']);
-        $this->assertSame('/admin/teacher/home', $payload['home_route']);
+        $this->assertSame('/admin/dashboard', $payload['home_route']);
     }
 
     #[Test]

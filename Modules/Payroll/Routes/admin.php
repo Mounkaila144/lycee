@@ -32,7 +32,7 @@ Route::prefix('admin/payroll')->middleware(['tenant', 'tenant.auth', 'role:Admin
     Route::post('advances/{id}/disburse', [PayrollComponentController::class, 'disburseAdvance']);
 
     // Epic 3: Payroll Processing (Stories 10-13)
-    Route::apiResource('payroll-periods', PayrollController::class);
+    Route::apiResource('payroll-periods', PayrollController::class)->except(['update']);
     Route::post('payroll-periods/{id}/calculate', [PayrollController::class, 'calculate']);
     Route::post('payroll-periods/{id}/validate', [PayrollController::class, 'validate']);
     Route::post('payroll-periods/{id}/generate-payslips', [PayrollController::class, 'generatePayslips']);

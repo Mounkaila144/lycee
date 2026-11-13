@@ -32,8 +32,15 @@ class CollectionService
             ];
         }
 
-        $reminderSchedule = config('finance.collection.reminder_schedule', []);
+        // Étape la plus avancée d'abord : une facture très en retard reçoit
+        // directement le niveau de relance correspondant (une seule relance
+        // par facture et par exécution), même si la génération n'a pas été
+        // lancée le jour exact de l'échéance + N jours.
+        $reminderSchedule = collect(config('finance.collection.reminder_schedule', []))
+            ->sortByDesc('days_after_due')
+            ->values();
         $reminders = [];
+        $handledInvoiceIds = [];
 
         foreach ($reminderSchedule as $config) {
             $daysAfterDue = $config['days_after_due'];
@@ -45,14 +52,17 @@ class CollectionService
             $invoices = Invoice::on('tenant')
                 ->with(['student', 'reminders'])
                 ->whereIn('status', ['pending', 'partial', 'overdue'])
-                ->whereDate('due_date', $targetDate)
+                ->whereDate('due_date', '<=', $targetDate)
+                ->whereNotIn('id', $handledInvoiceIds)
                 ->get();
 
             foreach ($invoices as $invoice) {
+                $handledInvoiceIds[] = $invoice->id;
+
                 // Check if this reminder type was already sent
-                $alreadySent = $invoice->reminders()
+                $alreadySent = $invoice->reminders
                     ->where('reminder_type', $reminderType)
-                    ->exists();
+                    ->isNotEmpty();
 
                 if ($alreadySent) {
                     continue;
@@ -65,7 +75,7 @@ class CollectionService
                     'reminder_date' => now(),
                     'reminder_type' => $reminderType,
                     'status' => 'pending',
-                    'send_methods' => $config['method'] === 'email_sms' ? ['email', 'sms'] : ['email'],
+                    'send_methods' => ($config['method'] ?? 'email') === 'email_sms' ? ['email', 'sms'] : ['email'],
                 ]);
 
                 $reminders[] = $reminder;
@@ -147,7 +157,7 @@ class CollectionService
                 'reason' => $reason,
                 'blocked_at' => now(),
                 'is_active' => true,
-                'blocked_by' => Auth::id(),
+                'blocked_by' => (Auth::guard('tenant')->id() ?? Auth::id()),
                 'related_invoices' => $relatedInvoiceIds,
             ]);
         });
@@ -161,7 +171,7 @@ class CollectionService
         $block->update([
             'unblocked_at' => now(),
             'is_active' => false,
-            'unblocked_by' => Auth::id(),
+            'unblocked_by' => (Auth::guard('tenant')->id() ?? Auth::id()),
         ]);
 
         return $block->fresh();

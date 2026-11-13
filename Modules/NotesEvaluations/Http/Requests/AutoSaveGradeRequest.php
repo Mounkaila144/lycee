@@ -14,8 +14,8 @@ class AutoSaveGradeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'student_id' => ['required', 'integer', 'exists:students,id'],
-            'evaluation_id' => ['required', 'integer', 'exists:module_evaluation_configs,id'],
+            'student_id' => ['required', 'integer', 'exists:tenant.students,id'],
+            'evaluation_id' => ['required', 'integer', 'exists:tenant.module_evaluation_configs,id'],
             'score' => ['nullable', 'numeric', 'min:0', 'max:20'],
             'is_absent' => ['boolean'],
             'comment' => ['nullable', 'string', 'max:200'],

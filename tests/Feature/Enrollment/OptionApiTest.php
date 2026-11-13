@@ -9,7 +9,7 @@ use Modules\Enrollment\Entities\OptionChoice;
 use Modules\Enrollment\Entities\Student;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Programme;
-use Modules\UsersGuard\Entities\User;
+use Modules\UsersGuard\Entities\TenantUser;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Tests\Concerns\InteractsWithTenancy;
@@ -19,7 +19,7 @@ class OptionApiTest extends TestCase
 {
     use InteractsWithTenancy;
 
-    private User $user;
+    private TenantUser $user;
 
     private string $token;
 
@@ -33,7 +33,8 @@ class OptionApiTest extends TestCase
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
 
-        $this->user = User::factory()->create();
+        $this->user = TenantUser::factory()->create();
+        $this->assignRole($this->user, 'Administrator');
         $this->token = $this->user->createToken('test-token')->plainTextToken;
 
         $this->programme = Programme::factory()->create(['statut' => 'Actif']);

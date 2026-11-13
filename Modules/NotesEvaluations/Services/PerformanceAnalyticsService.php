@@ -259,14 +259,13 @@ class PerformanceAnalyticsService
             ->select(
                 'semesters.id as semester_id',
                 'semesters.name as semester_name',
-                'semesters.order as semester_order',
                 DB::raw('COUNT(*) as total'),
                 DB::raw('AVG(semester_results.average) as avg_average'),
                 DB::raw('SUM(CASE WHEN semester_results.final_status IN ("admitted", "admitted_with_debts") THEN 1 ELSE 0 END) as admitted'),
                 DB::raw('SUM(CASE WHEN semester_results.final_status = "deferred_final" THEN 1 ELSE 0 END) as deferred')
             )
-            ->groupBy('semesters.id', 'semesters.name', 'semesters.order')
-            ->orderBy('semesters.order')
+            ->groupBy('semesters.id', 'semesters.name')
+            ->orderBy('semesters.id')
             ->get()
             ->map(function ($row) {
                 return [

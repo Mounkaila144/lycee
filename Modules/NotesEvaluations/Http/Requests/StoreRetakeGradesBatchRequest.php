@@ -15,7 +15,7 @@ class StoreRetakeGradesBatchRequest extends FormRequest
     {
         return [
             'grades' => ['required', 'array', 'min:1'],
-            'grades.*.retake_enrollment_id' => ['required', 'integer', 'exists:retake_enrollments,id'],
+            'grades.*.retake_enrollment_id' => ['required', 'integer', 'exists:tenant.retake_enrollments,id'],
             'grades.*.score' => ['nullable', 'numeric', 'min:0', 'max:20'],
             'grades.*.is_absent' => ['nullable', 'boolean'],
             'grades.*.comment' => ['nullable', 'string', 'max:500'],

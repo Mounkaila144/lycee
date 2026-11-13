@@ -17,8 +17,10 @@ use Tests\TestCase;
  *   - 05 Recouvrement
  *   - 06 Blocage services (cross-module)
  *
- * RBAC : `role:Administrator|Manager|Comptable|Agent Comptable|Caissier` sur Finance.
- * Restrictions fines (refund, write-off réservés Comptable/Admin) à appliquer story par story.
+ * Le rôle « Agent Comptable » a été fusionné dans « Comptable » (cf. RolesAndPermissionsSeeder) :
+ * RBAC Finance = `role:Administrator|Manager|Comptable|Caissier`. Les accès attendus de
+ * l'ex-Agent Comptable sont donc vérifiés avec Comptable ; les refus restent vérifiés
+ * avec un éventuel rôle résiduel « Agent Comptable ».
  */
 class AgentComptableRoutesProtectionTest extends TestCase
 {
@@ -57,19 +59,19 @@ class AgentComptableRoutesProtectionTest extends TestCase
     }
 
     #[Test]
-    public function agent_comptable_can_access_finance_routes(): void
+    public function comptable_can_access_finance_routes(): void
     {
-        $token = $this->tokenFor('Agent Comptable');
+        $token = $this->tokenFor('Comptable');
 
         $response = $this->withToken($token)->getJson('/api/admin/finance/invoices');
 
-        $this->assertNotSame(403, $response->getStatusCode(), 'Agent Comptable doit accéder à Finance (Stories 01-05)');
+        $this->assertNotSame(403, $response->getStatusCode(), 'Comptable (ex-Agent Comptable) doit accéder à Finance (Stories 01-05)');
     }
 
     #[Test]
-    public function agent_comptable_can_access_students_endpoint(): void
+    public function comptable_can_access_students_endpoint(): void
     {
-        $token = $this->tokenFor('Agent Comptable');
+        $token = $this->tokenFor('Comptable');
 
         $this->withToken($token)
             ->getJson('/api/admin/students')

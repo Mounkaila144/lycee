@@ -3,8 +3,10 @@
 namespace Modules\Finance\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Modules\Enrollment\Entities\Student;
+use Modules\Finance\Entities\Invoice;
 use Modules\Finance\Entities\ParentOnlinePayment;
 use Modules\UsersGuard\Entities\TenantUser;
 use RuntimeException;
@@ -23,6 +25,8 @@ use RuntimeException;
  */
 class CinetPayService
 {
+    public function __construct(private PaymentService $paymentService) {}
+
     /**
      * Initie une transaction CinetPay pour un paiement parent.
      */
@@ -56,7 +60,7 @@ class CinetPayService
             'customer_surname' => $parent->firstname ?? '',
             'customer_phone_number' => $phone,
             'channels' => $method === 'mobile_money' ? 'MOBILE_MONEY' : 'CREDIT_CARD',
-            'return_url' => (string) config('services.cinetpay.return_url'),
+            'return_url' => $this->returnUrlFor($payment),
             'notify_url' => (string) config('services.cinetpay.notify_url'),
         ];
 
@@ -81,6 +85,18 @@ class CinetPayService
         ]);
 
         return $payment->fresh();
+    }
+
+    /**
+     * URL de retour CinetPay, complétée par l'identifiant du paiement local
+     * (la page de retour du portail Parent interroge son statut).
+     */
+    protected function returnUrlFor(ParentOnlinePayment $payment): string
+    {
+        $returnUrl = (string) config('services.cinetpay.return_url');
+        $separator = str_contains($returnUrl, '?') ? '&' : '?';
+
+        return $returnUrl.$separator.'payment_id='.$payment->id;
     }
 
     /**
@@ -156,6 +172,47 @@ class CinetPayService
             'notified_at' => now(),
         ]);
 
+        if ($status === 'success') {
+            $this->recordInvoicePayment($payment);
+        }
+
         return $payment->fresh();
+    }
+
+    /**
+     * Enregistre l'encaissement Finance (paiement « online ») correspondant à un
+     * paiement en ligne confirmé, afin de mettre à jour le solde de la facture.
+     */
+    protected function recordInvoicePayment(ParentOnlinePayment $onlinePayment): void
+    {
+        $invoice = Invoice::on('tenant')->find($onlinePayment->invoice_id);
+
+        if (! $invoice) {
+            Log::warning('CinetPay: facture introuvable pour un paiement en ligne confirmé.', [
+                'transaction_id' => $onlinePayment->transaction_id,
+                'invoice_id' => $onlinePayment->invoice_id,
+            ]);
+
+            return;
+        }
+
+        try {
+            $this->paymentService->recordPayment(
+                $invoice,
+                (float) $onlinePayment->amount,
+                'online',
+                now(),
+                [
+                    'reference_number' => $onlinePayment->transaction_id,
+                    'notes' => 'Paiement en ligne CinetPay ('.$onlinePayment->method.')',
+                ]
+            );
+        } catch (\Exception $exception) {
+            Log::warning('CinetPay: impossible d\'imputer le paiement en ligne sur la facture.', [
+                'transaction_id' => $onlinePayment->transaction_id,
+                'invoice_id' => $invoice->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 }

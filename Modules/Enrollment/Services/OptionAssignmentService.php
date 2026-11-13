@@ -11,6 +11,7 @@ use Modules\Enrollment\Entities\OptionChoice;
 use Modules\Enrollment\Entities\Student;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Programme;
+use Modules\UsersGuard\Entities\TenantUser;
 use Modules\UsersGuard\Entities\User;
 
 class OptionAssignmentService
@@ -113,7 +114,7 @@ class OptionAssignmentService
         Student $student,
         Option $option,
         AcademicYear $academicYear,
-        User $assignedBy,
+        User|TenantUser $assignedBy,
         ?string $notes = null,
         ?int $choiceRankObtained = null
     ): OptionAssignment {

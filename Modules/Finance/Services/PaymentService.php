@@ -58,7 +58,7 @@ class PaymentService
                 'reference_number' => $options['reference_number'] ?? null,
                 'receipt_number' => $this->generateReceiptNumber(),
                 'notes' => $options['notes'] ?? null,
-                'recorded_by' => Auth::id(),
+                'recorded_by' => (Auth::guard('tenant')->id() ?? Auth::id()),
             ]);
 
             // Update invoice paid amount and status
@@ -120,7 +120,7 @@ class PaymentService
                 'reference_number' => 'REFUND-'.$payment->receipt_number,
                 'receipt_number' => $this->generateReceiptNumber(),
                 'notes' => "Remboursement: {$reason}",
-                'recorded_by' => Auth::id(),
+                'recorded_by' => (Auth::guard('tenant')->id() ?? Auth::id()),
             ]);
 
             // Update invoice paid amount and status

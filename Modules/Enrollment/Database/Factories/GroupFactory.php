@@ -25,7 +25,7 @@ class GroupFactory extends Factory
             'program_id' => Programme::factory(),
             'level' => $level,
             'academic_year_id' => AcademicYear::factory(),
-            'semester_id' => Semester::factory(),
+            'semester_id' => null,
             'code' => strtoupper($this->faker->unique()->lexify('GRP-???-').$type.'-'.$this->faker->numerify('##')),
             'name' => 'Groupe '.$type.' '.$this->faker->numerify('#'),
             'type' => $type,

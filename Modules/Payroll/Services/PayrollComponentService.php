@@ -8,6 +8,7 @@ use Modules\Payroll\Entities\Employee;
 use Modules\Payroll\Entities\EmployeeAdvance;
 use Modules\Payroll\Entities\PayrollComponent;
 use Modules\Payroll\Entities\SalaryScale;
+use Modules\Payroll\Exceptions\PayrollException;
 
 /**
  * Epic 2: Éléments de Paie (Stories 05-09)
@@ -142,7 +143,7 @@ class PayrollComponentService
     {
         return DB::connection('tenant')->transaction(function () use ($advance, $userId, $notes) {
             if (! $advance->canBeApproved()) {
-                throw new \Exception('Cette avance ne peut pas être approuvée');
+                throw new PayrollException('Cette avance ne peut pas être approuvée');
             }
 
             $advance->approve($userId, $notes);
@@ -161,7 +162,7 @@ class PayrollComponentService
     ): EmployeeAdvance {
         return DB::connection('tenant')->transaction(function () use ($advance, $method, $reference) {
             if (! $advance->canBeDisbursed()) {
-                throw new \Exception('Cette avance ne peut pas être débloquée');
+                throw new PayrollException('Cette avance ne peut pas être débloquée');
             }
 
             $advance->disburse($method, $reference);
@@ -177,11 +178,11 @@ class PayrollComponentService
     {
         return DB::connection('tenant')->transaction(function () use ($advance, $amount) {
             if ($amount <= 0) {
-                throw new \Exception('Le montant du remboursement doit être positif');
+                throw new PayrollException('Le montant du remboursement doit être positif');
             }
 
             if ($amount > $advance->balance) {
-                throw new \Exception('Le montant du remboursement dépasse le solde restant');
+                throw new PayrollException('Le montant du remboursement dépasse le solde restant');
             }
 
             $advance->recordRepayment($amount);
@@ -217,16 +218,16 @@ class PayrollComponentService
     protected function validateGrades(array $grades): void
     {
         if (empty($grades)) {
-            throw new \Exception('La grille doit contenir au moins un échelon');
+            throw new PayrollException('La grille doit contenir au moins un échelon');
         }
 
         foreach ($grades as $grade) {
             if (! isset($grade['grade']) || ! isset($grade['min_salary']) || ! isset($grade['max_salary'])) {
-                throw new \Exception('Chaque échelon doit avoir: grade, min_salary, max_salary');
+                throw new PayrollException('Chaque échelon doit avoir: grade, min_salary, max_salary');
             }
 
             if ($grade['min_salary'] >= $grade['max_salary']) {
-                throw new \Exception("Le salaire minimum doit être inférieur au salaire maximum pour l'échelon {$grade['grade']}");
+                throw new PayrollException("Le salaire minimum doit être inférieur au salaire maximum pour l'échelon {$grade['grade']}");
             }
         }
     }
@@ -239,13 +240,13 @@ class PayrollComponentService
         $contract = $employee->getCurrentContract();
 
         if (! $contract) {
-            throw new \Exception('Aucun contrat actif trouvé pour cet employé');
+            throw new PayrollException('Aucun contrat actif trouvé pour cet employé');
         }
 
         // Check maximum advance amount (e.g., 3 months salary)
         $maxAdvance = $contract->base_salary * 3;
         if ($amount > $maxAdvance) {
-            throw new \Exception("Le montant maximum de l'avance est {$maxAdvance} (3 mois de salaire)");
+            throw new PayrollException("Le montant maximum de l'avance est {$maxAdvance} (3 mois de salaire)");
         }
 
         // Check total outstanding advances
@@ -253,7 +254,7 @@ class PayrollComponentService
         $maxOutstanding = $contract->base_salary * 5;
 
         if (($totalOutstanding + $amount) > $maxOutstanding) {
-            throw new \Exception("Le total des avances en cours ne peut pas dépasser {$maxOutstanding}");
+            throw new PayrollException("Le total des avances en cours ne peut pas dépasser {$maxOutstanding}");
         }
     }
 

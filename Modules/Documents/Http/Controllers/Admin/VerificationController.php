@@ -60,6 +60,7 @@ class VerificationController extends Controller
     {
         $filters = $request->only([
             'document_type',
+            'document_category',
             'student_id',
             'academic_year_id',
             'status',

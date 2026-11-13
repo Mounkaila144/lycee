@@ -111,7 +111,7 @@ class FinanceReportService
         ?string $paymentMethod = null
     ): array {
         $query = Payment::on('tenant')
-            ->with(['invoice.student', 'recordedBy'])
+            ->with(['invoice.student', 'recordedBy:id,username,firstname,lastname'])
             ->dateRange($startDate, $endDate)
             ->orderBy('payment_date')
             ->orderBy('id');
@@ -166,7 +166,7 @@ class FinanceReportService
         ];
 
         foreach ($overdueInvoices as $invoice) {
-            $daysOverdue = $invoice->due_date->diffInDays(now());
+            $daysOverdue = (int) $invoice->due_date->diffInDays(now());
             $balance = $invoice->balance;
 
             $category = match (true) {
@@ -242,7 +242,7 @@ class FinanceReportService
                         'paid_amount' => $invoice->paid_amount,
                         'balance' => $invoice->balance,
                         'status' => $invoice->status,
-                        'days_overdue' => $invoice->isOverdue() ? $invoice->due_date->diffInDays(now()) : 0,
+                        'days_overdue' => $invoice->isOverdue() ? (int) $invoice->due_date->diffInDays(now()) : 0,
                     ];
                 }),
             ];
@@ -290,7 +290,7 @@ class FinanceReportService
                 ->avg(DB::raw('amount'));
 
             $forecast[] = [
-                'month' => $monthStart->format('F Y'),
+                'month' => $monthStart->copy()->locale('fr')->translatedFormat('F Y'),
                 'expected_collections' => $expectedCollections,
                 'scheduled_payments' => $scheduledPayments,
                 'historical_average' => $historicalAvg ?? 0,
@@ -428,7 +428,7 @@ class FinanceReportService
                 ->sum('amount');
 
             $trends[] = [
-                'month' => $monthStart->format('M Y'),
+                'month' => $monthStart->copy()->locale('fr')->translatedFormat('M Y'),
                 'collected' => $monthlyCollected,
             ];
         }

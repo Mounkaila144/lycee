@@ -6,7 +6,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\StructureAcademique\Entities\AcademicPeriod;
-use Modules\StructureAcademique\Entities\Semester;
 use Modules\StructureAcademique\Http\Requests\StoreAcademicPeriodRequest;
 use Modules\StructureAcademique\Http\Requests\UpdateAcademicPeriodRequest;
 use Modules\StructureAcademique\Http\Resources\AcademicPeriodResource;

@@ -4,12 +4,12 @@ namespace Modules\Documents\Services;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
+use Modules\Attendance\Entities\AttendanceRecord;
 use Modules\Documents\Entities\Document;
 use Modules\Documents\Entities\DocumentRequest;
 use Modules\Documents\Entities\DocumentTemplate;
 use Modules\Enrollment\Entities\Student;
 use Modules\StructureAcademique\Entities\AcademicYear;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 /**
  * Service for Epic 3: Attestations (Stories 11-16)
@@ -35,9 +35,7 @@ class CertificateService
         AcademicYear $academicYear,
         ?DocumentRequest $request = null
     ): Document {
-        $template = DocumentTemplate::active()
-            ->ofType('certificate_enrollment')
-            ->first();
+        $template = DefaultDocumentTemplates::resolve('certificate_enrollment');
 
         if (! $template) {
             throw new \Exception('No active enrollment certificate template found');
@@ -56,7 +54,7 @@ class CertificateService
         $data = [
             'student_name' => $student->full_name,
             'student_matricule' => $student->matricule,
-            'student_birthdate' => $student->birthdate->format('d/m/Y'),
+            'student_birthdate' => $student->birthdate?->format('d/m/Y') ?? '',
             'student_birthplace' => $student->birthplace,
             'academic_year' => $academicYear->name,
             'programme_name' => $enrollmentDetails['programme_name'] ?? '',
@@ -88,9 +86,7 @@ class CertificateService
         AcademicYear $academicYear,
         ?DocumentRequest $request = null
     ): Document {
-        $template = DocumentTemplate::active()
-            ->ofType('certificate_status')
-            ->first();
+        $template = DefaultDocumentTemplates::resolve('certificate_status');
 
         if (! $template) {
             throw new \Exception('No active status certificate template found');
@@ -106,7 +102,7 @@ class CertificateService
         $data = [
             'student_name' => $student->full_name,
             'student_matricule' => $student->matricule,
-            'student_birthdate' => $student->birthdate->format('d/m/Y'),
+            'student_birthdate' => $student->birthdate?->format('d/m/Y') ?? '',
             'status' => $this->getStatusLabel($student->status),
             'academic_year' => $academicYear->name,
             'document_number' => $documentNumber,
@@ -136,9 +132,7 @@ class CertificateService
         array $achievementData,
         ?DocumentRequest $request = null
     ): Document {
-        $template = DocumentTemplate::active()
-            ->ofType('certificate_achievement')
-            ->first();
+        $template = DefaultDocumentTemplates::resolve('certificate_achievement');
 
         if (! $template) {
             throw new \Exception('No active achievement certificate template found');
@@ -183,9 +177,7 @@ class CertificateService
         AcademicYear $academicYear,
         ?DocumentRequest $request = null
     ): Document {
-        $template = DocumentTemplate::active()
-            ->ofType('certificate_attendance')
-            ->first();
+        $template = DefaultDocumentTemplates::resolve('certificate_attendance');
 
         if (! $template) {
             throw new \Exception('No active attendance certificate template found');
@@ -237,7 +229,7 @@ class CertificateService
         bool $urgent = false
     ): DocumentRequest {
         $requestDate = now();
-        $expectedDeliveryDate = $urgent ? $requestDate->copy()->addBusinessDays(2) : $requestDate->copy()->addBusinessDays(5);
+        $expectedDeliveryDate = $urgent ? $requestDate->copy()->addWeekdays(2) : $requestDate->copy()->addWeekdays(5);
 
         // Calculate fee based on certificate type and urgency
         $feeAmount = $this->calculateCertificateFee($certificateType, $quantity, $urgent);
@@ -274,14 +266,15 @@ class CertificateService
 
         // Get student and academic year
         $student = $request->student;
-        $academicYear = AcademicYear::where('is_active', true)->first();
+        $academicYear = AcademicYear::where('is_active', true)->firstOrFail();
 
         // Generate the appropriate certificate
         $document = match ($request->document_type) {
             'certificate_enrollment' => $this->generateEnrollmentCertificate($student, $academicYear, $request),
             'certificate_status' => $this->generateStatusCertificate($student, $academicYear, $request),
             'certificate_attendance' => $this->generateAttendanceCertificate($student, $academicYear, $request),
-            default => throw new \Exception('Unknown certificate type'),
+            'certificate_schooling' => $this->generateSchoolingCertificate($student, $academicYear, $request),
+            default => throw new \InvalidArgumentException('Type de document non générable automatiquement : '.$request->document_type),
         };
 
         // Mark request as completed
@@ -309,9 +302,7 @@ class CertificateService
         AcademicYear $academicYear,
         ?DocumentRequest $request = null
     ): Document {
-        $template = DocumentTemplate::active()
-            ->ofType('certificate_schooling')
-            ->first();
+        $template = DefaultDocumentTemplates::resolve('certificate_schooling');
 
         if (! $template) {
             throw new \Exception('No active schooling certificate template found');
@@ -330,9 +321,10 @@ class CertificateService
         $data = [
             'student_name' => $student->full_name,
             'student_matricule' => $student->matricule,
-            'student_birthdate' => $student->birthdate->format('d/m/Y'),
+            'student_birthdate' => $student->birthdate?->format('d/m/Y') ?? '',
             'schooling_years' => $schoolingHistory,
             'current_academic_year' => $academicYear->name,
+            'level' => $this->getEnrollmentDetails($student, $academicYear)['level'],
             'document_number' => $documentNumber,
             'issue_date' => now()->format('d/m/Y'),
             'purpose' => $request?->reason ?? 'À la demande de l\'intéressé(e)',
@@ -360,9 +352,7 @@ class CertificateService
         string $transferReason,
         AcademicYear $academicYear
     ): Document {
-        $template = DocumentTemplate::active()
-            ->ofType('certificate_transfer')
-            ->first();
+        $template = DefaultDocumentTemplates::resolve('certificate_transfer');
 
         if (! $template) {
             throw new \Exception('No active transfer certificate template found');
@@ -381,11 +371,12 @@ class CertificateService
         $data = [
             'student_name' => $student->full_name,
             'student_matricule' => $student->matricule,
-            'student_birthdate' => $student->birthdate->format('d/m/Y'),
+            'student_birthdate' => $student->birthdate?->format('d/m/Y') ?? '',
             'transfer_destination' => $transferDestination,
             'transfer_reason' => $transferReason,
             'academic_record' => $academicRecord,
             'current_academic_year' => $academicYear->name,
+            'level' => $this->getEnrollmentDetails($student, $academicYear)['level'],
             'document_number' => $documentNumber,
             'issue_date' => now()->format('d/m/Y'),
             'verification_code' => $verificationCode,
@@ -416,14 +407,15 @@ class CertificateService
         AcademicYear $academicYear,
         ?DocumentRequest $request
     ): Document {
-        // Render HTML
-        $html = $template->renderTemplate($data);
+        $qrCode = $this->verificationService->storeQrCode($verificationCode, $documentNumber);
+        $qrCodePath = $qrCode['path'];
 
-        // Generate PDF
+        $html = $template->renderTemplate($data + [
+            'school_name' => $this->getSchoolName(),
+            'qr_code_data_uri' => $qrCode['data_uri'],
+        ]);
+
         $pdfPath = $this->generatePdf($html, $documentNumber, $template);
-
-        // Generate QR code
-        $qrCodePath = $this->generateQrCode($verificationCode, $documentNumber);
 
         // Create document record
         $document = Document::create([
@@ -437,10 +429,13 @@ class CertificateService
             'verification_code' => $verificationCode,
             'qr_code_path' => $qrCodePath,
             'status' => 'issued',
-            'metadata' => [
+            'metadata' => array_filter([
                 'request_id' => $request?->id,
-            ],
-            'issued_by' => auth()->id(),
+                'purpose' => $data['purpose'] ?? null,
+                'transfer_destination' => $data['transfer_destination'] ?? null,
+                'transfer_reason' => $data['transfer_reason'] ?? null,
+            ], fn ($value) => $value !== null),
+            'issued_by' => request()->user()?->id,
         ]);
 
         return $document;
@@ -451,36 +446,63 @@ class CertificateService
      */
     private function getEnrollmentDetails(Student $student, AcademicYear $academicYear): array
     {
-        // This would integrate with Enrollment module
+        $classEnrollment = $student->classEnrollments()
+            ->where('academic_year_id', $academicYear->id)
+            ->with('classe')
+            ->latest('id')
+            ->first();
+
+        $className = $classEnrollment?->classe?->name ?? '';
+
         return [
-            'programme_name' => '',
-            'level' => '',
+            'programme_name' => $className,
+            'level' => $className,
         ];
+    }
+
+    private function getSchoolName(): string
+    {
+        $tenant = function_exists('tenant') ? tenant() : null;
+
+        return (string) ($tenant?->company_name ?: config('app.name'));
     }
 
     /**
      * Get status label
      */
-    private function getStatusLabel(string $status): string
+    private function getStatusLabel(?string $status): string
     {
         return match ($status) {
-            'Actif' => 'Étudiant régulièrement inscrit',
-            'Diplômé' => 'Étudiant diplômé',
-            'Suspendu' => 'Étudiant suspendu',
-            default => $status,
+            'Actif' => 'Élève régulièrement inscrit(e)',
+            'Diplômé' => 'Élève diplômé(e)',
+            'Suspendu' => 'Élève suspendu(e)',
+            default => (string) $status,
         };
     }
 
     /**
-     * Get attendance statistics
+     * Attendance statistics computed from the Attendance module records.
+     *
+     * @return array{rate: float, total_sessions: int, attended_sessions: int}
      */
     private function getAttendanceStatistics(Student $student, AcademicYear $academicYear): array
     {
-        // This would integrate with Attendance module
+        $records = AttendanceRecord::query()
+            ->where('student_id', $student->id)
+            ->when($academicYear->start_date && $academicYear->end_date, function ($query) use ($academicYear) {
+                $query->whereHas('session', fn ($session) => $session->whereBetween('session_date', [
+                    $academicYear->start_date,
+                    $academicYear->end_date,
+                ]));
+            });
+
+        $totalSessions = (clone $records)->count();
+        $attendedSessions = (clone $records)->whereIn('status', ['present', 'late'])->count();
+
         return [
-            'rate' => 95.5,
-            'total_sessions' => 200,
-            'attended_sessions' => 191,
+            'rate' => $totalSessions > 0 ? round($attendedSessions * 100 / $totalSessions, 1) : 0.0,
+            'total_sessions' => $totalSessions,
+            'attended_sessions' => $attendedSessions,
         ];
     }
 
@@ -519,7 +541,7 @@ class CertificateService
     private function generateDocumentNumber(string $prefix, AcademicYear $academicYear): string
     {
         $year = $academicYear->name;
-        $sequence = Document::where('document_number', 'like', "{$prefix}-{$year}-%")->count() + 1;
+        $sequence = Document::withTrashed()->where('document_number', 'like', "{$prefix}-{$year}-%")->count() + 1;
 
         return sprintf('%s-%s-%05d', $prefix, $year, $sequence);
     }
@@ -540,21 +562,6 @@ class CertificateService
 
         $filename = "certificates/{$documentNumber}.pdf";
         Storage::disk('tenant')->put($filename, $pdf->output());
-
-        return $filename;
-    }
-
-    /**
-     * Generate QR Code
-     */
-    private function generateQrCode(string $verificationCode, string $documentNumber): string
-    {
-        $qrCode = QrCode::format('png')
-            ->size(300)
-            ->generate($verificationCode);
-
-        $filename = "qr_codes/{$documentNumber}.png";
-        Storage::disk('tenant')->put($filename, $qrCode);
 
         return $filename;
     }

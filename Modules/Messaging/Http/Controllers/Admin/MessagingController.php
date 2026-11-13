@@ -6,6 +6,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Messaging\Entities\Message;
+use Modules\Messaging\Http\Requests\StoreMessageRequest;
 use Modules\UsersGuard\Entities\TenantUser;
 
 /**
@@ -16,37 +17,48 @@ use Modules\UsersGuard\Entities\TenantUser;
  */
 class MessagingController extends Controller
 {
+    private const PARTICIPANT_RELATIONS = [
+        'sender:id,username,firstname,lastname',
+        'recipient:id,username,firstname,lastname',
+    ];
+
     public function index(Request $request): JsonResponse
     {
-        $userId = $request->user()->id;
+        $userId = (int) $request->user()->id;
 
         $messages = Message::query()
             ->where(fn ($q) => $q->where('sender_id', $userId)->orWhere('recipient_id', $userId))
+            ->with(self::PARTICIPANT_RELATIONS)
             ->orderByDesc('created_at')
             ->limit(100)
-            ->get();
+            ->get()
+            ->map(fn (Message $message): array => $this->presentMessage($message, $userId));
 
-        return response()->json(['data' => $messages]);
+        $unreadCount = Message::query()
+            ->where('recipient_id', $userId)
+            ->whereNull('read_at')
+            ->count();
+
+        return response()->json([
+            'data' => $messages,
+            'meta' => ['unread_count' => $unreadCount],
+        ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreMessageRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'recipient_id' => ['required', 'integer', 'exists:tenant.users,id'],
-            'thread_id' => ['nullable', 'integer'],
-            'student_context_id' => ['nullable', 'integer'],
-            'subject' => ['required', 'string', 'max:255'],
-            'body' => ['required', 'string', 'max:5000'],
-        ]);
+        $userId = (int) $request->user()->id;
 
         $message = Message::create([
-            ...$validated,
-            'sender_id' => $request->user()->id,
+            ...$request->validated(),
+            'sender_id' => $userId,
         ]);
+
+        $message->load(self::PARTICIPANT_RELATIONS);
 
         return response()->json([
             'message' => 'Message envoyé.',
-            'data' => $message,
+            'data' => $this->presentMessage($message, $userId),
         ], 201);
     }
 
@@ -118,34 +130,62 @@ class MessagingController extends Controller
      */
     private function allowedRecipientRoles(TenantUser $user): array
     {
-        if ($user->hasRole('Administrator')) {
-            return ['Parent', 'Professeur', 'Administrator', 'Manager'];
-        }
-
-        if ($user->hasRole('Professeur')) {
-            return ['Parent', 'Administrator'];
-        }
-
-        if ($user->hasRole('Parent')) {
-            return ['Professeur', 'Administrator'];
-        }
-
-        return [];
+        return StoreMessageRequest::allowedRecipientRoles($user);
     }
 
-    public function show(Request $request, Message $message): JsonResponse
+    /**
+     * Pas de route model binding : le binding s'exécute avant l'initialisation
+     * de la connexion tenant (middleware `tenant`) et provoquait une erreur 500.
+     */
+    public function show(Request $request, int $message): JsonResponse
     {
-        $userId = $request->user()->id;
+        $userId = (int) $request->user()->id;
 
-        if ($message->sender_id !== $userId && $message->recipient_id !== $userId) {
+        $found = Message::query()->with(self::PARTICIPANT_RELATIONS)->find($message);
+
+        if ($found === null) {
+            return response()->json(['message' => 'Message introuvable.'], 404);
+        }
+
+        if ((int) $found->sender_id !== $userId && (int) $found->recipient_id !== $userId) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
-        // Marquer comme lu si destinataire
-        if ($message->recipient_id === $userId && ! $message->read_at) {
-            $message->update(['read_at' => now()]);
+        if ((int) $found->recipient_id === $userId && ! $found->read_at) {
+            $found->update(['read_at' => now()]);
         }
 
-        return response()->json(['data' => $message]);
+        return response()->json(['data' => $this->presentMessage($found, $userId)]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function presentMessage(Message $message, int $currentUserId): array
+    {
+        return [
+            ...$message->toArray(),
+            'direction' => (int) $message->sender_id === $currentUserId ? 'sent' : 'received',
+            'sender' => $this->presentParticipant($message->sender),
+            'recipient' => $this->presentParticipant($message->recipient),
+        ];
+    }
+
+    /**
+     * @return array{id: int, username: string|null, full_name: string}|null
+     */
+    private function presentParticipant(?TenantUser $user): ?array
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        $fullName = trim(($user->firstname ?? '').' '.($user->lastname ?? ''));
+
+        return [
+            'id' => $user->id,
+            'username' => $user->username,
+            'full_name' => $fullName !== '' ? $fullName : (string) $user->username,
+        ];
     }
 }

@@ -78,13 +78,17 @@ class ManagerRoutesProtectionTest extends TestCase
     }
 
     #[Test]
-    public function manager_cannot_list_roles(): void
+    public function manager_can_list_roles_but_cannot_manage_them(): void
     {
-        // Roles management = Admin only
+        // Roles list is readable (needed to assign a role when creating a user); management = Admin only
         $token = $this->tokenFor('Manager');
 
         $this->withToken($token)
             ->getJson('/api/admin/roles')
+            ->assertOk();
+
+        $this->withToken($token)
+            ->postJson('/api/admin/roles', ['name' => 'Hacker'])
             ->assertForbidden();
     }
 
@@ -171,6 +175,37 @@ class ManagerRoutesProtectionTest extends TestCase
 
         $this->withToken($token)
             ->getJson('/api/admin/parent/me')
+            ->assertForbidden();
+    }
+
+    /**
+     * Widgets du tableau de bord (/admin/dashboard, RoleDashboard) : chaque
+     * endpoint appelé doit être autorisé pour le Manager.
+     */
+    #[Test]
+    public function manager_can_load_dashboard_widgets(): void
+    {
+        $token = $this->tokenFor('Manager');
+
+        foreach ([
+            '/api/admin/academic-years/active',
+            '/api/admin/enrollment/students/statistics/summary',
+            '/api/admin/classes/stats',
+            '/api/admin/finance/reports/dashboard',
+        ] as $uri) {
+            $status = $this->withToken($token)->getJson($uri)->getStatusCode();
+
+            $this->assertNotContains($status, [401, 403, 500], "Widget dashboard {$uri} doit être accessible au Manager (reçu {$status})");
+        }
+    }
+
+    #[Test]
+    public function manager_cannot_access_teacher_my_classes(): void
+    {
+        $token = $this->tokenFor('Manager');
+
+        $this->withToken($token)
+            ->getJson('/api/frontend/teacher/my-classes')
             ->assertForbidden();
     }
 }

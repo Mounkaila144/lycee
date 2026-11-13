@@ -4,6 +4,7 @@ namespace Tests\Feature\StructureAcademique;
 
 use Modules\StructureAcademique\Database\Seeders\SeriesSeeder;
 use Modules\StructureAcademique\Entities\Series;
+use Modules\UsersGuard\Entities\TenantUser;
 use Modules\UsersGuard\Entities\User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -23,9 +24,13 @@ class SeriesApiTest extends TestCase
         parent::setUp();
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
+        // Rôles créés avant toute lecture : la transaction tenant doit les voir.
+        $this->seedRolesAndPermissions();
 
         $this->user = User::factory()->create();
-        $this->token = $this->user->createToken('test-token')->plainTextToken;
+        $tenantUser = TenantUser::findOrFail($this->user->id);
+        $this->assignRole($tenantUser, 'Administrator');
+        $this->token = $tenantUser->createToken('test-token')->plainTextToken;
     }
 
     protected function tearDown(): void

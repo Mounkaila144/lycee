@@ -161,7 +161,7 @@ class ExamSupervisionService
     {
         return ExamIncident::create(array_merge($data, [
             'status' => 'reported',
-            'reported_by' => auth()->id(),
+            'reported_by' => auth('tenant')->id(),
         ]));
     }
 
@@ -173,7 +173,7 @@ class ExamSupervisionService
         $updateData = array_merge($data, ['status' => $status]);
 
         if ($status === 'resolved') {
-            $updateData['reviewed_by'] = auth()->id();
+            $updateData['reviewed_by'] = auth('tenant')->id();
             $updateData['reviewed_at'] = now();
         }
 

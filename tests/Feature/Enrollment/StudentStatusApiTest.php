@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Event;
 use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Entities\StudentStatusHistory;
 use Modules\Enrollment\Events\StudentStatusChanged;
-use Modules\UsersGuard\Entities\User;
+use Modules\UsersGuard\Entities\TenantUser as User;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Tests\Concerns\InteractsWithTenancy;
 use Tests\TestCase;
@@ -25,7 +25,9 @@ class StudentStatusApiTest extends TestCase
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
 
+        $this->seedRolesAndPermissions();
         $this->user = User::factory()->create();
+        $this->assignRole($this->user, 'Administrator');
         $this->token = $this->user->createToken('test-token')->plainTextToken;
     }
 

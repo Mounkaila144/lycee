@@ -27,7 +27,7 @@ class ExamReportService
             'session' => [
                 'id' => $session->id,
                 'title' => $session->title,
-                'module' => $session->module->name,
+                'module' => $session->module?->name,
                 'date' => $session->exam_date,
                 'time' => $session->start_time.' - '.$session->end_time,
             ],
@@ -43,7 +43,7 @@ class ExamReportService
                 $room = $sheets->first()->roomAssignment;
 
                 return [
-                    'room_name' => $room->room->name,
+                    'room_name' => $room?->room?->name,
                     'total' => $sheets->count(),
                     'present' => $sheets->where('status', 'present')->count(),
                     'absent' => $sheets->where('status', 'absent')->count(),
@@ -51,9 +51,9 @@ class ExamReportService
             })->values(),
             'students' => $attendanceSheets->map(function ($sheet) {
                 return [
-                    'student_id' => $sheet->student->id,
-                    'student_name' => $sheet->student->full_name,
-                    'room' => $sheet->roomAssignment?->room->name,
+                    'student_id' => $sheet->student_id,
+                    'student_name' => $sheet->student?->full_name,
+                    'room' => $sheet->roomAssignment?->room?->name,
                     'seat' => $sheet->seat_number,
                     'status' => $sheet->status,
                     'arrival_time' => $sheet->arrival_time,
@@ -98,7 +98,7 @@ class ExamReportService
                     ] : null,
                     'occurred_at' => $incident->occurred_at_time,
                     'status' => $incident->status,
-                    'reported_by' => $incident->reporter->name,
+                    'reported_by' => $incident->reporter?->name,
                     'action_taken' => $incident->action_taken,
                     'reviewed_by' => $incident->reviewer?->name,
                     'reviewed_at' => $incident->reviewed_at,
@@ -182,8 +182,8 @@ class ExamReportService
                 $module = $moduleSessions->first()->module;
 
                 return [
-                    'module_id' => $module->id,
-                    'module_name' => $module->name,
+                    'module_id' => $moduleSessions->first()->module_id,
+                    'module_name' => $module?->name,
                     'total_sessions' => $moduleSessions->count(),
                     'total_students' => DB::connection('tenant')
                         ->table('exam_attendance_sheets')
@@ -230,17 +230,17 @@ class ExamReportService
     {
         $query = DB::connection('tenant')
             ->table('exam_supervisors')
-            ->join('teachers', 'exam_supervisors.teacher_id', '=', 'teachers.id')
+            ->join('users', 'exam_supervisors.teacher_id', '=', 'users.id')
             ->join('exam_sessions', 'exam_supervisors.exam_session_id', '=', 'exam_sessions.id')
             ->select(
-                'teachers.id as teacher_id',
-                'teachers.first_name',
-                'teachers.last_name',
+                'users.id as teacher_id',
+                'users.firstname as first_name',
+                'users.lastname as last_name',
                 DB::raw('COUNT(exam_supervisors.id) as total_supervisions'),
-                DB::raw('SUM(CASE WHEN exam_supervisors.status = "present" THEN 1 ELSE 0 END) as completed'),
+                DB::raw("SUM(CASE WHEN exam_supervisors.status = 'present' THEN 1 ELSE 0 END) as completed"),
                 DB::raw('SUM(exam_sessions.duration_minutes) as total_minutes')
             )
-            ->groupBy('teachers.id', 'teachers.first_name', 'teachers.last_name');
+            ->groupBy('users.id', 'users.firstname', 'users.lastname');
 
         if ($startDate && $endDate) {
             $query->whereBetween('exam_sessions.exam_date', [$startDate, $endDate]);

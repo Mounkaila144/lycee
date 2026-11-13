@@ -1,12 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Modules\Enrollment\Http\Controllers\Frontend\ExemptionRequestController;
 use Modules\Enrollment\Http\Controllers\Frontend\MyCardController;
-use Modules\Enrollment\Http\Controllers\Frontend\MyEnrollmentController;
 use Modules\Enrollment\Http\Controllers\Frontend\ReenrollmentController;
 use Modules\Enrollment\Http\Controllers\Frontend\StudentGroupController;
-use Modules\Enrollment\Http\Controllers\Frontend\TransferRequestController;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,16 +23,6 @@ Route::prefix('frontend/enrollment')
 
         Route::get('/my-groups/year/{academicYearId}', [StudentGroupController::class, 'myGroupsByYear'])
             ->name('frontend.enrollment.my-groups-by-year');
-
-        // Pedagogical Enrollment - My Status
-        Route::get('/my-enrollment/status', [MyEnrollmentController::class, 'status'])
-            ->name('frontend.enrollment.my-enrollment-status');
-
-        Route::get('/my-enrollment/history', [MyEnrollmentController::class, 'history'])
-            ->name('frontend.enrollment.my-enrollment-history');
-
-        Route::get('/my-enrollment/contract', [MyEnrollmentController::class, 'downloadContract'])
-            ->name('frontend.enrollment.my-enrollment-contract');
 
         // Student Card - My Card
         Route::get('/my-card', [MyCardController::class, 'show'])
@@ -90,55 +77,6 @@ Route::prefix('frontend/enrollment')
                 ->name('frontend.enrollment.reenrollment-confirmation');
         });
 
-        // =====================================================================
-        // Transfer Request - Demande de transfert (Story 12)
-        // =====================================================================
-        Route::prefix('transfer')->group(function () {
-            // Programmes disponibles
-            Route::get('/programs', [TransferRequestController::class, 'availablePrograms'])
-                ->name('frontend.enrollment.transfer-programs');
-
-            // Année académique active
-            Route::get('/academic-year', [TransferRequestController::class, 'activeAcademicYear'])
-                ->name('frontend.enrollment.transfer-academic-year');
-
-            // Soumettre une demande
-            Route::post('/', [TransferRequestController::class, 'request'])
-                ->name('frontend.enrollment.transfer-request');
-
-            // Vérifier statut (public avec numéro + email)
-            Route::post('/check-status', [TransferRequestController::class, 'checkStatus'])
-                ->name('frontend.enrollment.transfer-check-status');
-
-            // Mes demandes (authentifié)
-            Route::get('/my-requests', [TransferRequestController::class, 'myRequests'])
-                ->name('frontend.enrollment.transfer-my-requests');
-        });
-
-        // =====================================================================
-        // Exemption Request - Demande de dispense (Story 13)
-        // =====================================================================
-        Route::prefix('exemption')->group(function () {
-            // Modules disponibles pour demande
-            Route::get('/available-modules', [ExemptionRequestController::class, 'availableModules'])
-                ->name('frontend.enrollment.exemption-available-modules');
-
-            // Soumettre une demande
-            Route::post('/', [ExemptionRequestController::class, 'request'])
-                ->name('frontend.enrollment.exemption-request');
-
-            // Mes demandes
-            Route::get('/my-requests', [ExemptionRequestController::class, 'myRequests'])
-                ->name('frontend.enrollment.exemption-my-requests');
-
-            // Détails d'une demande
-            Route::get('/{exemption}', [ExemptionRequestController::class, 'show'])
-                ->name('frontend.enrollment.exemption-show');
-
-            // Télécharger attestation
-            Route::get('/{exemption}/certificate', [ExemptionRequestController::class, 'downloadCertificate'])
-                ->name('frontend.enrollment.exemption-certificate');
-        });
     });
 
 /*

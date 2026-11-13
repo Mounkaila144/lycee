@@ -9,7 +9,6 @@ use Modules\Documents\Entities\DocumentTemplate;
 use Modules\Documents\Entities\StudentCard;
 use Modules\Enrollment\Entities\Student;
 use Modules\StructureAcademique\Entities\AcademicYear;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 /**
  * Service for Epic 4: Certificats (Stories 19-20)
@@ -455,9 +454,7 @@ class CardService
      */
     private function generateQrCodeImage(string $content, string $cardNumber): string
     {
-        $qrCode = QrCode::format('png')
-            ->size(200)
-            ->generate($content);
+        $qrCode = $this->verificationService->renderQrCodePng($content);
 
         $filename = "cards/qr/{$cardNumber}.png";
         Storage::disk('tenant')->put($filename, $qrCode);

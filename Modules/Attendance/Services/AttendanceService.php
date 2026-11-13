@@ -3,59 +3,91 @@
 namespace Modules\Attendance\Services;
 
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\Attendance\Entities\AttendanceRecord;
 use Modules\Attendance\Entities\AttendanceSession;
+use Modules\Enrollment\Entities\Student;
 
 class AttendanceService
 {
     /**
-     * Créer une session d'appel (Story 01)
+     * Créer une session d'appel (Story 01).
+     *
+     * @param  array{timetable_slot_id?: int|null, classe_id?: int|null, subject_id?: int|null, start_time?: string|null, end_time?: string|null, notes?: string|null}  $attributes
      */
     public function createSession(
-        int $timetableSlotId,
+        array $attributes,
         Carbon $sessionDate,
-        string $method = 'manual'
+        string $method,
+        int $userId
     ): AttendanceSession {
-        return DB::connection('tenant')->transaction(function () use ($timetableSlotId, $sessionDate, $method) {
+        return DB::connection('tenant')->transaction(function () use ($attributes, $sessionDate, $method, $userId) {
+            $startTime = $attributes['start_time'] ?? null;
+            $endTime = $attributes['end_time'] ?? null;
+
             $session = AttendanceSession::create([
-                'timetable_slot_id' => $timetableSlotId,
-                'session_date' => $sessionDate,
-                'start_time' => now()->format('H:i:s'),
-                'end_time' => now()->addHours(2)->format('H:i:s'),
+                'timetable_slot_id' => $attributes['timetable_slot_id'] ?? null,
+                'classe_id' => $attributes['classe_id'] ?? null,
+                'subject_id' => $attributes['subject_id'] ?? null,
+                'session_date' => $sessionDate->toDateString(),
+                'start_time' => $startTime ?? now()->format('H:i:s'),
+                'end_time' => $endTime ?? Carbon::parse($startTime ?? now())->addHours(2)->format('H:i:s'),
                 'status' => 'draft',
                 'method' => $method,
-                'created_by' => auth()->id(),
+                'created_by' => $userId,
+                'notes' => $attributes['notes'] ?? null,
             ]);
 
-            // Initialiser records pour tous les étudiants du groupe
-            $this->initializeSessionRecords($session);
+            $this->initializeSessionRecords($session, $userId);
 
             return $session;
         });
     }
 
     /**
-     * Initialiser les enregistrements pour tous les étudiants
+     * Initialiser les enregistrements (absent par défaut) pour tous les élèves concernés.
      */
-    private function initializeSessionRecords(AttendanceSession $session): void
+    private function initializeSessionRecords(AttendanceSession $session, int $userId): void
     {
-        $slot = $session->timetableSlot;
-        $groupId = $slot->group_id;
-
-        $students = DB::connection('tenant')
-            ->table('group_student')
-            ->where('group_id', $groupId)
-            ->pluck('student_id');
-
-        foreach ($students as $studentId) {
-            AttendanceRecord::create([
-                'attendance_session_id' => $session->id,
-                'student_id' => $studentId,
-                'status' => 'absent',
-                'recorded_by' => auth()->id(),
-            ]);
+        foreach ($this->studentUserIdsForSession($session) as $studentUserId) {
+            AttendanceRecord::firstOrCreate(
+                [
+                    'attendance_session_id' => $session->id,
+                    'student_id' => $studentUserId,
+                ],
+                [
+                    'status' => 'absent',
+                    'recorded_by' => $userId,
+                ]
+            );
         }
+    }
+
+    /**
+     * Comptes utilisateurs (users.id) des élèves attendus à la séance.
+     */
+    private function studentUserIdsForSession(AttendanceSession $session): Collection
+    {
+        $students = Student::query()->whereNotNull('user_id');
+
+        if ($session->classe_id) {
+            $students->whereHas('classEnrollments', function ($query) use ($session) {
+                $query->where('classe_id', $session->classe_id)->where('status', 'Actif');
+            });
+        } elseif ($session->timetableSlot?->group_id) {
+            $studentIds = DB::connection('tenant')
+                ->table('group_assignments')
+                ->where('group_id', $session->timetableSlot->group_id)
+                ->whereNull('deleted_at')
+                ->pluck('student_id');
+
+            $students->whereIn('id', $studentIds);
+        } else {
+            return collect();
+        }
+
+        return $students->pluck('user_id')->unique()->values();
     }
 
     /**
@@ -74,14 +106,14 @@ class AttendanceService
         $data = [
             'status' => $status,
             'arrival_time' => $arrivalTime,
+            'delay_minutes' => 0,
         ];
 
-        // Calculer retard si late
         if ($status === 'late' && $arrivalTime) {
             $session = AttendanceSession::find($sessionId);
             $scheduledTime = Carbon::parse($session->start_time);
             $actualTime = Carbon::parse($arrivalTime);
-            $data['delay_minutes'] = $scheduledTime->diffInMinutes($actualTime);
+            $data['delay_minutes'] = max(0, (int) $scheduledTime->diffInMinutes($actualTime, false));
         }
 
         $record->update($data);
@@ -93,15 +125,14 @@ class AttendanceService
      * Modifier un enregistrement (Story 03)
      */
     public function modifyRecord(
-        int $recordId,
+        AttendanceRecord $record,
         string $newStatus,
-        string $reason
+        string $reason,
+        int $userId
     ): AttendanceRecord {
-        $record = AttendanceRecord::findOrFail($recordId);
-
         $record->update([
             'status' => $newStatus,
-            'modified_by' => auth()->id(),
+            'modified_by' => $userId,
             'modification_reason' => $reason,
         ]);
 
@@ -111,13 +142,11 @@ class AttendanceService
     /**
      * Compléter une session
      */
-    public function completeSession(int $sessionId): AttendanceSession
+    public function completeSession(AttendanceSession $session, int $userId): AttendanceSession
     {
-        $session = AttendanceSession::findOrFail($sessionId);
-
         $session->update([
             'status' => 'completed',
-            'completed_by' => auth()->id(),
+            'completed_by' => $userId,
             'completed_at' => now(),
         ]);
 
@@ -129,25 +158,39 @@ class AttendanceService
      */
     public function recordViaQRCode(int $sessionId, int $studentId, string $qrToken): bool
     {
-        // Vérifier validité du token QR
-        // Pour MVP, enregistrer directement
-        $this->recordAttendance($sessionId, $studentId, 'present', now()->format('H:i:s'));
+        $this->recordAttendance($sessionId, $studentId, 'present', now()->format('H:i'));
 
         return true;
     }
 
     /**
      * Obtenir feuille d'appel
+     *
+     * @return array{session: AttendanceSession, records: Collection, summary: array<string, int>}
      */
-    public function getAttendanceSheet(int $sessionId): array
+    public function getAttendanceSheet(AttendanceSession $session): array
     {
-        $session = AttendanceSession::with(['timetableSlot.module', 'timetableSlot.group'])
-            ->findOrFail($sessionId);
+        $session->load(['timetableSlot.module', 'timetableSlot.group', 'classe', 'subject', 'creator']);
 
-        $records = AttendanceRecord::where('attendance_session_id', $sessionId)
+        $records = AttendanceRecord::where('attendance_session_id', $session->id)
             ->with('student')
             ->orderBy('student_id')
             ->get();
+
+        $profiles = Student::query()
+            ->whereIn('user_id', $records->pluck('student_id'))
+            ->get(['id', 'user_id', 'matricule', 'firstname', 'lastname'])
+            ->keyBy('user_id');
+
+        $records->each(function (AttendanceRecord $record) use ($profiles) {
+            $profile = $profiles->get($record->student_id);
+            $record->setAttribute('student_profile', $profile ? [
+                'id' => $profile->id,
+                'matricule' => $profile->matricule,
+                'firstname' => $profile->firstname,
+                'lastname' => $profile->lastname,
+            ] : null);
+        });
 
         return [
             'session' => $session,

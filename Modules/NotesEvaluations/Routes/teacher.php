@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
 use Modules\NotesEvaluations\Http\Controllers\Teacher\AbsenceManagementController;
 use Modules\NotesEvaluations\Http\Controllers\Teacher\BatchGradeController;
@@ -19,7 +20,7 @@ use Modules\NotesEvaluations\Http\Controllers\Teacher\RetakeGradeController;
 // accèdent à ces endpoints. Ownership (teacher_id = auth()->id()) reste à contrôler
 // dans chaque controller — cf. DEV-AGENT-PROMPT §C.
 Route::prefix('api/frontend/teacher')
-    ->middleware(['tenant', 'tenant.auth', 'role:Professeur|Administrator,tenant'])
+    ->middleware(['tenant', 'tenant.auth', 'role:Professeur|Administrator,tenant', SubstituteBindings::class])
     ->group(function () {
         // Teacher's Modules
         Route::get('/my-modules', [GradeEntryController::class, 'myModules']);

@@ -64,8 +64,9 @@ class EnrollmentController extends Controller
         }
 
         // Sort
-        $sortBy = $request->input('sort_by', 'created_at');
-        $sortOrder = $request->input('sort_order', 'desc');
+        $sortableColumns = ['id', 'created_at', 'updated_at', 'enrollment_date', 'level', 'status', 'academic_year_id', 'semester_id', 'programme_id'];
+        $sortBy = in_array($request->input('sort_by'), $sortableColumns, true) ? $request->input('sort_by') : 'created_at';
+        $sortOrder = strtolower((string) $request->input('sort_order')) === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sortBy, $sortOrder);
 
         // Paginate

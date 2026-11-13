@@ -21,6 +21,7 @@ class ClasseResource extends JsonResource
             'level_id' => $this->level_id,
             'series_id' => $this->series_id,
             'head_teacher_id' => $this->head_teacher_id,
+            'students_count' => $this->when(isset($this->students_count), (int) $this->students_count),
 
             // Relations conditionnelles
             'level' => new LevelResource($this->whenLoaded('level')),

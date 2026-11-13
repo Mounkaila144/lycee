@@ -20,7 +20,7 @@ class AllocateEquivalenceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'module_id' => ['required', 'exists:modules,id'],
+            'module_id' => ['required', 'exists:tenant.modules,id'],
             'credits' => ['required', 'integer', 'min:1', 'max:30'],
             'note' => ['nullable', 'string', 'max:1000'],
         ];

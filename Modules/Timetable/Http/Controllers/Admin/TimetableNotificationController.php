@@ -29,7 +29,7 @@ class TimetableNotificationController extends Controller
         ]);
 
         $notifications = $this->notificationService->getUserNotifications(
-            userId: auth()->id(),
+            userId: auth('tenant')->id(),
             type: $validated['type'] ?? null,
             unreadOnly: $validated['unread_only'] ?? false,
             perPage: $validated['per_page'] ?? 15
@@ -37,7 +37,7 @@ class TimetableNotificationController extends Controller
 
         return response()->json([
             'notifications' => $notifications,
-            'unread_count' => $this->notificationService->getUnreadCount(auth()->id()),
+            'unread_count' => $this->notificationService->getUnreadCount(auth('tenant')->id()),
         ]);
     }
 
@@ -47,7 +47,7 @@ class TimetableNotificationController extends Controller
     public function unreadCount(): JsonResponse
     {
         return response()->json([
-            'unread_count' => $this->notificationService->getUnreadCount(auth()->id()),
+            'unread_count' => $this->notificationService->getUnreadCount(auth('tenant')->id()),
         ]);
     }
 
@@ -56,7 +56,7 @@ class TimetableNotificationController extends Controller
      */
     public function markAsRead(int $notificationId): JsonResponse
     {
-        $success = $this->notificationService->markAsRead($notificationId, auth()->id());
+        $success = $this->notificationService->markAsRead($notificationId, auth('tenant')->id());
 
         if (! $success) {
             return response()->json(['message' => 'Notification non trouvée'], 404);
@@ -64,7 +64,7 @@ class TimetableNotificationController extends Controller
 
         return response()->json([
             'message' => 'Notification marquée comme lue',
-            'unread_count' => $this->notificationService->getUnreadCount(auth()->id()),
+            'unread_count' => $this->notificationService->getUnreadCount(auth('tenant')->id()),
         ]);
     }
 
@@ -73,7 +73,7 @@ class TimetableNotificationController extends Controller
      */
     public function markAllAsRead(): JsonResponse
     {
-        $count = $this->notificationService->markAllAsRead(auth()->id());
+        $count = $this->notificationService->markAllAsRead(auth('tenant')->id());
 
         return response()->json([
             'message' => "{$count} notification(s) marquée(s) comme lue(s)",
@@ -86,7 +86,7 @@ class TimetableNotificationController extends Controller
      */
     public function getSettings(): JsonResponse
     {
-        $settings = $this->notificationService->getSettings(auth()->id());
+        $settings = $this->notificationService->getSettings(auth('tenant')->id());
 
         return response()->json(['settings' => $settings]);
     }
@@ -109,7 +109,7 @@ class TimetableNotificationController extends Controller
             'quiet_hours_end' => 'nullable|date_format:H:i',
         ]);
 
-        $settings = $this->notificationService->updateSettings(auth()->id(), $validated);
+        $settings = $this->notificationService->updateSettings(auth('tenant')->id(), $validated);
 
         return response()->json([
             'message' => 'Paramètres mis à jour',
@@ -127,7 +127,7 @@ class TimetableNotificationController extends Controller
         ]);
 
         $changes = $this->notificationService->getUpcomingChangesForUser(
-            auth()->id(),
+            auth('tenant')->id(),
             $validated['days'] ?? 7
         );
 

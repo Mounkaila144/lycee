@@ -6,6 +6,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\StructureAcademique\Entities\Semester;
+use Modules\StructureAcademique\Http\Requests\StoreSemesterRequest;
 use Modules\StructureAcademique\Http\Requests\UpdateSemesterRequest;
 use Modules\StructureAcademique\Http\Resources\SemesterResource;
 
@@ -32,17 +33,9 @@ class SemesterController extends Controller
     /**
      * Créer un semestre
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreSemesterRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'academic_year_id' => 'required|integer|exists:tenant.academic_years,id',
-            'name' => 'required|string|max:255',
-            'code' => 'required|string|max:20',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
-        ]);
-
-        $semester = Semester::on('tenant')->create($validated);
+        $semester = Semester::on('tenant')->create($request->validated());
 
         return response()->json([
             'message' => 'Semestre créé avec succès.',
@@ -95,7 +88,17 @@ class SemesterController extends Controller
     public function close(int $semester): JsonResponse
     {
         $semester = Semester::on('tenant')->findOrFail($semester);
-        $semester->update(['status' => 'closed']);
+
+        if ($semester->closed_at !== null) {
+            return response()->json([
+                'message' => 'Ce semestre est déjà clôturé.',
+            ], 422);
+        }
+
+        $semester->update([
+            'closed_at' => now(),
+            'is_active' => false,
+        ]);
 
         return response()->json([
             'message' => 'Semestre clôturé avec succès.',

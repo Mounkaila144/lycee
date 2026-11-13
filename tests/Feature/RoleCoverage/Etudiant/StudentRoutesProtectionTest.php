@@ -37,7 +37,7 @@ class StudentRoutesProtectionTest extends TestCase
     private function tokenForEtudiant(): string
     {
         $user = TenantUser::factory()->create(['application' => 'admin']);
-        $this->assignRole($user, 'Étudiant');
+        $this->assignRole($user, 'Élève');
 
         return $user->createToken('test-token')->plainTextToken;
     }

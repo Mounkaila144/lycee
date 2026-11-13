@@ -6,6 +6,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Modules\StructureAcademique\Entities\Classe;
 use Modules\StructureAcademique\Entities\Level;
+use Modules\UsersGuard\Entities\TenantUser;
 
 class StoreClasseRequest extends FormRequest
 {
@@ -46,6 +47,13 @@ class StoreClasseRequest extends FormRequest
                 );
             }
 
+            if ($this->head_teacher_id && ! $this->headTeacherIsTeacher()) {
+                $validator->errors()->add(
+                    'head_teacher_id',
+                    'Le professeur principal doit avoir le rôle Professeur.'
+                );
+            }
+
             if ($this->head_teacher_id && $this->academic_year_id && $this->headTeacherAlreadyAssigned()) {
                 $validator->errors()->add(
                     'head_teacher_id',
@@ -70,6 +78,17 @@ class StoreClasseRequest extends FormRequest
         }
 
         return in_array($level->code, ['1ERE', 'TLE']);
+    }
+
+    /**
+     * Vérifie que l'utilisateur choisi comme PP a le rôle Professeur
+     */
+    private function headTeacherIsTeacher(): bool
+    {
+        return TenantUser::query()
+            ->whereHas('roles', fn ($query) => $query->where('name', 'Professeur'))
+            ->whereKey($this->head_teacher_id)
+            ->exists();
     }
 
     /**

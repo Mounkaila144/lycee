@@ -2,9 +2,12 @@
 
 namespace Modules\Exams\Services;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Modules\Enrollment\Entities\Student;
+use Modules\Enrollment\Entities\StudentModuleEnrollment;
 use Modules\Exams\Entities\ExamAttendanceSheet;
 use Modules\Exams\Entities\ExamRoomAssignment;
 use Modules\Exams\Entities\ExamSession;
@@ -31,7 +34,9 @@ class ExamManagementService
                 ->get();
 
             if ($roomAssignments->isEmpty()) {
-                throw new \Exception('No rooms assigned to this exam session');
+                throw ValidationException::withMessages([
+                    'rooms' => 'Aucune salle n\'est affectée à cette session d\'examen.',
+                ]);
             }
 
             $currentRoomIndex = 0;
@@ -44,7 +49,9 @@ class ExamManagementService
                 if ($currentRoom->assigned_students >= $currentRoom->capacity) {
                     $currentRoomIndex++;
                     if ($currentRoomIndex >= $roomAssignments->count()) {
-                        throw new \Exception('Not enough room capacity for all students');
+                        throw ValidationException::withMessages([
+                            'student_ids' => 'Capacité des salles insuffisante pour tous les élèves.',
+                        ]);
                     }
                     $currentRoom = $roomAssignments[$currentRoomIndex];
                     $currentSeatNumber = $currentRoom->seat_start_number ?? 1;
@@ -80,13 +87,7 @@ class ExamManagementService
      */
     public function autoAssignStudentsFromModule(ExamSession $session): Collection
     {
-        $students = Student::query()
-            ->whereHas('enrolledModules', function ($q) use ($session) {
-                $q->where('module_id', $session->module_id)
-                    ->where('academic_year_id', $session->academic_year_id);
-            })
-            ->pluck('id')
-            ->toArray();
+        $students = $this->eligibleStudentsQuery($session)->pluck('id')->toArray();
 
         return $this->assignStudents($session, $students);
     }
@@ -104,7 +105,9 @@ class ExamManagementService
 
             // Check capacity
             if ($newRoom->assigned_students >= $newRoom->capacity) {
-                throw new \Exception('Target room is full');
+                throw ValidationException::withMessages([
+                    'room_assignment_id' => 'La salle cible est pleine.',
+                ]);
             }
 
             // Update sheet
@@ -114,7 +117,7 @@ class ExamManagementService
             ]);
 
             // Update room counts
-            $oldRoom->decrement('assigned_students');
+            $oldRoom?->decrement('assigned_students');
             $newRoom->increment('assigned_students');
 
             DB::connection('tenant')->commit();
@@ -237,14 +240,30 @@ class ExamManagementService
      */
     public function getEligibleStudents(ExamSession $session): Collection
     {
+        return $this->eligibleStudentsQuery($session)->get();
+    }
+
+    /**
+     * Élèves inscrits au module de la session (année académique de la session)
+     * et pas encore affectés à cette session.
+     */
+    private function eligibleStudentsQuery(ExamSession $session): Builder
+    {
+        $enrolledStudentIds = StudentModuleEnrollment::query()
+            ->where('module_id', $session->module_id)
+            ->whereHas('semester', function ($query) use ($session) {
+                $query->where('academic_year_id', $session->academic_year_id);
+            })
+            ->select('student_id');
+
+        $alreadyAssignedStudentIds = ExamAttendanceSheet::query()
+            ->where('exam_session_id', $session->id)
+            ->select('student_id');
+
         return Student::query()
-            ->whereHas('enrolledModules', function ($q) use ($session) {
-                $q->where('module_id', $session->module_id)
-                    ->where('academic_year_id', $session->academic_year_id);
-            })
-            ->whereDoesntHave('examAttendanceSheets', function ($q) use ($session) {
-                $q->where('exam_session_id', $session->id);
-            })
-            ->get();
+            ->whereIn('id', $enrolledStudentIds)
+            ->whereNotIn('id', $alreadyAssignedStudentIds)
+            ->orderBy('lastname')
+            ->orderBy('firstname');
     }
 }

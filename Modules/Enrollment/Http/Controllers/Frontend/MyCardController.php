@@ -223,7 +223,7 @@ class MyCardController extends Controller
         $user = Auth::user();
 
         return Student::on('tenant')
-            ->where('email', $user->email)
+            ->where('user_id', $user->id)
             ->first();
     }
 }

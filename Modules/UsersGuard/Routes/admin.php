@@ -67,9 +67,11 @@ Route::prefix('admin')->middleware(['tenant', 'tenant.auth'])->group(function ()
         Route::delete('/{permission}', [PermissionController::class, 'destroy']);
     });
 
+    // Liste des rôles — lecture Admin / Manager (nécessaire pour attribuer un rôle à la création d'un utilisateur)
+    Route::get('/roles', [RoleController::class, 'index'])->middleware('role:Administrator|Manager,tenant');
+
     // CRUD Rôles — Admin only
     Route::prefix('roles')->middleware('role:Administrator,tenant')->group(function () {
-        Route::get('/', [RoleController::class, 'index']);
         Route::post('/', [RoleController::class, 'store']);
         Route::get('/{role}', [RoleController::class, 'show']);
         Route::put('/{role}', [RoleController::class, 'update']);

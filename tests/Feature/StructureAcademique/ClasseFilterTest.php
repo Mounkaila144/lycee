@@ -9,6 +9,7 @@ use Modules\StructureAcademique\Entities\Classe;
 use Modules\StructureAcademique\Entities\Cycle;
 use Modules\StructureAcademique\Entities\Level;
 use Modules\StructureAcademique\Entities\Series;
+use Modules\UsersGuard\Entities\TenantUser;
 use Modules\UsersGuard\Entities\User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -34,9 +35,13 @@ class ClasseFilterTest extends TestCase
         parent::setUp();
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
+        // Rôles créés avant toute lecture : la transaction tenant doit les voir.
+        $this->seedRolesAndPermissions();
 
         $this->user = User::factory()->create();
-        $this->token = $this->user->createToken('test-token')->plainTextToken;
+        $tenantUser = TenantUser::findOrFail($this->user->id);
+        $this->assignRole($tenantUser, 'Administrator');
+        $this->token = $tenantUser->createToken('test-token')->plainTextToken;
 
         (new CycleAndLevelSeeder)->run();
         (new SeriesSeeder)->run();
@@ -272,10 +277,25 @@ class ClasseFilterTest extends TestCase
         $response->assertJsonStructure([
             'data' => [
                 'total_classes',
+                'total_capacity',
                 'classes_by_cycle',
                 'classes_by_level',
             ],
         ]);
+    }
+
+    #[Test]
+    public function it_returns_total_capacity_in_stats(): void
+    {
+        $expectedCapacity = (int) Classe::on('tenant')
+            ->where('academic_year_id', $this->activeYear->id)
+            ->sum('max_capacity');
+
+        $response = $this->authGetJson("/api/admin/classes/stats?academic_year_id={$this->activeYear->id}");
+
+        $response->assertOk();
+        $response->assertJsonPath('data.total_capacity', $expectedCapacity);
+        $this->assertGreaterThan(0, $expectedCapacity);
     }
 
     #[Test]

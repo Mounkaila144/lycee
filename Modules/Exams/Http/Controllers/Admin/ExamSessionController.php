@@ -32,9 +32,9 @@ class ExamSessionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'module_id' => 'required|exists:modules,id',
-            'evaluation_period_id' => 'required|exists:evaluation_periods,id',
-            'academic_year_id' => 'required|exists:academic_years,id',
+            'module_id' => 'required|exists:tenant.modules,id',
+            'evaluation_period_id' => 'nullable|exists:tenant.academic_periods,id',
+            'academic_year_id' => 'required|exists:tenant.academic_years,id',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'type' => 'required|in:normal,rattrapage,special',
@@ -50,13 +50,17 @@ class ExamSessionController extends Controller
         return response()->json($session->load(['module', 'evaluationPeriod']), 201);
     }
 
-    public function show(ExamSession $session): JsonResponse
+    public function show(int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
+
         return response()->json($session->load(['module', 'roomAssignments.room', 'supervisors.teacher', 'attendanceSheets']));
     }
 
-    public function update(Request $request, ExamSession $session): JsonResponse
+    public function update(Request $request, int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
+
         $validated = $request->validate([
             'title' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
@@ -72,30 +76,30 @@ class ExamSessionController extends Controller
         return response()->json($session);
     }
 
-    public function destroy(ExamSession $session): JsonResponse
+    public function destroy(int $session): JsonResponse
     {
-        $session->delete();
+        ExamSession::query()->findOrFail($session)->delete();
 
         return response()->json(null, 204);
     }
 
-    public function publish(ExamSession $session): JsonResponse
+    public function publish(int $session): JsonResponse
     {
-        $session = $this->planningService->publishSession($session);
+        $session = $this->planningService->publishSession(ExamSession::query()->findOrFail($session));
 
         return response()->json($session);
     }
 
-    public function cancel(Request $request, ExamSession $session): JsonResponse
+    public function cancel(Request $request, int $session): JsonResponse
     {
-        $session = $this->planningService->cancelSession($session, $request->input('reason'));
+        $session = $this->planningService->cancelSession(ExamSession::query()->findOrFail($session), $request->input('reason'));
 
         return response()->json($session);
     }
 
-    public function duplicate(Request $request, ExamSession $session): JsonResponse
+    public function duplicate(Request $request, int $session): JsonResponse
     {
-        $newSession = $this->planningService->duplicateSession($session, $request->all());
+        $newSession = $this->planningService->duplicateSession(ExamSession::query()->findOrFail($session), $request->all());
 
         return response()->json($newSession, 201);
     }
@@ -106,10 +110,10 @@ class ExamSessionController extends Controller
             'exam_date' => 'required|date',
             'start_time' => 'required',
             'end_time' => 'required',
-            'module_id' => 'nullable|exists:modules,id',
+            'module_id' => 'nullable|exists:tenant.modules,id',
             'room_ids' => 'nullable|array',
-            'room_ids.*' => 'exists:rooms,id',
-            'exclude_session_id' => 'nullable|exists:exam_sessions,id',
+            'room_ids.*' => 'exists:tenant.rooms,id',
+            'exclude_session_id' => 'nullable|exists:tenant.exam_sessions,id',
         ]);
 
         $conflicts = $this->planningService->validateSchedule($validated, $validated['exclude_session_id'] ?? null);

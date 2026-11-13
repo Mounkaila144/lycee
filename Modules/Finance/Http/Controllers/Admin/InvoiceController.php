@@ -19,6 +19,11 @@ use Modules\StructureAcademique\Entities\AcademicYear;
  */
 class InvoiceController extends Controller
 {
+    /**
+     * @var list<string>
+     */
+    private const SORTABLE_COLUMNS = ['invoice_date', 'due_date', 'total_amount', 'paid_amount', 'invoice_number', 'status', 'created_at', 'id'];
+
     public function __construct(
         private BillingService $billingService
     ) {}
@@ -48,15 +53,24 @@ class InvoiceController extends Controller
             $query->overdue();
         }
 
-        // Search by invoice number
+        // Search by invoice number, or by student matricule / name
         if ($search = $request->input('search')) {
-            $query->where('invoice_number', 'like', "%{$search}%");
+            $query->where(function ($searchQuery) use ($search) {
+                $searchQuery->where('invoice_number', 'like', "%{$search}%")
+                    ->orWhereHas('student', function ($studentQuery) use ($search) {
+                        $studentQuery->where('matricule', 'like', "%{$search}%")
+                            ->orWhere('firstname', 'like', "%{$search}%")
+                            ->orWhere('lastname', 'like', "%{$search}%");
+                    });
+            });
         }
 
-        // Sort
-        $sortBy = $request->input('sort_by', 'invoice_date');
-        $sortOrder = $request->input('sort_order', 'desc');
-        $query->orderBy($sortBy, $sortOrder);
+        // Sort (whitelist to avoid SQL errors on unknown columns)
+        $sortBy = in_array($request->input('sort_by'), self::SORTABLE_COLUMNS, true)
+            ? $request->input('sort_by')
+            : 'invoice_date';
+        $sortOrder = strtolower((string) $request->input('sort_order')) === 'asc' ? 'asc' : 'desc';
+        $query->orderBy($sortBy, $sortOrder)->orderBy('id', $sortOrder);
 
         $perPage = $request->input('per_page', 15);
         $invoices = $query->paginate($perPage);

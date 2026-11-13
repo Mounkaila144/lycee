@@ -6,8 +6,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Entities\StudentDocument;
-use Modules\StructureAcademique\Entities\Programme;
-use Modules\UsersGuard\Entities\User;
+use Modules\UsersGuard\Entities\TenantUser as User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Tests\Concerns\InteractsWithTenancy;
@@ -30,7 +29,9 @@ class StudentApiTest extends TestCase
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
 
         // Create user and REAL token (TenantSanctumAuth requires Bearer token)
+        $this->seedRolesAndPermissions();
         $this->user = User::factory()->create();
+        $this->assignRole($this->user, 'Administrator');
         $this->token = $this->user->createToken('test-token')->plainTextToken;
 
         Storage::fake('tenant');
@@ -92,7 +93,7 @@ class StudentApiTest extends TestCase
         $response->assertOk()
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'matricule', 'firstname', 'lastname', 'email', 'status'],
+                    '*' => ['id', 'matricule', 'firstname', 'lastname', 'phone', 'status'],
                 ],
                 'meta' => ['current_page', 'last_page', 'per_page', 'total'],
             ])
@@ -104,10 +105,11 @@ class StudentApiTest extends TestCase
     {
         Student::factory()->create([
             'firstname' => 'John',
-            'email' => 'john@example.com',
+            'lastname' => 'Zeta',
         ]);
         Student::factory()->create([
             'firstname' => 'Jane',
+            'lastname' => 'Alpha',
         ]);
 
         $response = $this->authGetJson('/api/admin/enrollment/students?search=john');
@@ -132,18 +134,14 @@ class StudentApiTest extends TestCase
     #[Test]
     public function it_creates_student_with_auto_generated_matricule(): void
     {
-        $programme = Programme::factory()->create(['code' => 'INF']);
-
         $data = [
             'firstname' => 'John',
             'lastname' => 'Doe',
-            'birthdate' => '2000-01-01',
+            'birthdate' => '2010-01-01',
             'sex' => 'M',
-            'nationality' => 'Niger',
-            'email' => 'john.doe@example.com',
-            'mobile' => '+22798765432',
-            'country' => 'Niger',
-            'programme_id' => $programme->id,
+            'nationality' => 'Nigérienne',
+            'phone' => '+22798765432',
+            'quarter' => 'Plateau',
         ];
 
         $response = $this->authPostJson('/api/admin/enrollment/students', $data);
@@ -154,13 +152,11 @@ class StudentApiTest extends TestCase
                 'data' => ['id', 'matricule', 'firstname', 'lastname'],
             ]);
 
-        $this->assertDatabaseHas('students', [
-            'email' => 'john.doe@example.com',
-        ], 'tenant');
-
-        // Check matricule format
-        $student = Student::on('tenant')->where('email', 'john.doe@example.com')->first();
-        $this->assertMatchesRegularExpression('/^\d{4}-INF-\d{3}$/', $student->matricule);
+        $student = Student::on('tenant')->where('lastname', 'Doe')->first();
+        $this->assertNotNull($student);
+        $this->assertSame('+22798765432', $student->phone);
+        $this->assertSame('Plateau', $student->quarter);
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{4}$/', $student->matricule);
     }
 
     #[Test]
@@ -174,64 +170,36 @@ class StudentApiTest extends TestCase
                 'lastname',
                 'birthdate',
                 'sex',
-                'email',
-                'mobile',
-                'programme_id',
-            ]);
+            ])
+            ->assertJsonMissingValidationErrors(['email', 'mobile', 'programme_id']);
     }
 
     #[Test]
-    public function it_validates_unique_email(): void
+    public function it_ignores_legacy_university_fields_when_creating_student(): void
     {
-        Student::factory()->create(['email' => 'existing@example.com']);
-        $programme = Programme::factory()->create();
-
+        // Les colonnes email/mobile/country ont été retirées de `students` (migration align_students_to_secondaire).
         $response = $this->authPostJson('/api/admin/enrollment/students', [
-            'firstname' => 'John',
-            'lastname' => 'Doe',
-            'birthdate' => '2000-01-01',
-            'sex' => 'M',
-            'nationality' => 'Niger',
-            'email' => 'existing@example.com',
-            'mobile' => '+22798765432',
-            'country' => 'Niger',
-            'programme_id' => $programme->id,
-        ]);
-
-        $response->assertUnprocessable()
-            ->assertJsonValidationErrors(['email']);
-    }
-
-    #[Test]
-    public function it_validates_age_constraints(): void
-    {
-        $programme = Programme::factory()->create();
-
-        // Too young (14 years old)
-        $response = $this->authPostJson('/api/admin/enrollment/students', [
-            'firstname' => 'John',
-            'lastname' => 'Doe',
-            'birthdate' => now()->subYears(14)->format('Y-m-d'),
-            'sex' => 'M',
-            'email' => 'john@example.com',
-            'mobile' => '+22798765432',
-            'country' => 'Niger',
-            'programme_id' => $programme->id,
-        ]);
-
-        $response->assertUnprocessable()
-            ->assertJsonValidationErrors(['birthdate']);
-
-        // Too old (61 years old)
-        $response = $this->authPostJson('/api/admin/enrollment/students', [
-            'firstname' => 'Jane',
-            'lastname' => 'Doe',
-            'birthdate' => now()->subYears(61)->format('Y-m-d'),
+            'firstname' => 'Legacy',
+            'lastname' => 'Payload',
+            'birthdate' => '2011-05-05',
             'sex' => 'F',
-            'email' => 'jane@example.com',
+            'email' => 'legacy@example.com',
             'mobile' => '+22798765432',
             'country' => 'Niger',
-            'programme_id' => $programme->id,
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('students', ['lastname' => 'Payload'], 'tenant');
+    }
+
+    #[Test]
+    public function it_rejects_birthdate_in_the_future(): void
+    {
+        $response = $this->authPostJson('/api/admin/enrollment/students', [
+            'firstname' => 'John',
+            'lastname' => 'Doe',
+            'birthdate' => now()->addDay()->format('Y-m-d'),
+            'sex' => 'M',
         ]);
 
         $response->assertUnprocessable()
@@ -253,30 +221,34 @@ class StudentApiTest extends TestCase
                     'matricule',
                     'full_name',
                     'documents',
-                    'has_complete_documents',
-                    'completeness_percentage',
                 ],
-            ]);
+            ])
+            ->assertJsonCount(2, 'data.documents');
     }
 
     #[Test]
     public function it_updates_student_information(): void
     {
         $student = Student::factory()->create([
-            'email' => 'old@example.com',
+            'phone' => '+22790000000',
+            'city' => 'Zinder',
         ]);
 
         $response = $this->authPutJson("/api/admin/enrollment/students/{$student->id}", [
-            'email' => 'new@example.com',
-            'mobile' => '+22712345678',
+            'phone' => '+22712345678',
+            'city' => 'Niamey',
+            'quarter' => 'Lazaret',
+            'email' => 'ignored@example.com',
         ]);
 
         $response->assertOk()
-            ->assertJsonPath('data.email', 'new@example.com');
+            ->assertJsonPath('data.phone', '+22712345678')
+            ->assertJsonPath('data.quarter', 'Lazaret');
 
         $this->assertDatabaseHas('students', [
             'id' => $student->id,
-            'email' => 'new@example.com',
+            'phone' => '+22712345678',
+            'city' => 'Niamey',
         ], 'tenant');
     }
 
@@ -417,5 +389,87 @@ class StudentApiTest extends TestCase
                     'with_complete_documents',
                 ],
             ]);
+    }
+
+    #[Test]
+    public function professeur_can_read_but_cannot_modify_students(): void
+    {
+        $teacher = User::factory()->create();
+        $this->assignRole($teacher, 'Professeur');
+        $teacherToken = $teacher->createToken('test-token')->plainTextToken;
+        $student = Student::factory()->create();
+
+        $this->withToken($teacherToken)->getJson('/api/admin/enrollment/students')->assertOk();
+        $this->withToken($teacherToken)->getJson("/api/admin/enrollment/students/{$student->id}")->assertOk();
+
+        $this->withToken($teacherToken)->postJson('/api/admin/enrollment/students', [
+            'firstname' => 'John',
+            'lastname' => 'Doe',
+            'birthdate' => '2010-01-01',
+            'sex' => 'M',
+        ])->assertForbidden();
+        $this->withToken($teacherToken)->putJson("/api/admin/enrollment/students/{$student->id}", ['city' => 'Dosso'])->assertForbidden();
+        $this->withToken($teacherToken)->deleteJson("/api/admin/enrollment/students/{$student->id}")->assertForbidden();
+        $this->withToken($teacherToken)->postJson("/api/admin/enrollment/students/{$student->id}/status", [
+            'status' => 'Suspendu',
+            'reason' => 'Test',
+        ])->assertForbidden();
+    }
+
+    #[Test]
+    public function manager_can_update_student(): void
+    {
+        $manager = User::factory()->create();
+        $this->assignRole($manager, 'Manager');
+        $managerToken = $manager->createToken('test-token')->plainTextToken;
+        $student = Student::factory()->create();
+
+        $this->withToken($managerToken)
+            ->putJson("/api/admin/enrollment/students/{$student->id}", ['city' => 'Dosso'])
+            ->assertOk()
+            ->assertJsonPath('data.city', 'Dosso');
+    }
+
+    #[Test]
+    public function autocomplete_searches_by_name_and_matricule(): void
+    {
+        Student::factory()->withMatricule('2026-0042')->create(['firstname' => 'Aïcha', 'lastname' => 'Moussa']);
+        Student::factory()->create(['firstname' => 'Ibrahim', 'lastname' => 'Sani']);
+
+        $this->authGetJson('/api/admin/enrollment/students/search/autocomplete?q=Moussa')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.matricule', '2026-0042');
+
+        $this->authGetJson('/api/admin/enrollment/students/search/autocomplete?q=2026-00')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+    }
+
+    #[Test]
+    public function finance_roles_can_list_students_but_cannot_modify_them(): void
+    {
+        $student = Student::factory()->withMatricule('2026-0099')->create();
+
+        foreach (['Comptable', 'Caissier'] as $roleName) {
+            $financeUser = User::factory()->create();
+            $this->assignRole($financeUser, $roleName);
+            $financeToken = $financeUser->createToken('test-token')->plainTextToken;
+
+            $this->withToken($financeToken)
+                ->getJson('/api/admin/enrollment/students?search=2026-0099')
+                ->assertOk()
+                ->assertJsonPath('data.0.matricule', '2026-0099');
+
+            $this->withToken($financeToken)->postJson('/api/admin/enrollment/students', [
+                'firstname' => 'John',
+                'lastname' => 'Doe',
+                'birthdate' => '2010-01-01',
+                'sex' => 'M',
+            ])->assertForbidden();
+            $this->withToken($financeToken)->getJson("/api/admin/enrollment/students/{$student->id}")->assertForbidden();
+            $this->withToken($financeToken)->putJson("/api/admin/enrollment/students/{$student->id}", ['city' => 'Dosso'])->assertForbidden();
+            $this->withToken($financeToken)->deleteJson("/api/admin/enrollment/students/{$student->id}")->assertForbidden();
+        }
     }
 }

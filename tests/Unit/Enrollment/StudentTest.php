@@ -189,11 +189,12 @@ class StudentTest extends TestCase
         Student::factory()->create([
             'matricule' => '2025-INF-001',
             'firstname' => 'John',
-            'email' => 'john@example.com',
+            'lastname' => 'Doe',
         ]);
         Student::factory()->create([
             'matricule' => '2025-MATH-002',
             'firstname' => 'Jane',
+            'lastname' => 'Smith',
         ]);
 
         $query = Student::on('tenant')->search('john');

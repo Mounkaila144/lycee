@@ -13,11 +13,13 @@ class ExamRoomController extends Controller
 {
     public function __construct(private ExamPlanningService $planningService) {}
 
-    public function assign(Request $request, ExamSession $session): JsonResponse
+    public function assign(Request $request, int $session): JsonResponse
     {
+        $session = ExamSession::query()->findOrFail($session);
+
         $validated = $request->validate([
             'rooms' => 'required|array',
-            'rooms.*.room_id' => 'required|exists:rooms,id',
+            'rooms.*.room_id' => 'required|exists:tenant.rooms,id',
             'rooms.*.capacity' => 'nullable|integer',
             'rooms.*.seat_start_number' => 'nullable|integer',
             'rooms.*.seat_end_number' => 'nullable|integer',
@@ -28,9 +30,12 @@ class ExamRoomController extends Controller
         return response()->json($assignments, 201);
     }
 
-    public function remove(ExamSession $session, ExamRoomAssignment $assignment): JsonResponse
+    public function remove(int $session, int $assignment): JsonResponse
     {
-        $assignment->delete();
+        ExamRoomAssignment::query()
+            ->where('exam_session_id', $session)
+            ->findOrFail($assignment)
+            ->delete();
 
         return response()->json(null, 204);
     }

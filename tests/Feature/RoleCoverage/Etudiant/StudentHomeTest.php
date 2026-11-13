@@ -6,7 +6,6 @@ use Modules\Enrollment\Entities\Student;
 use Modules\UsersGuard\Entities\TenantUser;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
-use Tests\Concerns\InteractsWithTenancy;
 use Tests\TestCase;
 
 /**
@@ -20,7 +19,7 @@ use Tests\TestCase;
  */
 class StudentHomeTest extends TestCase
 {
-    use InteractsWithTenancy;
+    use RunsStudentPortalMigrations;
 
     protected function setUp(): void
     {
@@ -39,7 +38,7 @@ class StudentHomeTest extends TestCase
     private function studentWithProfile(): array
     {
         $user = TenantUser::factory()->create(['application' => 'admin']);
-        $this->assignRole($user, 'Étudiant');
+        $this->assignRole($user, 'Élève');
         $student = Student::factory()->create(['user_id' => $user->id]);
         $token = $user->createToken('test-token')->plainTextToken;
 
@@ -62,7 +61,7 @@ class StudentHomeTest extends TestCase
     public function etudiant_without_profile_returns_404(): void
     {
         $user = TenantUser::factory()->create(['application' => 'admin']);
-        $this->assignRole($user, 'Étudiant');
+        $this->assignRole($user, 'Élève');
         $token = $user->createToken('test-token')->plainTextToken;
 
         $this->withToken($token)

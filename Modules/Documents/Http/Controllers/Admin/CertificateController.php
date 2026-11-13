@@ -15,6 +15,16 @@ use Modules\StructureAcademique\Entities\AcademicYear;
  */
 class CertificateController extends Controller
 {
+    /**
+     * Request types that can be generated without additional input on approval.
+     */
+    private const AUTO_GENERATED_REQUEST_TYPES = [
+        'certificate_enrollment',
+        'certificate_status',
+        'certificate_attendance',
+        'certificate_schooling',
+    ];
+
     public function __construct(
         private CertificateService $certificateService
     ) {}
@@ -240,9 +250,21 @@ class CertificateController extends Controller
 
         $documentRequest = DocumentRequest::findOrFail($requestId);
 
+        if (! $documentRequest->isPending()) {
+            return response()->json([
+                'message' => 'Cette demande a déjà été traitée.',
+            ], 422);
+        }
+
+        if (! in_array($documentRequest->document_type, self::AUTO_GENERATED_REQUEST_TYPES, true)) {
+            return response()->json([
+                'message' => 'Ce type de document doit être généré manuellement (informations complémentaires requises).',
+            ], 422);
+        }
+
         $document = $this->certificateService->approveAndGenerateCertificate(
             $documentRequest,
-            auth()->id(),
+            $request->user()->id,
             $validated['notes'] ?? null
         );
 
@@ -266,7 +288,7 @@ class CertificateController extends Controller
 
         $this->certificateService->rejectCertificateRequest(
             $documentRequest,
-            auth()->id(),
+            $request->user()->id,
             $validated['reason']
         );
 

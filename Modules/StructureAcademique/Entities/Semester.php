@@ -22,6 +22,7 @@ class Semester extends Model
         'start_date',
         'end_date',
         'is_active',
+        'closed_at',
     ];
 
     /**
@@ -33,6 +34,7 @@ class Semester extends Model
             'start_date' => 'date',
             'end_date' => 'date',
             'is_active' => 'boolean',
+            'closed_at' => 'datetime',
         ];
     }
 

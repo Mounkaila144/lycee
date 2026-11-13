@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Gate;
 use Modules\Enrollment\Entities\Student;
+use Modules\Finance\Entities\Invoice;
 use Modules\Finance\Entities\ParentOnlinePayment;
 use Modules\Finance\Services\CinetPayService;
 
@@ -15,7 +16,7 @@ use Modules\Finance\Services\CinetPayService;
  * Story Parent 06 — Paiement en ligne d'une facture enfant (CinetPay).
  *
  * Endpoints :
- *   - POST /api/admin/parent/children/{student}/invoices/{invoice}/pay
+ *   - POST /api/admin/parent/children/{studentId}/invoices/{invoiceId}/pay
  *           → initie une transaction CinetPay + renvoie le payment_url
  *   - GET  /api/admin/parent/payments/{paymentId}/status
  *           → retourne le statut d'un paiement initié par le parent connecté
@@ -26,13 +27,35 @@ class ParentPaymentController extends Controller
 {
     public function __construct(private CinetPayService $cinetPay) {}
 
-    public function initiate(Request $request, Student $student, int $invoiceId): JsonResponse
+    public function initiate(Request $request, int $studentId, int $invoiceId): JsonResponse
     {
+        $student = Student::query()->findOrFail($studentId);
         $this->ensurePolicy($request, 'payInvoices', $student);
+
+        $invoice = Invoice::query()
+            ->where('id', $invoiceId)
+            ->where('student_id', $student->id)
+            ->first();
+
+        if (! $invoice) {
+            return response()->json([
+                'message' => 'Facture introuvable pour cet élève.',
+                'code' => 'INVOICE_NOT_FOUND',
+            ], 404);
+        }
+
+        $balance = max(0, (float) $invoice->total_amount - (float) $invoice->paid_amount);
+
+        if (in_array($invoice->status, ['draft', 'paid', 'cancelled'], true) || $balance <= 0) {
+            return response()->json([
+                'message' => 'Cette facture ne peut pas être payée en ligne.',
+                'code' => 'INVOICE_NOT_PAYABLE',
+            ], 422);
+        }
 
         $validated = $request->validate([
             'method' => ['required', 'in:mobile_money,card'],
-            'amount' => ['required', 'numeric', 'min:100'],
+            'amount' => ['required', 'numeric', 'min:100', 'max:'.$balance],
             'phone' => ['nullable', 'string', 'max:30'],
         ]);
 

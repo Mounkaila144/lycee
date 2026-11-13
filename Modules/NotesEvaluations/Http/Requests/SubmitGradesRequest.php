@@ -14,8 +14,8 @@ class SubmitGradesRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'module_id' => ['required', 'integer', 'exists:modules,id'],
-            'evaluation_id' => ['nullable', 'integer', 'exists:module_evaluation_configs,id'],
+            'module_id' => ['required', 'integer', 'exists:tenant.modules,id'],
+            'evaluation_id' => ['nullable', 'integer', 'exists:tenant.module_evaluation_configs,id'],
         ];
     }
 

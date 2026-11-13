@@ -4,7 +4,7 @@ namespace Tests\Feature\Enrollment;
 
 use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Entities\StudentAuditLog;
-use Modules\UsersGuard\Entities\User;
+use Modules\UsersGuard\Entities\TenantUser as User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Tests\Concerns\InteractsWithTenancy;
@@ -27,7 +27,9 @@ class StudentUpdateApiTest extends TestCase
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
 
         // Create user and REAL token (TenantSanctumAuth requires Bearer token)
+        $this->seedRolesAndPermissions();
         $this->user = User::factory()->create();
+        $this->assignRole($this->user, 'Administrator');
         $this->token = $this->user->createToken('test-token')->plainTextToken;
     }
 
@@ -57,7 +59,7 @@ class StudentUpdateApiTest extends TestCase
     public function it_can_update_student_modifiable_fields(): void
     {
         $student = Student::factory()->create([
-            'email' => 'original@example.com',
+            'quarter' => 'Original Quarter',
             'address' => '123 Original St',
             'city' => 'Original City',
             'phone' => '+22712345678',
@@ -66,7 +68,7 @@ class StudentUpdateApiTest extends TestCase
         ]);
 
         $response = $this->authPutJson("/api/admin/enrollment/students/{$student->id}", [
-            'email' => 'updated@example.com',
+            'quarter' => 'Updated Quarter',
             'address' => '456 Updated Ave',
             'city' => 'Updated City',
             'phone' => '+22798765432',
@@ -81,7 +83,7 @@ class StudentUpdateApiTest extends TestCase
 
         $this->assertDatabaseHas('students', [
             'id' => $student->id,
-            'email' => 'updated@example.com',
+            'quarter' => 'Updated Quarter',
             'address' => '456 Updated Ave',
             'city' => 'Updated City',
             'phone' => '+22798765432',
@@ -94,14 +96,14 @@ class StudentUpdateApiTest extends TestCase
     public function it_creates_audit_log_when_updating_student(): void
     {
         $student = Student::factory()->create([
-            'email' => 'original@example.com',
+            'quarter' => 'Original Quarter',
         ]);
 
         // Clear any existing audit logs from creation
         StudentAuditLog::on('tenant')->where('student_id', $student->id)->delete();
 
         $response = $this->authPutJson("/api/admin/enrollment/students/{$student->id}", [
-            'email' => 'updated@example.com',
+            'quarter' => 'Updated Quarter',
         ]);
 
         $response->assertOk();
@@ -111,9 +113,9 @@ class StudentUpdateApiTest extends TestCase
             'student_id' => $student->id,
             'user_id' => $this->user->id,
             'event' => 'updated',
-            'field_name' => 'email',
-            'old_value' => 'original@example.com',
-            'new_value' => 'updated@example.com',
+            'field_name' => 'quarter',
+            'old_value' => 'Original Quarter',
+            'new_value' => 'Updated Quarter',
         ], 'tenant');
     }
 
@@ -132,7 +134,7 @@ class StudentUpdateApiTest extends TestCase
             'lastname' => 'Change',
             'birthdate' => '2001-02-02',
             'matricule' => '2024-CHANGED-999',
-            'email' => 'allowed@example.com', // This should work
+            'quarter' => 'Allowed Quarter', // This should work
         ]);
 
         $response->assertOk();
@@ -144,22 +146,23 @@ class StudentUpdateApiTest extends TestCase
             'lastname' => 'Name',
             'birthdate' => '2000-01-01',
             'matricule' => '2024-TEST-001',
-            'email' => 'allowed@example.com', // But this should be updated
+            'quarter' => 'Allowed Quarter', // But this should be updated
         ], 'tenant');
     }
 
     #[Test]
-    public function it_rejects_duplicate_email(): void
+    public function it_ignores_legacy_email_field(): void
     {
-        Student::factory()->create(['email' => 'existing@example.com']);
-        $student = Student::factory()->create(['email' => 'original@example.com']);
+        // La colonne email a été retirée de `students` (migration align_students_to_secondaire).
+        $student = Student::factory()->create();
 
         $response = $this->authPutJson("/api/admin/enrollment/students/{$student->id}", [
             'email' => 'existing@example.com',
+            'mobile' => '+22790000000',
+            'country' => 'Niger',
         ]);
 
-        $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['email']);
+        $response->assertOk();
     }
 
     #[Test]
@@ -224,7 +227,7 @@ class StudentUpdateApiTest extends TestCase
     public function it_tracks_multiple_field_changes_separately(): void
     {
         $student = Student::factory()->create([
-            'email' => 'old@example.com',
+            'quarter' => 'Old Quarter',
             'city' => 'Old City',
             'phone' => '+22712345678',
         ]);
@@ -233,7 +236,7 @@ class StudentUpdateApiTest extends TestCase
         StudentAuditLog::on('tenant')->where('student_id', $student->id)->delete();
 
         $response = $this->authPutJson("/api/admin/enrollment/students/{$student->id}", [
-            'email' => 'new@example.com',
+            'quarter' => 'New Quarter',
             'city' => 'New City',
             'phone' => '+22787654321',
         ]);
@@ -249,22 +252,22 @@ class StudentUpdateApiTest extends TestCase
         $this->assertCount(3, $auditLogs);
 
         $fieldNames = $auditLogs->pluck('field_name')->toArray();
-        $this->assertContains('email', $fieldNames);
+        $this->assertContains('quarter', $fieldNames);
         $this->assertContains('city', $fieldNames);
         $this->assertContains('phone', $fieldNames);
     }
 
     #[Test]
-    public function it_validates_email_format(): void
+    public function it_validates_blood_group(): void
     {
         $student = Student::factory()->create();
 
         $response = $this->authPutJson("/api/admin/enrollment/students/{$student->id}", [
-            'email' => 'invalid-email',
+            'blood_group' => 'Z+',
         ]);
 
         $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['email']);
+        $response->assertJsonValidationErrors(['blood_group']);
     }
 
     #[Test]
@@ -273,11 +276,11 @@ class StudentUpdateApiTest extends TestCase
         $student = Student::factory()->create();
 
         $response = $this->authPutJson("/api/admin/enrollment/students/{$student->id}", [
-            'mobile' => 'invalid-phone',
+            'phone' => 'invalid-phone',
         ]);
 
         $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['mobile']);
+        $response->assertJsonValidationErrors(['phone']);
     }
 
     #[Test]
@@ -286,7 +289,7 @@ class StudentUpdateApiTest extends TestCase
         $student = Student::factory()->create();
 
         $response = $this->putJson("/api/admin/enrollment/students/{$student->id}", [
-            'email' => 'test@example.com',
+            'city' => 'Dosso',
         ]);
 
         $response->assertStatus(401);

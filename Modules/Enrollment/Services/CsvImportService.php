@@ -6,7 +6,6 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Modules\Enrollment\Entities\Student;
-use Modules\StructureAcademique\Entities\Programme;
 
 class CsvImportService
 {
@@ -18,7 +17,6 @@ class CsvImportService
         'prenom',
         'date_naissance',
         'sexe',
-        'email',
     ];
 
     /**
@@ -29,16 +27,15 @@ class CsvImportService
         'mobile',
         'adresse',
         'ville',
-        'pays',
+        'quartier',
         'nationalite',
         'lieu_naissance',
-        'programme', // Programme code
     ];
 
     /**
      * Valid sex values
      */
-    public const VALID_SEX_VALUES = ['M', 'F', 'O'];
+    public const VALID_SEX_VALUES = ['M', 'F'];
 
     public function __construct(
         private MatriculeGeneratorService $matriculeGenerator
@@ -90,7 +87,7 @@ class CsvImportService
         $rows = [];
         $validCount = 0;
         $errorCount = 0;
-        $seenEmails = [];
+        $seenIdentities = [];
         $rowNumber = 1;
 
         foreach ($lines as $line) {
@@ -103,7 +100,7 @@ class CsvImportService
             }
 
             $rowData = $this->mapRowToData($headers, $values);
-            $rowErrors = $this->validateRow($rowData, $seenEmails, $rowNumber);
+            $rowErrors = $this->validateRow($rowData, $seenIdentities, $rowNumber);
 
             if (empty($rowErrors)) {
                 $validCount++;
@@ -117,9 +114,9 @@ class CsvImportService
 
             $rowData['row_number'] = $rowNumber;
 
-            // Track emails for duplicate detection within file
-            if (! empty($rowData['email'])) {
-                $seenEmails[strtolower($rowData['email'])] = $rowNumber;
+            $identityKey = $this->identityKey($rowData);
+            if ($identityKey !== null && ! isset($seenIdentities[$identityKey])) {
+                $seenIdentities[$identityKey] = $rowNumber;
             }
 
             $rows[] = $rowData;
@@ -135,79 +132,65 @@ class CsvImportService
     }
 
     /**
-     * Import validated rows
+     * Import validated rows.
      *
+     * Rows are re-validated server-side (the client-side preview cannot be trusted)
+     * and duplicates (same nom, prénom, date de naissance) are skipped.
+     *
+     * @param  array<int, array<string, mixed>>  $validatedRows
      * @return array{imported_count: int, errors: array, imported_students: array}
      */
-    public function import(array $validatedRows, ?Programme $defaultProgramme = null): array
+    public function import(array $validatedRows): array
     {
         $importedStudents = [];
         $errors = [];
         $importedCount = 0;
+        $seenIdentities = [];
 
-        return DB::connection('tenant')->transaction(function () use ($validatedRows, $defaultProgramme, &$importedStudents, &$errors, &$importedCount) {
+        return DB::connection('tenant')->transaction(function () use ($validatedRows, &$importedStudents, &$errors, &$importedCount, &$seenIdentities) {
             foreach ($validatedRows as $row) {
                 if (! $row['is_valid']) {
                     continue;
                 }
 
+                $rowErrors = $this->validateRow($row, $seenIdentities, (int) $row['row_number']);
+
+                if (! empty($rowErrors)) {
+                    $errors[] = [
+                        'row_number' => $row['row_number'],
+                        'error' => implode(' ; ', $rowErrors),
+                    ];
+
+                    continue;
+                }
+
                 try {
-                    // Find programme if specified
-                    $programme = $defaultProgramme;
-                    if (! empty($row['programme'])) {
-                        $programme = Programme::on('tenant')
-                            ->where('code', strtoupper($row['programme']))
-                            ->first();
-
-                        if (! $programme) {
-                            $errors[] = [
-                                'row_number' => $row['row_number'],
-                                'error' => "Programme '{$row['programme']}' non trouvé",
-                            ];
-
-                            continue;
-                        }
-                    }
-
-                    // Generate matricule
-                    $matricule = null;
-                    if ($programme) {
-                        $matricule = $this->matriculeGenerator->generateNext($programme);
-                    } else {
-                        // Generate a simple matricule without programme
-                        $matricule = $this->generateSimpleMatricule();
-                    }
-
-                    // Prepare mobile value (required field)
-                    $mobile = $this->sanitize($row['mobile'] ?? $row['telephone'] ?? null);
-                    if (empty($mobile)) {
-                        // Use a placeholder value if no phone/mobile provided
-                        $mobile = 'N/A';
-                    }
-
-                    // Create student
                     $student = Student::on('tenant')->create([
-                        'matricule' => $matricule,
+                        'matricule' => $this->matriculeGenerator->generateSimpleMatricule(),
                         'firstname' => $this->sanitize($row['prenom']),
                         'lastname' => $this->sanitize($row['nom']),
                         'birthdate' => $this->parseDate($row['date_naissance']),
                         'birthplace' => $this->sanitize($row['lieu_naissance'] ?? null),
-                        'sex' => strtoupper($row['sexe']),
-                        'email' => strtolower(trim($row['email'])),
-                        'phone' => $this->sanitize($row['telephone'] ?? null),
-                        'mobile' => $mobile,
+                        'sex' => strtoupper(trim($row['sexe'])),
+                        'phone' => $this->sanitize($row['telephone'] ?? null) ?? $this->sanitize($row['mobile'] ?? null),
                         'address' => $this->sanitize($row['adresse'] ?? null),
-                        'city' => $this->sanitize($row['ville'] ?? null),
-                        'country' => $this->sanitize($row['pays'] ?? 'Niger'),
-                        'nationality' => $this->sanitize($row['nationalite'] ?? 'Niger'),
+                        'city' => $this->sanitize($row['ville'] ?? null) ?? 'Niamey',
+                        'quarter' => $this->sanitize($row['quartier'] ?? null),
+                        'nationality' => $this->sanitize($row['nationalite'] ?? null) ?? 'Nigérienne',
                         'status' => 'Actif',
                     ]);
+
+                    $identityKey = $this->identityKey($row);
+                    if ($identityKey !== null) {
+                        $seenIdentities[$identityKey] = (int) $row['row_number'];
+                    }
 
                     $importedStudents[] = [
                         'id' => $student->id,
                         'matricule' => $student->matricule,
                         'full_name' => $student->full_name,
-                        'email' => $student->email,
+                        'firstname' => $student->firstname,
+                        'lastname' => $student->lastname,
                         'row_number' => $row['row_number'],
                     ];
 
@@ -238,31 +221,25 @@ class CsvImportService
             'prenom',
             'date_naissance',
             'sexe',
-            'email',
+            'lieu_naissance',
+            'nationalite',
             'telephone',
-            'mobile',
             'adresse',
             'ville',
-            'pays',
-            'nationalite',
-            'lieu_naissance',
-            'programme',
+            'quartier',
         ];
 
         $exampleRow = [
-            'Dupont',
-            'Jean',
-            '15/03/2005',
-            'M',
-            'jean.dupont@email.com',
+            'Issoufou',
+            'Amina',
+            '15/03/2012',
+            'F',
+            'Niamey',
+            'Nigérienne',
             '+22790123456',
-            '+22796123456',
-            '123 Rue Example',
+            'Rue 12',
             'Niamey',
-            'Niger',
-            'Niger',
-            'Niamey',
-            'LINF',
+            'Plateau',
         ];
 
         return implode(';', $headers)."\n".implode(';', $exampleRow)."\n";
@@ -287,15 +264,19 @@ class CsvImportService
      */
     public function revalidateRow(array $row, array $allRows): array
     {
-        // Build seenEmails from other rows (excluding current row)
-        $seenEmails = [];
+        $seenIdentities = [];
         foreach ($allRows as $otherRow) {
-            if ($otherRow['row_number'] !== $row['row_number'] && ! empty($otherRow['email'])) {
-                $seenEmails[strtolower($otherRow['email'])] = $otherRow['row_number'];
+            if (($otherRow['row_number'] ?? null) === $row['row_number']) {
+                continue;
+            }
+
+            $identityKey = $this->identityKey($otherRow);
+            if ($identityKey !== null && ! isset($seenIdentities[$identityKey])) {
+                $seenIdentities[$identityKey] = $otherRow['row_number'];
             }
         }
 
-        $errors = $this->validateRow($row, $seenEmails, $row['row_number']);
+        $errors = $this->validateRow($row, $seenIdentities, $row['row_number']);
 
         $row['is_valid'] = empty($errors);
         $row['errors'] = $errors;
@@ -344,6 +325,7 @@ class CsvImportService
             'sex' => 'sexe',
             'mail' => 'email',
             'courriel' => 'email',
+            'quarter' => 'quartier',
             'tel' => 'telephone',
             'phone' => 'telephone',
             'portable' => 'mobile',
@@ -420,8 +402,11 @@ class CsvImportService
 
     /**
      * Validate a single row
+     *
+     * @param  array<string, int>  $seenIdentities  identity key => first row number seen
+     * @return array<int, string>
      */
-    private function validateRow(array $row, array $seenEmails, int $rowNumber): array
+    private function validateRow(array $row, array $seenIdentities, int $rowNumber): array
     {
         $errors = [];
 
@@ -432,32 +417,6 @@ class CsvImportService
 
         if (empty(trim($row['prenom'] ?? ''))) {
             $errors[] = 'Le prénom est obligatoire';
-        }
-
-        // Validate email
-        $email = trim($row['email'] ?? '');
-        if (empty($email)) {
-            $errors[] = 'L\'email est obligatoire';
-        } else {
-            // Check email format
-            if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $errors[] = 'Format d\'email invalide';
-            } else {
-                // Check for duplicates in the file
-                $emailLower = strtolower($email);
-                if (isset($seenEmails[$emailLower]) && $seenEmails[$emailLower] !== $rowNumber) {
-                    $errors[] = "Email en doublon avec la ligne {$seenEmails[$emailLower]}";
-                }
-
-                // Check for duplicates in the database
-                $existingStudent = Student::on('tenant')
-                    ->where('email', $emailLower)
-                    ->first();
-
-                if ($existingStudent) {
-                    $errors[] = "Email déjà utilisé par l'étudiant {$existingStudent->matricule}";
-                }
-            }
         }
 
         // Validate date of birth
@@ -484,17 +443,26 @@ class CsvImportService
         if (empty($sex)) {
             $errors[] = 'Le sexe est obligatoire';
         } elseif (! in_array($sex, self::VALID_SEX_VALUES)) {
-            $errors[] = 'Sexe invalide (utilisez M, F ou O)';
+            $errors[] = 'Sexe invalide (utilisez M ou F)';
         }
 
-        // Validate programme if provided
-        if (! empty($row['programme'])) {
-            $programme = Programme::on('tenant')
-                ->where('code', strtoupper($row['programme']))
+        if (empty($errors)) {
+            $identityKey = $this->identityKey($row);
+
+            if ($identityKey !== null && isset($seenIdentities[$identityKey]) && $seenIdentities[$identityKey] !== $rowNumber) {
+                $errors[] = "Élève en doublon avec la ligne {$seenIdentities[$identityKey]}";
+            }
+
+            $existingStudent = Student::on('tenant')
+                ->duplicateOf(
+                    trim($row['prenom']),
+                    trim($row['nom']),
+                    $this->parseDate($row['date_naissance'])->format('Y-m-d')
+                )
                 ->first();
 
-            if (! $programme) {
-                $errors[] = "Programme '{$row['programme']}' non trouvé";
+            if ($existingStudent) {
+                $errors[] = "Élève déjà enregistré (matricule {$existingStudent->matricule})";
             }
         }
 
@@ -581,25 +549,18 @@ class CsvImportService
     }
 
     /**
-     * Generate a simple matricule without programme
+     * Build the identity key (nom + prénom + date de naissance) used for duplicate detection.
      */
-    private function generateSimpleMatricule(): string
+    private function identityKey(array $row): ?string
     {
-        $year = now()->year;
-        $prefix = "{$year}-IMP";
+        $lastname = trim((string) ($row['nom'] ?? ''));
+        $firstname = trim((string) ($row['prenom'] ?? ''));
+        $birthdate = $this->parseDate($row['date_naissance'] ?? null);
 
-        $lastMatricule = Student::on('tenant')
-            ->where('matricule', 'like', "{$prefix}-%")
-            ->orderByRaw('CAST(SUBSTRING_INDEX(matricule, \'-\', -1) AS UNSIGNED) DESC')
-            ->first();
-
-        $sequence = 1;
-        if ($lastMatricule) {
-            $parts = explode('-', $lastMatricule->matricule);
-            $lastSequence = (int) end($parts);
-            $sequence = $lastSequence + 1;
+        if ($lastname === '' || $firstname === '' || ! $birthdate) {
+            return null;
         }
 
-        return sprintf('%s-%03d', $prefix, $sequence);
+        return mb_strtolower($lastname).'|'.mb_strtolower($firstname).'|'.$birthdate->format('Y-m-d');
     }
 }

@@ -29,30 +29,25 @@ class UpdateStudentRequest extends FormRequest
 
     public function rules(): array
     {
-        $studentId = $this->route('student');
-
         return [
             // Personal information
             // IMMUTABLE FIELDS: firstname, lastname, birthdate, matricule cannot be updated
             // Only modifiable fields are listed below
             'birthplace' => ['nullable', 'string', 'max:255'],
-            'sex' => ['sometimes', Rule::in(['M', 'F', 'O'])],
+            'sex' => ['sometimes', Rule::in(['M', 'F'])],
             'nationality' => ['sometimes', 'string', 'max:255'],
 
             // Contact
-            'email' => [
-                'sometimes',
-                'email',
-                'max:255',
-                Rule::unique('tenant.students', 'email')->ignore($studentId),
-            ],
             'phone' => ['nullable', 'regex:/^\+\d{10,15}$/'],
-            'mobile' => ['sometimes', 'regex:/^\+\d{10,15}$/'],
 
             // Address
             'address' => ['nullable', 'string'],
             'city' => ['nullable', 'string', 'max:255'],
-            'country' => ['sometimes', 'string', 'max:255'],
+            'quarter' => ['nullable', 'string', 'max:255'],
+
+            // Health
+            'blood_group' => ['nullable', Rule::in(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])],
+            'health_notes' => ['nullable', 'string', 'max:2000'],
 
             // Photo
             'photo' => ['nullable', 'image', 'max:2048'],
@@ -69,10 +64,7 @@ class UpdateStudentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'sex.in' => 'Le sexe doit être M (Masculin), F (Féminin) ou O (Autre)',
-            'email.email' => 'L\'adresse email doit être valide',
-            'email.unique' => 'Cette adresse email est déjà utilisée par un autre étudiant',
-            'mobile.regex' => 'Le numéro de téléphone doit être au format international (+227...)',
+            'sex.in' => 'Le sexe doit être M (Masculin) ou F (Féminin)',
             'phone.regex' => 'Le numéro de téléphone doit être au format international (+227...)',
             'emergency_contact_phone.regex' => 'Le numéro de téléphone doit être au format international (+227...)',
             'photo.image' => 'Le fichier doit être une image',

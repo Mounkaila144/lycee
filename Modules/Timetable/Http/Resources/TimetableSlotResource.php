@@ -32,6 +32,26 @@ class TimetableSlotResource extends JsonResource
                 'name' => $this->module->name,
             ]),
 
+            'subject_id' => $this->subject_id,
+            'subject' => $this->whenLoaded('subject', fn () => [
+                'id' => $this->subject->id,
+                'code' => $this->subject->code,
+                'name' => $this->subject->name,
+            ]),
+
+            'classe_id' => $this->classe_id,
+            'classe' => $this->whenLoaded('classe', fn () => [
+                'id' => $this->classe->id,
+                'name' => $this->classe->name,
+                'classroom' => $this->classe->classroom,
+            ]),
+
+            'module_id' => $this->module_id,
+            'teacher_id' => $this->teacher_id,
+            'group_id' => $this->group_id,
+            'room_id' => $this->room_id,
+            'semester_id' => $this->semester_id,
+
             'teacher' => $this->whenLoaded('teacher', fn () => [
                 'id' => $this->teacher->id,
                 'name' => $this->teacher->name ?? $this->teacher->firstname.' '.$this->teacher->lastname,

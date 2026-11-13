@@ -43,7 +43,7 @@ class ReenrollmentController extends Controller
         ]);
 
         // Get current student (linked to authenticated user)
-        $student = Student::where('email', auth()->user()->email)->firstOrFail();
+        $student = Student::where('user_id', auth()->id())->firstOrFail();
         $campaign = ReenrollmentCampaign::findOrFail($request->campaign_id);
 
         $eligibility = $this->reenrollmentService->checkEligibility($student, $campaign);
@@ -65,7 +65,7 @@ class ReenrollmentController extends Controller
             'personal_data_updates' => ['nullable', 'array'],
         ]);
 
-        $student = Student::where('email', auth()->user()->email)->firstOrFail();
+        $student = Student::where('user_id', auth()->id())->firstOrFail();
         $campaign = ReenrollmentCampaign::findOrFail($request->campaign_id);
 
         if (! $campaign->isOpen()) {
@@ -100,7 +100,7 @@ class ReenrollmentController extends Controller
         $reenrollment = Reenrollment::findOrFail($reenrollment);
 
         // Verify ownership
-        $student = Student::where('email', auth()->user()->email)->firstOrFail();
+        $student = Student::where('user_id', auth()->id())->firstOrFail();
 
         if ($reenrollment->student_id !== $student->id) {
             return response()->json(['message' => 'Non autorisé.'], 403);
@@ -141,7 +141,7 @@ class ReenrollmentController extends Controller
         ]);
 
         // Verify ownership
-        $student = Student::where('email', auth()->user()->email)->firstOrFail();
+        $student = Student::where('user_id', auth()->id())->firstOrFail();
 
         if ($reenrollment->student_id !== $student->id) {
             return response()->json(['message' => 'Non autorisé.'], 403);
@@ -169,7 +169,7 @@ class ReenrollmentController extends Controller
      */
     public function myStatus(): JsonResponse
     {
-        $student = Student::where('email', auth()->user()->email)->first();
+        $student = Student::where('user_id', auth()->id())->first();
 
         if (! $student) {
             return response()->json([
@@ -193,7 +193,7 @@ class ReenrollmentController extends Controller
     public function show(int $reenrollment): JsonResponse
     {
         $reenrollment = Reenrollment::findOrFail($reenrollment);
-        $student = Student::where('email', auth()->user()->email)->firstOrFail();
+        $student = Student::where('user_id', auth()->id())->firstOrFail();
 
         if ($reenrollment->student_id !== $student->id) {
             return response()->json(['message' => 'Non autorisé.'], 403);
@@ -210,7 +210,7 @@ class ReenrollmentController extends Controller
     public function downloadConfirmation(int $reenrollment)
     {
         $reenrollment = Reenrollment::findOrFail($reenrollment);
-        $student = Student::where('email', auth()->user()->email)->firstOrFail();
+        $student = Student::where('user_id', auth()->id())->firstOrFail();
 
         if ($reenrollment->student_id !== $student->id) {
             return response()->json(['message' => 'Non autorisé.'], 403);

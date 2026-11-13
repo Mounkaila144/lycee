@@ -6,6 +6,7 @@ use Modules\StructureAcademique\Database\Seeders\CycleAndLevelSeeder;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Classe;
 use Modules\StructureAcademique\Entities\Level;
+use Modules\UsersGuard\Entities\TenantUser;
 use Modules\UsersGuard\Entities\User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -27,9 +28,13 @@ class HeadTeacherAssignmentTest extends TestCase
         parent::setUp();
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
+        // Rôles créés avant toute lecture : la transaction tenant doit les voir.
+        $this->seedRolesAndPermissions();
 
         $this->user = User::factory()->create();
-        $this->token = $this->user->createToken('test-token')->plainTextToken;
+        $tenantUser = TenantUser::findOrFail($this->user->id);
+        $this->assignRole($tenantUser, 'Administrator');
+        $this->token = $tenantUser->createToken('test-token')->plainTextToken;
 
         (new CycleAndLevelSeeder)->run();
         $this->activeYear = AcademicYear::factory()->active()->create(['name' => '2025-2026']);
@@ -39,6 +44,14 @@ class HeadTeacherAssignmentTest extends TestCase
     {
         $this->tearDownTenancy();
         parent::tearDown();
+    }
+
+    private function createTeacher(): User
+    {
+        $teacher = User::factory()->create();
+        $this->assignRole(TenantUser::findOrFail($teacher->id), 'Professeur');
+
+        return $teacher;
     }
 
     private function authGetJson(string $uri): \Illuminate\Testing\TestResponse
@@ -63,7 +76,7 @@ class HeadTeacherAssignmentTest extends TestCase
     #[Test]
     public function it_can_assign_head_teacher_on_create(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
 
         $response = $this->authPostJson('/api/admin/classes', [
@@ -80,7 +93,7 @@ class HeadTeacherAssignmentTest extends TestCase
     #[Test]
     public function it_blocks_same_teacher_as_pp_for_two_classes_same_year(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
 
         // Assign teacher as PP for first class
@@ -106,7 +119,7 @@ class HeadTeacherAssignmentTest extends TestCase
     #[Test]
     public function it_allows_same_teacher_as_pp_in_different_years(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
         $otherYear = AcademicYear::factory()->create(['name' => '2024-2025']);
 
@@ -132,8 +145,8 @@ class HeadTeacherAssignmentTest extends TestCase
     #[Test]
     public function it_can_change_head_teacher(): void
     {
-        $teacher1 = User::factory()->create();
-        $teacher2 = User::factory()->create();
+        $teacher1 = $this->createTeacher();
+        $teacher2 = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
 
         $classe = Classe::on('tenant')->create([
@@ -155,7 +168,7 @@ class HeadTeacherAssignmentTest extends TestCase
     #[Test]
     public function it_blocks_update_when_teacher_already_pp_of_another_class(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
 
         // Create class A with this teacher
@@ -187,7 +200,7 @@ class HeadTeacherAssignmentTest extends TestCase
     #[Test]
     public function it_allows_reassigning_same_teacher_to_same_class(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
 
         $classe = Classe::on('tenant')->create([
@@ -213,9 +226,9 @@ class HeadTeacherAssignmentTest extends TestCase
     #[Test]
     public function it_lists_available_head_teachers(): void
     {
-        $teacher1 = User::factory()->create();
-        $teacher2 = User::factory()->create();
-        $teacher3 = User::factory()->create();
+        $teacher1 = $this->createTeacher();
+        $teacher2 = $this->createTeacher();
+        $teacher3 = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
 
         // Assign teacher1 as PP
@@ -242,7 +255,7 @@ class HeadTeacherAssignmentTest extends TestCase
     #[Test]
     public function it_excludes_current_class_teacher_from_used_list(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
 
         $classe = Classe::on('tenant')->create([
@@ -268,7 +281,7 @@ class HeadTeacherAssignmentTest extends TestCase
     #[Test]
     public function it_lists_classes_without_head_teacher(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
 
         // Class with PP
@@ -299,7 +312,7 @@ class HeadTeacherAssignmentTest extends TestCase
     #[Test]
     public function it_returns_empty_when_all_classes_have_pp(): void
     {
-        $teacher = User::factory()->create();
+        $teacher = $this->createTeacher();
         $level6e = Level::on('tenant')->where('code', '6E')->first();
 
         Classe::on('tenant')->create([
@@ -314,5 +327,68 @@ class HeadTeacherAssignmentTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonPath('count', 0);
+    }
+
+    #[Test]
+    public function it_rejects_a_head_teacher_without_professeur_role(): void
+    {
+        $notATeacher = User::factory()->create();
+        $level6e = Level::on('tenant')->where('code', '6E')->first();
+
+        $response = $this->authPostJson('/api/admin/classes', [
+            'academic_year_id' => $this->activeYear->id,
+            'level_id' => $level6e->id,
+            'section' => 'A',
+            'head_teacher_id' => $notATeacher->id,
+        ]);
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors('head_teacher_id');
+    }
+
+    #[Test]
+    public function it_only_lists_users_with_professeur_role_as_available_head_teachers(): void
+    {
+        $teacher = $this->createTeacher();
+        $notATeacher = User::factory()->create();
+
+        $response = $this->authGetJson("/api/admin/classes/available-head-teachers?academic_year_id={$this->activeYear->id}");
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id')->all();
+        $this->assertContains($teacher->id, $ids);
+        $this->assertNotContains($notATeacher->id, $ids);
+        $this->assertNotContains($this->user->id, $ids);
+    }
+
+    #[Test]
+    public function it_allows_updating_a_class_when_the_head_teacher_is_unchanged(): void
+    {
+        $teacher = $this->createTeacher();
+        $level6e = Level::on('tenant')->where('code', '6E')->first();
+
+        $classeA = Classe::on('tenant')->create([
+            'academic_year_id' => $this->activeYear->id,
+            'level_id' => $level6e->id,
+            'section' => 'A',
+            'name' => '6ème A',
+            'head_teacher_id' => $teacher->id,
+        ]);
+
+        Classe::on('tenant')->create([
+            'academic_year_id' => $this->activeYear->id,
+            'level_id' => $level6e->id,
+            'section' => 'B',
+            'name' => '6ème B',
+            'head_teacher_id' => $teacher->id,
+        ]);
+
+        $response = $this->authPutJson("/api/admin/classes/{$classeA->id}", [
+            'max_capacity' => 45,
+            'head_teacher_id' => $teacher->id,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.max_capacity', 45);
     }
 }
