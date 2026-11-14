@@ -276,6 +276,72 @@ class AttendanceWorkflowTest extends TestCase
     }
 
     #[Test]
+    public function teacher_corrects_a_record_of_his_completed_session_with_a_reason(): void
+    {
+        $session = $this->openSession($this->teacher, $this->teacherClasse);
+        $this->withUserToken($this->teacher)->postJson("/api/admin/attendance/sessions/{$session->id}/complete")->assertOk();
+        $record = AttendanceRecord::query()->where('attendance_session_id', $session->id)->firstOrFail();
+
+        $this->withUserToken($this->teacher)->putJson("/api/admin/attendance/records/{$record->id}", [
+            'status' => 'present',
+            'reason' => 'Élève arrivé avec un billet de la vie scolaire',
+        ])->assertOk()
+            ->assertJsonPath('status', 'present')
+            ->assertJsonPath('modified_by', $this->teacher->id)
+            ->assertJsonPath('modification_reason', 'Élève arrivé avec un billet de la vie scolaire')
+            ->assertJsonPath('modifier.id', $this->teacher->id)
+            ->assertJsonPath('modifier.lastname', $this->teacher->lastname);
+
+        $this->withUserToken($this->teacher)->getJson("/api/admin/attendance/sessions/{$session->id}/sheet")
+            ->assertOk()
+            ->assertJsonPath('session.status', 'completed')
+            ->assertJsonPath('records.0.status', 'present')
+            ->assertJsonPath('records.0.modifier.id', $this->teacher->id)
+            ->assertJsonPath('records.0.modification_reason', 'Élève arrivé avec un billet de la vie scolaire');
+    }
+
+    #[Test]
+    public function correcting_a_record_requires_a_reason_and_a_valid_status(): void
+    {
+        $session = $this->openSession($this->teacher, $this->teacherClasse);
+        $record = AttendanceRecord::query()->where('attendance_session_id', $session->id)->firstOrFail();
+
+        $this->withUserToken($this->teacher)->putJson("/api/admin/attendance/records/{$record->id}", ['status' => 'present'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['reason' => 'Le motif de la correction est obligatoire.']);
+        $this->withUserToken($this->teacher)->putJson("/api/admin/attendance/records/{$record->id}", ['status' => 'present', 'reason' => '   '])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['reason']);
+        $this->withUserToken($this->teacher)->putJson("/api/admin/attendance/records/{$record->id}", ['status' => 'parti', 'reason' => 'Erreur'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['status']);
+
+        $this->assertSame('absent', $record->fresh()->status);
+        $this->assertNull($record->fresh()->modified_by);
+    }
+
+    #[Test]
+    public function only_class_staff_can_correct_a_record(): void
+    {
+        $session = $this->openSession($this->teacher, $this->teacherClasse);
+        $record = AttendanceRecord::query()->where('attendance_session_id', $session->id)->firstOrFail();
+        $payload = ['status' => 'excused', 'reason' => 'Certificat médical reçu'];
+
+        $this->withUserToken($this->otherTeacher)->putJson("/api/admin/attendance/records/{$record->id}", $payload)->assertForbidden();
+        $this->withUserToken($this->parentUser)->putJson("/api/admin/attendance/records/{$record->id}", $payload)->assertForbidden();
+        $this->withUserToken($this->childUser)->putJson("/api/admin/attendance/records/{$record->id}", $payload)->assertForbidden();
+        $this->assertSame('absent', $record->fresh()->status);
+
+        $this->withUserToken($this->userWithRole('Manager'))->putJson("/api/admin/attendance/records/{$record->id}", $payload)
+            ->assertOk()
+            ->assertJsonPath('status', 'excused');
+        $this->withUserToken($this->admin)->putJson("/api/admin/attendance/records/{$record->id}", ['status' => 'late', 'reason' => 'Retard constaté'])
+            ->assertOk()
+            ->assertJsonPath('modified_by', $this->admin->id);
+        $this->withUserToken($this->admin)->putJson('/api/admin/attendance/records/999999', $payload)->assertNotFound();
+    }
+
+    #[Test]
     public function teacher_only_lists_own_sessions_while_admin_lists_all(): void
     {
         $own = $this->openSession($this->teacher, $this->teacherClasse);

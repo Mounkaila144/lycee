@@ -34,9 +34,12 @@ class LyceeEvaluationsApiTest extends TestCase
         ], $overrides);
     }
 
-    private function draft(array $attributes = []): ClassEvaluation
+    /**
+     * @param  array<string, float|null|string>  $scores
+     */
+    private function draft(array $attributes = [], array $scores = []): ClassEvaluation
     {
-        return $this->evaluation($this->maths, [], array_merge([
+        return $this->evaluation($this->maths, $scores, array_merge([
             'status' => ClassEvaluation::STATUS_DRAFT, 'published_at' => null,
         ], $attributes));
     }
@@ -229,7 +232,7 @@ class LyceeEvaluationsApiTest extends TestCase
     #[Test]
     public function only_admin_publishes_and_unpublishes(): void
     {
-        $evaluation = $this->draft();
+        $evaluation = $this->draft([], ['A' => 12]);
 
         $this->postAs($this->admin, self::BASE."/{$evaluation->id}/publish")
             ->assertOk()
@@ -349,10 +352,10 @@ class LyceeEvaluationsApiTest extends TestCase
     #[Test]
     public function publish_bulk_publishes_only_submitted_evaluations_of_the_scope(): void
     {
-        $submitted = $this->draft(['status' => 'submitted', 'submitted_at' => now()]);
-        $otherSubmitted = $this->evaluation($this->french, [], ['status' => 'submitted', 'published_at' => null]);
-        $draft = $this->draft();
-        $s2Submitted = $this->draft(['status' => 'submitted', 'semester_id' => $this->s2->id]);
+        $submitted = $this->draft(['status' => 'submitted', 'submitted_at' => now()], ['A' => 11]);
+        $otherSubmitted = $this->evaluation($this->french, ['B' => 'abs'], ['status' => 'submitted', 'published_at' => null]);
+        $draft = $this->draft([], ['A' => 9]);
+        $s2Submitted = $this->draft(['status' => 'submitted', 'semester_id' => $this->s2->id], ['A' => 10]);
 
         $this->postAs($this->admin, self::BASE.'/publish-bulk', [
             'semester_id' => $this->s1->id,
@@ -371,5 +374,48 @@ class LyceeEvaluationsApiTest extends TestCase
         $this->assertSame('submitted', $s2Submitted->fresh()->status);
 
         $this->postAs($this->admin, self::BASE.'/publish-bulk', [])->assertUnprocessable()->assertJsonValidationErrors(['semester_id']);
+    }
+
+    #[Test]
+    public function publishing_an_evaluation_without_any_entered_grade_is_refused(): void
+    {
+        $empty = $this->draft(['status' => 'submitted', 'submitted_at' => now()]);
+        ClassEvaluationGrade::query()->create([
+            'class_evaluation_id' => $empty->id,
+            'student_id' => $this->students['A']->id,
+            'score' => null,
+            'is_absent' => false,
+            'comment' => 'Pas encore corrigé',
+            'entered_by' => $this->mathTeacher->id,
+        ]);
+
+        $this->postAs($this->admin, self::BASE."/{$empty->id}/publish")
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Impossible de publier cette évaluation : aucune note saisie.');
+        $this->assertSame('submitted', $empty->fresh()->status);
+
+        $onlyAbsences = $this->draft([], ['A' => 'abs']);
+        $this->postAs($this->admin, self::BASE."/{$onlyAbsences->id}/publish")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'published');
+    }
+
+    #[Test]
+    public function publish_bulk_skips_evaluations_without_any_entered_grade(): void
+    {
+        $graded = $this->draft(['status' => 'submitted', 'submitted_at' => now(), 'title' => 'Avec notes'], ['A' => 14]);
+        $empty = $this->draft(['status' => 'submitted', 'submitted_at' => now(), 'title' => 'Sans notes']);
+
+        $this->postAs($this->admin, self::BASE.'/publish-bulk', ['semester_id' => $this->s1->id])
+            ->assertOk()
+            ->assertJsonPath('data.published_count', 1)
+            ->assertJsonPath('data.evaluation_ids', [$graded->id])
+            ->assertJsonPath('data.skipped_count', 1)
+            ->assertJsonPath('data.skipped.0.id', $empty->id)
+            ->assertJsonPath('data.skipped.0.title', 'Sans notes')
+            ->assertJsonPath('data.skipped.0.reason', 'Aucune note saisie');
+
+        $this->assertSame('published', $graded->fresh()->status);
+        $this->assertSame('submitted', $empty->fresh()->status);
     }
 }

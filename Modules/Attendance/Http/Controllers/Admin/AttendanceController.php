@@ -10,6 +10,7 @@ use Illuminate\Validation\Rule;
 use Modules\Attendance\Entities\AttendanceRecord;
 use Modules\Attendance\Entities\AttendanceSession;
 use Modules\Attendance\Http\Requests\BulkRecordAttendanceRequest;
+use Modules\Attendance\Http\Requests\ModifyAttendanceRecordRequest;
 use Modules\Attendance\Http\Requests\StoreAttendanceSessionRequest;
 use Modules\Attendance\Services\AttendanceAccessService;
 use Modules\Attendance\Services\AttendanceService;
@@ -113,12 +114,9 @@ class AttendanceController extends Controller
     /**
      * Modifier enregistrement (Story 03)
      */
-    public function modifyRecord(Request $request, int $recordId): JsonResponse
+    public function modifyRecord(ModifyAttendanceRecordRequest $request, int $recordId): JsonResponse
     {
-        $validated = $request->validate([
-            'status' => ['required', 'string', Rule::in(['present', 'absent', 'late', 'excused'])],
-            'reason' => 'required|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         $record = AttendanceRecord::query()->findOrFail($recordId);
         $this->findManageableSession($request, (int) $record->attendance_session_id);
@@ -130,7 +128,7 @@ class AttendanceController extends Controller
             (int) $request->user()->getAuthIdentifier()
         );
 
-        return response()->json($record->load('student'));
+        return response()->json($record->load(['student', 'modifier:id,firstname,lastname,username']));
     }
 
     /**

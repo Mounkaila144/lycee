@@ -202,7 +202,7 @@ class AttendanceService
         $session->load(['timetableSlot.module', 'timetableSlot.group', 'classe', 'subject', 'creator']);
 
         $records = AttendanceRecord::where('attendance_session_id', $session->id)
-            ->with('student')
+            ->with(['student', 'modifier:id,firstname,lastname,username'])
             ->orderBy('student_id')
             ->get();
 

@@ -267,6 +267,10 @@ class ClassEvaluationController extends Controller
             abort(422, 'Cette évaluation est déjà publiée.');
         }
 
+        if (! $evaluation->grades()->where(fn (Builder $scored) => $this->scopeEnteredGrades($scored))->exists()) {
+            abort(422, 'Impossible de publier cette évaluation : aucune note saisie.');
+        }
+
         $evaluation->update([
             'status' => ClassEvaluation::STATUS_PUBLISHED,
             'submitted_at' => $evaluation->submitted_at ?? now(),
@@ -309,7 +313,11 @@ class ClassEvaluationController extends Controller
             ->where('status', ClassEvaluation::STATUS_SUBMITTED)
             ->when(! empty($validated['classe_id']), fn ($query) => $query->where('classe_id', $validated['classe_id']))
             ->when(! empty($validated['evaluation_ids']), fn ($query) => $query->whereIn('id', $validated['evaluation_ids']))
+            ->withCount(['grades as grades_count' => fn ($gradeQuery) => $gradeQuery->where(fn (Builder $scored) => $this->scopeEnteredGrades($scored))])
             ->get();
+
+        $skipped = $evaluations->filter(fn (ClassEvaluation $evaluation): bool => (int) $evaluation->grades_count === 0);
+        $evaluations = $evaluations->reject(fn (ClassEvaluation $evaluation): bool => (int) $evaluation->grades_count === 0)->values();
 
         $userId = $request->user()->getAuthIdentifier();
 
@@ -327,8 +335,14 @@ class ClassEvaluationController extends Controller
             'data' => [
                 'published_count' => $evaluations->count(),
                 'evaluation_ids' => $evaluations->pluck('id')->values()->all(),
+                'skipped_count' => $skipped->count(),
+                'skipped' => $skipped->map(fn (ClassEvaluation $evaluation): array => [
+                    'id' => $evaluation->id,
+                    'title' => $evaluation->title,
+                    'reason' => 'Aucune note saisie',
+                ])->values()->all(),
             ],
-            'message' => "{$evaluations->count()} évaluation(s) publiée(s).",
+            'message' => "{$evaluations->count()} évaluation(s) publiée(s).".($skipped->isNotEmpty() ? " {$skipped->count()} ignorée(s) : aucune note saisie." : ''),
         ]);
     }
 
@@ -406,10 +420,16 @@ class ClassEvaluationController extends Controller
                 'semester',
                 'teacher:id,firstname,lastname',
             ])
-            ->withCount(['grades as grades_count' => fn ($gradeQuery) => $gradeQuery->where(
-                fn ($scored) => $scored->whereNotNull('score')->orWhere('is_absent', true)
-            )])
+            ->withCount(['grades as grades_count' => fn ($gradeQuery) => $gradeQuery->where(fn (Builder $scored) => $this->scopeEnteredGrades($scored))])
             ->withAvg(['grades as average' => fn ($gradeQuery) => $gradeQuery->where('is_absent', false)], 'score');
+    }
+
+    /**
+     * Note réellement saisie : un score renseigné ou une absence déclarée.
+     */
+    private function scopeEnteredGrades(Builder $query): Builder
+    {
+        return $query->whereNotNull('score')->orWhere('is_absent', true);
     }
 
     /**
