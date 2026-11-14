@@ -269,7 +269,7 @@ class StudentPortalService
             'total_amount' => (float) $billable->sum('total_amount'),
             'total_paid' => (float) $billable->sum('paid_amount'),
             'total_balance' => (float) $billable->sum('balance'),
-            'currency' => (string) config('services.cinetpay.currency', 'XOF'),
+            'currency' => (string) config('finance.currency', 'XOF'),
         ];
     }
 

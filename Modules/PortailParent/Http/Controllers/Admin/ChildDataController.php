@@ -114,7 +114,7 @@ class ChildDataController extends Controller
     public function invoices(Request $request, int $studentId): JsonResponse
     {
         $student = $this->resolveChild($request, 'viewInvoices', $studentId);
-        $currency = (string) config('services.cinetpay.currency', 'XOF');
+        $currency = (string) config('finance.currency', 'XOF');
 
         $invoices = Invoice::query()
             ->where('student_id', $student->id)

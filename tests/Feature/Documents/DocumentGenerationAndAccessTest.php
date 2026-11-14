@@ -8,8 +8,10 @@ use Illuminate\Support\Facades\Storage;
 use Modules\Documents\Entities\Document;
 use Modules\Documents\Entities\DocumentRequest;
 use Modules\Documents\Entities\DocumentTemplate;
+use Modules\Documents\Services\DefaultDocumentTemplates;
 use Modules\Enrollment\Entities\Student;
 use Modules\PortailParent\Entities\ParentModel;
+use Modules\Settings\Services\SchoolProfileService;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\UsersGuard\Entities\TenantUser;
 use PHPUnit\Framework\Attributes\Test;
@@ -459,5 +461,58 @@ class DocumentGenerationAndAccessTest extends TestCase
     public function download_requires_authentication(): void
     {
         $this->getJson('/api/admin/documents/files/1/download')->assertUnauthorized();
+    }
+
+    #[Test]
+    public function certificates_use_the_school_profile_header_and_signatory(): void
+    {
+        app(SchoolProfileService::class)->update([
+            'name' => 'CEG 1 de Maradi', 'type' => 'CEG', 'city' => 'Maradi', 'region' => 'DREN de Maradi',
+            'head_title' => 'Le Directeur', 'head_name' => 'M. Issoufou Garba',
+        ]);
+        $student = Student::factory()->create(['firstname' => 'Aïcha', 'lastname' => 'Moussa']);
+
+        $document = $this->generateSchoolingCertificate($student);
+
+        $template = DocumentTemplate::findOrFail($document->template_id);
+        $profile = app(SchoolProfileService::class);
+        $html = $template->renderTemplate(['issue_date' => '01/10/2090'] + $profile->templateVariables(), $profile->templateHtmlVariables());
+
+        foreach (['RÉPUBLIQUE DU NIGER', 'CEG 1 de Maradi', 'DREN de Maradi', 'Fait à Maradi, le 01/10/2090', 'Le Directeur certifie', 'M. Issoufou Garba'] as $expected) {
+            $this->assertStringContainsString($expected, $html);
+        }
+        $this->assertStringNotContainsString('{{', $html);
+
+        if ($dumpPath = getenv('CERTIFICATE_PDF_DUMP')) {
+            file_put_contents($dumpPath, Storage::disk('tenant')->get($document->pdf_path));
+        }
+    }
+
+    #[Test]
+    public function legacy_auto_generated_templates_are_upgraded_but_custom_ones_are_kept(): void
+    {
+        $legacy = DocumentTemplate::create([
+            'type' => 'certificate_schooling',
+            'name' => 'Certificat de scolarité (défaut)',
+            'description' => DefaultDocumentTemplates::AUTO_DESCRIPTION,
+            'content_template' => '<html><body><div class="header"><strong>{{school_name}}</strong></div><p>Le Proviseur certifie</p></body></html>',
+            'variables' => [],
+            'settings' => ['paper_size' => 'a4', 'orientation' => 'portrait'],
+            'is_active' => true,
+        ]);
+        $custom = DocumentTemplate::create([
+            'type' => 'certificate_transfer',
+            'name' => 'Exeat maison',
+            'description' => 'Modèle personnalisé',
+            'content_template' => '<html><body><div class="header"><strong>{{school_name}}</strong></div>Exeat</body></html>',
+            'variables' => [],
+            'settings' => [],
+            'is_active' => true,
+        ]);
+
+        $this->assertStringContainsString('{{school_header}}', DefaultDocumentTemplates::resolve('certificate_schooling')->content_template);
+        $this->assertStringContainsString('{{school_header}}', $legacy->fresh()->content_template);
+        $this->assertStringNotContainsString('{{school_header}}', DefaultDocumentTemplates::resolve('certificate_transfer')->content_template);
+        $this->assertSame($custom->content_template, $custom->fresh()->content_template);
     }
 }

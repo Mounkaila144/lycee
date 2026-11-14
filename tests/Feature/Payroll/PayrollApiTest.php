@@ -485,7 +485,8 @@ class PayrollApiTest extends TestCase
             ->assertCreated()
             ->json('data.id');
         $this->authPostJson("/api/admin/payroll/payroll-periods/{$periodId}/declarations/income-tax")->assertCreated();
-        $this->authPostJson("/api/admin/payroll/payroll-periods/{$periodId}/declarations/amo")->assertCreated();
+        $this->authPostJson("/api/admin/payroll/payroll-periods/{$periodId}/declarations/employer-charges")->assertCreated();
+        $this->authPostJson("/api/admin/payroll/payroll-periods/{$periodId}/declarations/amo")->assertNotFound();
 
         $this->authGetJson('/api/admin/payroll/declarations')->assertOk()->assertJsonCount(3);
         $this->authGetJson("/api/admin/payroll/declarations/{$declarationId}")->assertOk();

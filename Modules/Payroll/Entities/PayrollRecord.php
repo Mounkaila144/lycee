@@ -168,6 +168,81 @@ class PayrollRecord extends Model
     }
 
     /**
+     * Cotisations sociales par code (salarié + employeur).
+     * Bulletins calculés avant le paramétrage : une ligne globale « calcul antérieur ».
+     *
+     * @return array<int, array{code: string, label: string, base: float, employee_rate: float|null, employer_rate: float|null, employee_amount: float, employer_amount: float}>
+     */
+    public function contributionLines(): array
+    {
+        $deductions = $this->deductions_breakdown ?? [];
+        $charges = $this->charges_breakdown ?? [];
+
+        if (($deductions['format'] ?? null) === 'configurable') {
+            $employerByCode = collect($charges['contributions'] ?? [])->keyBy('code');
+
+            return array_map(function (array $line) use ($employerByCode): array {
+                $employer = $employerByCode->get($line['code'], []);
+
+                return [
+                    'code' => (string) $line['code'],
+                    'label' => (string) $line['label'],
+                    'base' => (float) ($line['base'] ?? 0),
+                    'employee_rate' => isset($line['rate']) ? (float) $line['rate'] : null,
+                    'employer_rate' => isset($employer['rate']) ? (float) $employer['rate'] : null,
+                    'employee_amount' => (float) ($line['amount'] ?? 0),
+                    'employer_amount' => (float) ($employer['amount'] ?? 0),
+                ];
+            }, $deductions['contributions'] ?? []);
+        }
+
+        $employeeAmount = (float) $this->cnss_employee + (float) $this->amo_employee + (float) $this->cimr_employee;
+        $employerAmount = (float) $this->cnss_employer + (float) $this->amo_employer + (float) $this->cimr_employer;
+
+        if ($employeeAmount == 0.0 && $employerAmount == 0.0) {
+            return [];
+        }
+
+        return [[
+            'code' => 'legacy_social',
+            'label' => 'Cotisations sociales (calcul antérieur au paramétrage)',
+            'base' => (float) $this->base_salary,
+            'employee_rate' => null,
+            'employer_rate' => null,
+            'employee_amount' => $employeeAmount,
+            'employer_amount' => $employerAmount,
+        ]];
+    }
+
+    /**
+     * Charges patronales additionnelles (taxes assises sur la masse salariale) par code.
+     *
+     * @return array<int, array{code: string, label: string, rate: float|null, amount: float}>
+     */
+    public function additionalEmployerChargeLines(): array
+    {
+        $charges = $this->charges_breakdown ?? [];
+
+        if (($charges['format'] ?? null) === 'configurable') {
+            return array_map(fn (array $line): array => [
+                'code' => (string) $line['code'],
+                'label' => (string) $line['label'],
+                'rate' => isset($line['rate']) ? (float) $line['rate'] : null,
+                'amount' => (float) ($line['amount'] ?? 0),
+            ], $charges['employer_charges'] ?? []);
+        }
+
+        $amount = (float) $this->professional_tax + (float) $this->training_tax;
+
+        return $amount == 0.0 ? [] : [[
+            'code' => 'legacy_payroll_taxes',
+            'label' => 'Taxes sur salaires (calcul antérieur au paramétrage)',
+            'rate' => null,
+            'amount' => $amount,
+        ]];
+    }
+
+    /**
      * Business Methods
      */
     public function isDraft(): bool

@@ -2,10 +2,15 @@
 
 namespace Tests\Feature\Enrollment;
 
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Entities\StudentCard;
+use Modules\Enrollment\Jobs\GenerateCardPdfJob;
+use Modules\Enrollment\Services\QRCodeService;
 use Modules\Enrollment\Services\StudentCardGeneratorService;
+use Modules\Settings\Services\SchoolProfileService;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\UsersGuard\Entities\TenantUser as User;
 use PHPUnit\Framework\Attributes\Test;
@@ -293,5 +298,27 @@ class StudentCardApiTest extends TestCase
         $response = $this->getJson('/api/admin/enrollment/student-cards');
 
         $response->assertStatus(401);
+    }
+
+    #[Test]
+    public function card_pdf_is_generated_with_the_school_profile(): void
+    {
+        Storage::fake('tenant');
+        Storage::fake('local');
+        $profile = app(SchoolProfileService::class);
+        $profile->update(['name' => 'Lycée Mariama']);
+        $profile->storeImage('logo', UploadedFile::fake()->image('logo.png', 200, 200));
+        $this->student->update(['matricule' => 'LM-2026-001']);
+
+        $card = StudentCard::factory()->active()->create([
+            'student_id' => $this->student->id,
+            'academic_year_id' => $this->academicYear->id,
+        ]);
+
+        (new GenerateCardPdfJob($card))->handle(app(QRCodeService::class));
+
+        $card->refresh();
+        $this->assertNotNull($card->pdf_path);
+        $this->assertStringStartsWith('%PDF', Storage::disk('tenant')->get($card->pdf_path));
     }
 }

@@ -9,6 +9,8 @@ use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Entities\StudentStatusHistory;
 use Modules\Enrollment\Events\StudentStatusChanged;
 use Modules\Enrollment\Exceptions\InvalidStatusTransitionException;
+use Modules\PortailParent\Entities\ParentModel;
+use Modules\UsersGuard\Entities\TenantUser;
 
 class StudentStatusService
 {
@@ -23,6 +25,21 @@ class StudentStatusService
         'Abandon',
         'Transféré',
     ];
+
+    /**
+     * Statuts de sortie : l'élève a quitté l'établissement (son compte de connexion est désactivé).
+     */
+    public const EXIT_STATUSES = [
+        'Exclu',
+        'Diplômé',
+        'Abandon',
+        'Transféré',
+    ];
+
+    /**
+     * Rôles « famille » : un compte qui porte un autre rôle (personnel) n'est jamais désactivé ici.
+     */
+    private const FAMILY_ROLES = ['Élève', 'Parent'];
 
     /**
      * Allowed transitions from each status.
@@ -85,11 +102,73 @@ class StudentStatusService
             // Update student status
             $student->update(['status' => $newStatus]);
 
+            if ($this->isExitStatus($newStatus)) {
+                $this->deactivateAccountsAfterDeparture($student);
+            }
+
             // Dispatch event for listeners
             event(new StudentStatusChanged($student, $oldStatus, $newStatus, $history));
 
             return $history;
         });
+    }
+
+    public function isExitStatus(string $status): bool
+    {
+        return in_array($status, self::EXIT_STATUSES, true);
+    }
+
+    /**
+     * Désactive les comptes de connexion liés à un élève qui a quitté l'établissement
+     * (et révoque leurs jetons d'accès) :
+     *  - le compte élève ;
+     *  - le compte de chaque parent qui n'a plus aucun autre enfant scolarisé (statut hors sortie).
+     *    Un parent qui a encore un enfant dans l'établissement garde son accès.
+     * Un compte portant un rôle autre qu'Élève/Parent (ex. personnel également parent) n'est pas touché.
+     *
+     * @return list<int> identifiants des comptes désactivés
+     */
+    public function deactivateAccountsAfterDeparture(Student $student): array
+    {
+        $deactivatedUserIds = [];
+
+        if ($student->user_id !== null && $this->deactivateFamilyAccount($student->user)) {
+            $deactivatedUserIds[] = (int) $student->user_id;
+        }
+
+        $parents = $student->parents()->whereNotNull('parents.user_id')->with('user')->get();
+
+        foreach ($parents as $parent) {
+            /** @var ParentModel $parent */
+            $hasChildStillEnrolled = $parent->students()
+                ->where('students.id', '!=', $student->id)
+                ->whereNotIn('students.status', self::EXIT_STATUSES)
+                ->exists();
+
+            if (! $hasChildStillEnrolled && $this->deactivateFamilyAccount($parent->user)) {
+                $deactivatedUserIds[] = (int) $parent->user_id;
+            }
+        }
+
+        return $deactivatedUserIds;
+    }
+
+    private function deactivateFamilyAccount(?TenantUser $user): bool
+    {
+        if ($user === null || ! $user->is_active) {
+            return false;
+        }
+
+        $roleNames = $user->getRoleNames()->all();
+
+        if (array_diff($roleNames, self::FAMILY_ROLES) !== []) {
+            return false;
+        }
+
+        $user->forceFill(['is_active' => false])->save();
+        $user->tokens()->delete();
+
+        return true;
     }
 
     /**

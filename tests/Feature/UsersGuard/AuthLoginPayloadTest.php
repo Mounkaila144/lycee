@@ -40,6 +40,22 @@ class AuthLoginPayloadTest extends TestCase
     }
 
     #[Test]
+    public function login_records_the_last_login_timestamp(): void
+    {
+        $user = TenantUser::factory()->create([
+            'application' => 'admin',
+            'password' => bcrypt('password'),
+            'lastlogin' => null,
+        ]);
+        $this->assignRole($user, 'Administrator');
+
+        $payload = $this->loginPayload($user);
+
+        $this->assertNotNull($user->fresh()->lastlogin);
+        $this->assertNotNull($payload['lastlogin']);
+    }
+
+    #[Test]
     public function administrator_login_returns_dashboard_home_route(): void
     {
         $user = TenantUser::factory()->create([

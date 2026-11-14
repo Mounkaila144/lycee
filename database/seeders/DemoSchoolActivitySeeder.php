@@ -40,6 +40,7 @@ use Modules\Payroll\Entities\PayrollComponent;
 use Modules\Payroll\Entities\PayrollPeriod;
 use Modules\Payroll\Entities\Payslip;
 use Modules\Payroll\Services\PayrollProcessingService;
+use Modules\Payroll\Services\PayrollSettingsService;
 use Modules\PortailParent\Entities\ParentModel;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Classe;
@@ -1530,7 +1531,19 @@ class DemoSchoolActivitySeeder extends Seeder
             $employeeIds[] = $employee->id;
         }
 
+        $this->seedPayrollSettings();
         $this->seedPayrollPeriod($employeeIds);
+    }
+
+    /**
+     * Paramètres de paie par défaut (Niger, à vérifier par le comptable) si aucune version n'existe.
+     * Les périodes déjà calculées ne sont jamais recalculées.
+     */
+    private function seedPayrollSettings(): void
+    {
+        if (app(PayrollSettingsService::class)->ensureDefaultVersion('2026-01-01', $this->admin->id)) {
+            $this->count('paramètres de paie');
+        }
     }
 
     private function teacherSubjectLabel(string $username): string

@@ -11,6 +11,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 use Modules\Enrollment\Entities\StudentCard;
 use Modules\Enrollment\Services\QRCodeService;
+use Modules\Settings\Services\SchoolProfileService;
 
 class GenerateCardPdfJob implements ShouldQueue
 {
@@ -35,9 +36,7 @@ class GenerateCardPdfJob implements ShouldQueue
         // Generate barcode
         $barcode = $qrService->generateBarcode($student->matricule);
 
-        // Get institution name from tenant
-        $tenant = tenant();
-        $institutionName = $tenant?->company_name ?? config('app.name', 'Institution');
+        $school = app(SchoolProfileService::class)->forDocuments();
 
         $pdf = Pdf::loadView('enrollment::cards.template', [
             'card' => $this->card,
@@ -45,7 +44,9 @@ class GenerateCardPdfJob implements ShouldQueue
             'qrCode' => $qrCode,
             'barcode' => $barcode,
             'academicYear' => $this->card->academicYear,
-            'institutionName' => $institutionName,
+            'institutionName' => $school['display_name'],
+            'schoolLogo' => $school['logo_data_uri'],
+            'schoolCity' => $school['city'],
         ]);
 
         // Credit card size: 85.6 x 53.98 mm = 242.64 x 153 points

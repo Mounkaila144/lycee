@@ -8,6 +8,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Modules\Enrollment\Entities\Student;
 use Modules\UsersGuard\Entities\TenantUser;
 
+/**
+ * Historique des paiements en ligne initiés par les parents (table conservée ;
+ * aucune passerelle de paiement n'est branchée actuellement).
+ */
 class ParentOnlinePayment extends Model
 {
     protected $connection = 'tenant';
@@ -17,7 +21,7 @@ class ParentOnlinePayment extends Model
     protected $fillable = [
         'transaction_id', 'parent_user_id', 'student_id', 'invoice_id',
         'amount', 'currency', 'method', 'status',
-        'cinetpay_token', 'cinetpay_transaction_id', 'payment_url',
+        'payment_url',
         'init_payload', 'webhook_payload', 'notified_at',
     ];
 

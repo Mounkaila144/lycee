@@ -12,6 +12,7 @@ class SettingsServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(module_path($this->moduleName, 'Config/config.php'), 'settings');
         $this->loadRoutesFrom(module_path($this->moduleName, 'Routes/admin.php'));
+        $this->loadViewsFrom(module_path($this->moduleName, 'Resources/views'), 'settings');
     }
 
     public function register(): void

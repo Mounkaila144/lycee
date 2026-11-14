@@ -10,6 +10,13 @@ use Modules\Documents\Entities\DocumentTemplate;
  */
 class DefaultDocumentTemplates
 {
+    public const AUTO_DESCRIPTION = 'Modèle par défaut généré automatiquement.';
+
+    /**
+     * Marqueur de l'ancien en-tête (nom seul) des modèles générés automatiquement.
+     */
+    private const LEGACY_HEADER = '<div class="header"><strong>{{school_name}}</strong></div>';
+
     /**
      * @var array<string, array{name: string, title: string, body: string}>
      */
@@ -17,32 +24,32 @@ class DefaultDocumentTemplates
         'certificate_enrollment' => [
             'name' => 'Certificat d\'inscription (défaut)',
             'title' => 'CERTIFICAT D\'INSCRIPTION',
-            'body' => '<p>Le Proviseur certifie que l\'élève <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, né(e) le {{student_birthdate}} à {{student_birthplace}}, est régulièrement inscrit(e) dans notre établissement au titre de l\'année scolaire <strong>{{academic_year}}</strong>, en classe de <strong>{{level}}</strong>.</p><p>Le présent certificat est délivré pour servir et valoir ce que de droit. Motif : {{purpose}}.</p>',
+            'body' => '<p>{{head_title}} certifie que l\'élève <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, né(e) le {{student_birthdate}} à {{student_birthplace}}, est régulièrement inscrit(e) dans notre établissement au titre de l\'année scolaire <strong>{{academic_year}}</strong>, en classe de <strong>{{level}}</strong>.</p><p>Le présent certificat est délivré pour servir et valoir ce que de droit. Motif : {{purpose}}.</p>',
         ],
         'certificate_status' => [
             'name' => 'Attestation de statut (défaut)',
             'title' => 'ATTESTATION DE STATUT',
-            'body' => '<p>Le Proviseur atteste que <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, né(e) le {{student_birthdate}}, a le statut suivant : <strong>{{status}}</strong> pour l\'année scolaire <strong>{{academic_year}}</strong>.</p><p>Motif : {{purpose}}.</p>',
+            'body' => '<p>{{head_title}} atteste que <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, né(e) le {{student_birthdate}}, a le statut suivant : <strong>{{status}}</strong> pour l\'année scolaire <strong>{{academic_year}}</strong>.</p><p>Motif : {{purpose}}.</p>',
         ],
         'certificate_achievement' => [
             'name' => 'Attestation de réussite (défaut)',
             'title' => 'ATTESTATION DE RÉUSSITE',
-            'body' => '<p>Le Proviseur atteste que l\'élève <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, a obtenu au cours de l\'année scolaire {{academic_year}} : <strong>{{achievement_title}}</strong> ({{achievement_date}}).</p><p>{{achievement_description}}</p>',
+            'body' => '<p>{{head_title}} atteste que l\'élève <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, a obtenu au cours de l\'année scolaire {{academic_year}} : <strong>{{achievement_title}}</strong> ({{achievement_date}}).</p><p>{{achievement_description}}</p>',
         ],
         'certificate_attendance' => [
             'name' => 'Attestation d\'assiduité (défaut)',
             'title' => 'ATTESTATION D\'ASSIDUITÉ',
-            'body' => '<p>Le Proviseur atteste que l\'élève <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, a suivi les cours de l\'année scolaire <strong>{{academic_year}}</strong> avec un taux de présence de <strong>{{attendance_rate}} %</strong> ({{attended_sessions}} séances sur {{total_sessions}}).</p><p>Motif : {{purpose}}.</p>',
+            'body' => '<p>{{head_title}} atteste que l\'élève <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, a suivi les cours de l\'année scolaire <strong>{{academic_year}}</strong> avec un taux de présence de <strong>{{attendance_rate}} %</strong> ({{attended_sessions}} séances sur {{total_sessions}}).</p><p>Motif : {{purpose}}.</p>',
         ],
         'certificate_schooling' => [
             'name' => 'Certificat de scolarité (défaut)',
             'title' => 'CERTIFICAT DE SCOLARITÉ',
-            'body' => '<p>Le Proviseur certifie que l\'élève <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, né(e) le {{student_birthdate}} à {{student_birthplace}}, suit régulièrement les cours dans notre établissement au titre de l\'année scolaire <strong>{{current_academic_year}}</strong>, en classe de <strong>{{level}}</strong>.</p><p>Le présent certificat est délivré pour servir et valoir ce que de droit. Motif : {{purpose}}.</p>',
+            'body' => '<p>{{head_title}} certifie que l\'élève <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, né(e) le {{student_birthdate}} à {{student_birthplace}}, suit régulièrement les cours dans notre établissement au titre de l\'année scolaire <strong>{{current_academic_year}}</strong>, en classe de <strong>{{level}}</strong>.</p><p>Le présent certificat est délivré pour servir et valoir ce que de droit. Motif : {{purpose}}.</p>',
         ],
         'certificate_transfer' => [
             'name' => 'Certificat de transfert / exeat (défaut)',
             'title' => 'CERTIFICAT DE TRANSFERT (EXEAT)',
-            'body' => '<p>Le Proviseur certifie que l\'élève <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, né(e) le {{student_birthdate}}, inscrit(e) en classe de <strong>{{level}}</strong> au titre de l\'année scolaire {{current_academic_year}}, est autorisé(e) à quitter l\'établissement.</p><p>Établissement de destination : <strong>{{transfer_destination}}</strong>.<br>Motif du transfert : {{transfer_reason}}.</p><p>L\'intéressé(e) est libre de tout engagement envers l\'établissement.</p>',
+            'body' => '<p>{{head_title}} certifie que l\'élève <strong>{{student_name}}</strong>, matricule <strong>{{student_matricule}}</strong>, né(e) le {{student_birthdate}}, inscrit(e) en classe de <strong>{{level}}</strong> au titre de l\'année scolaire {{current_academic_year}}, est autorisé(e) à quitter l\'établissement.</p><p>Établissement de destination : <strong>{{transfer_destination}}</strong>.<br>Motif du transfert : {{transfer_reason}}.</p><p>L\'intéressé(e) est libre de tout engagement envers l\'établissement.</p>',
         ],
         'transcript_semester' => [
             'name' => 'Relevé de notes (défaut)',
@@ -68,12 +75,15 @@ class DefaultDocumentTemplates
     public static function resolve(string $type): ?DocumentTemplate
     {
         $template = DocumentTemplate::active()->ofType($type)->first();
+        $definition = self::DEFINITIONS[$type] ?? null;
 
         if ($template) {
+            if ($definition && self::isLegacyDefault($template)) {
+                $template->update(['content_template' => self::wrap($definition['title'], $definition['body'])]);
+            }
+
             return $template;
         }
-
-        $definition = self::DEFINITIONS[$type] ?? null;
 
         if (! $definition) {
             return null;
@@ -82,7 +92,7 @@ class DefaultDocumentTemplates
         return DocumentTemplate::create([
             'type' => $type,
             'name' => $definition['name'],
-            'description' => 'Modèle par défaut généré automatiquement.',
+            'description' => self::AUTO_DESCRIPTION,
             'content_template' => self::wrap($definition['title'], $definition['body']),
             'variables' => [],
             'settings' => ['paper_size' => 'a4', 'orientation' => 'portrait'],
@@ -98,21 +108,43 @@ class DefaultDocumentTemplates
         return array_keys(self::DEFINITIONS);
     }
 
+    /**
+     * Modèle par défaut généré avant l'introduction du profil de l'établissement (jamais personnalisé).
+     */
+    private static function isLegacyDefault(DocumentTemplate $template): bool
+    {
+        $content = (string) $template->content_template;
+
+        return $template->description === self::AUTO_DESCRIPTION
+            && str_contains($content, self::LEGACY_HEADER)
+            && ! str_contains($content, '{{school_header}}');
+    }
+
+    /**
+     * Variables disponibles : en-tête/pied de page de l'établissement ({{school_header}}, {{school_footer}},
+     * {{school_stamp}}), {{school_name}}, {{issue_place}}, {{head_title}}, {{head_name}}… (SchoolProfileService).
+     */
     private static function wrap(string $title, string $body): string
     {
         return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-            .'body{font-family:DejaVu Sans,sans-serif;font-size:12pt;margin:40px;color:#222}'
-            .'.header{text-align:center;border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:30px}'
-            .'h1{text-align:center;font-size:18pt;margin:30px 0;text-decoration:underline}'
+            .'@page{margin:12mm 14mm}'
+            .'body{font-family:DejaVu Sans,sans-serif;font-size:11.5pt;margin:0;color:#222}'
+            .'h1{text-align:center;font-size:17pt;margin:28px 0 24px;text-decoration:underline;letter-spacing:1px}'
             .'.body p{line-height:1.7;text-align:justify}'
-            .'.footer{margin-top:50px;font-size:9pt;color:#555}'
-            .'.signature{margin-top:40px;text-align:right}'
+            .'.signature{margin-top:36px;margin-left:55%;text-align:center}'
+            .'.signature .role{font-weight:bold;margin-top:4px}'
+            .'.signature .stamp{height:85px}'
+            .'.reference{margin-top:30px;font-size:8.5pt;color:#555}'
             .'</style></head><body>'
-            .'<div class="header"><strong>{{school_name}}</strong></div>'
+            .'{{school_header}}'
             .'<h1>'.$title.'</h1>'
             .'<div class="body">'.$body.'</div>'
-            .'<div class="signature">Fait le {{issue_date}}<br><br>Le Proviseur</div>'
-            .'<div class="footer">N° {{document_number}} — Code de vérification : {{verification_code}}<br><img src="{{qr_code_data_uri}}" width="90" height="90" alt="QR"></div>'
+            .'<div class="signature">Fait à {{issue_place}}, le {{issue_date}}'
+            .'<div class="role">{{head_title}}</div>'
+            .'<div class="stamp">{{school_stamp}}</div>'
+            .'<strong>{{head_name}}</strong></div>'
+            .'<div class="reference">N° {{document_number}} — Code de vérification : {{verification_code}}<br><img src="{{qr_code_data_uri}}" width="80" height="80" alt="QR"></div>'
+            .'{{school_footer}}'
             .'</body></html>';
     }
 }

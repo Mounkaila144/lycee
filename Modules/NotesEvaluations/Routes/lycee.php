@@ -18,14 +18,17 @@ use Modules\NotesEvaluations\Http\Controllers\Lycee\TeacherAssignmentController;
 Route::prefix('api/admin/lycee-grades')
     ->middleware(['tenant', 'tenant.auth'])
     ->group(function () {
-        // Administration : affectations et publication
+        // Administration : affectations
         Route::middleware('role:Administrator|Manager,tenant')->group(function () {
             Route::get('/assignments', [TeacherAssignmentController::class, 'index']);
             Route::post('/assignments', [TeacherAssignmentController::class, 'store']);
             Route::post('/assignments/bulk', [TeacherAssignmentController::class, 'bulk']);
             Route::put('/assignments/{id}', [TeacherAssignmentController::class, 'update'])->whereNumber('id');
             Route::delete('/assignments/{id}', [TeacherAssignmentController::class, 'destroy'])->whereNumber('id');
+        });
 
+        // Publication des notes : réservée à l'Administrator
+        Route::middleware('role:Administrator,tenant')->group(function () {
             Route::post('/evaluations/publish-bulk', [ClassEvaluationController::class, 'publishBulk']);
             Route::post('/evaluations/{id}/publish', [ClassEvaluationController::class, 'publish'])->whereNumber('id');
             Route::post('/evaluations/{id}/unpublish', [ClassEvaluationController::class, 'unpublish'])->whereNumber('id');

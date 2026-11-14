@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Storage;
 use Modules\Documents\Entities\Document;
 use Modules\Documents\Entities\DocumentTemplate;
 use Modules\Enrollment\Entities\Student;
+use Modules\Settings\Services\SchoolProfileService;
 use Modules\StructureAcademique\Entities\AcademicYear;
 use Modules\StructureAcademique\Entities\Semester;
 
@@ -22,7 +23,8 @@ use Modules\StructureAcademique\Entities\Semester;
 class TranscriptService
 {
     public function __construct(
-        private DocumentVerificationService $verificationService
+        private DocumentVerificationService $verificationService,
+        private SchoolProfileService $schoolProfile
     ) {}
 
     /**
@@ -70,9 +72,8 @@ class TranscriptService
         $qrCodePath = $qrCode['path'];
 
         $html = $template->renderTemplate($data + [
-            'school_name' => config('app.name'),
             'qr_code_data_uri' => $qrCode['data_uri'],
-        ]);
+        ] + $this->schoolProfile->templateVariables(), $this->schoolProfile->templateHtmlVariables());
 
         $pdfPath = $this->generatePdf($html, $documentNumber, $template);
 
@@ -136,9 +137,8 @@ class TranscriptService
         $qrCodePath = $qrCode['path'];
 
         $html = $template->renderTemplate($data + [
-            'school_name' => config('app.name'),
             'qr_code_data_uri' => $qrCode['data_uri'],
-        ]);
+        ] + $this->schoolProfile->templateVariables(), $this->schoolProfile->templateHtmlVariables());
 
         $pdfPath = $this->generatePdf($html, $documentNumber, $template);
 

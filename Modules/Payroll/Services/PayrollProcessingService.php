@@ -21,22 +21,10 @@ use Modules\Payroll\Exceptions\PayrollException;
  */
 class PayrollProcessingService
 {
-    // Moroccan social security rates (2026)
-    protected const CNSS_EMPLOYEE_RATE = 4.48; // 4.48%
-
-    protected const CNSS_EMPLOYER_RATE = 12.89; // 12.89%
-
-    protected const AMO_EMPLOYEE_RATE = 2.26; // 2.26%
-
-    protected const AMO_EMPLOYER_RATE = 3.96; // 3.96%
-
-    protected const CIMR_EMPLOYEE_RATE = 3.0; // 3% (optional)
-
-    protected const CIMR_EMPLOYER_RATE = 6.0; // 6% (optional)
-
-    protected const PROFESSIONAL_TAX_RATE = 0.5; // 0.5% (on gross salary)
-
-    protected const TRAINING_TAX_RATE = 1.6; // 1.6% (on gross salary)
+    public function __construct(
+        protected PayrollSettingsService $settingsService,
+        protected PayrollCalculator $calculator
+    ) {}
 
     /**
      * Story 10: Create and calculate payroll period
@@ -91,10 +79,13 @@ class PayrollProcessingService
 
             $period->update(['status' => 'in_progress']);
 
+            // Paramètres de paie en vigueur au début de la période (version datée ou valeurs par défaut).
+            $resolvedSettings = $this->settingsService->resolveForDate($period->start_date);
+
             $processedCount = 0;
 
             foreach ($employees as $employee) {
-                if ($this->calculateEmployeePayroll($period, $employee) !== null) {
+                if ($this->calculateEmployeePayroll($period, $employee, $resolvedSettings) !== null) {
                     $processedCount++;
                 }
             }
@@ -117,8 +108,11 @@ class PayrollProcessingService
 
     /**
      * Calculate payroll for a single employee (null when the employee has no active contract).
+     * An existing record is returned untouched (never recalculated).
+     *
+     * @param  array{settings: array<string, mixed>, version: array<string, mixed>}  $resolvedSettings
      */
-    protected function calculateEmployeePayroll(PayrollPeriod $period, Employee $employee): ?PayrollRecord
+    protected function calculateEmployeePayroll(PayrollPeriod $period, Employee $employee, array $resolvedSettings): ?PayrollRecord
     {
         $contract = $employee->getCurrentContract();
         if (! $contract) {
@@ -154,8 +148,8 @@ class PayrollProcessingService
         $totalEarnings = array_sum($earnings) + $overtimePay;
         $grossSalary = $baseSalary + $totalEarnings;
 
-        // Calculate employee deductions
-        $employeeDeductions = $this->calculateEmployeeDeductions($grossSalary, $baseSalary);
+        // Cotisations et impôt selon les paramètres de paie configurés
+        $calculation = $this->calculator->calculate($grossSalary, $resolvedSettings['settings']);
 
         // Calculate advance deductions
         $advanceDeductions = $this->calculateAdvanceDeductions($employee, $period);
@@ -163,18 +157,21 @@ class PayrollProcessingService
         // Calculate other deductions
         $otherDeductions = $this->calculateOtherDeductions($components);
 
-        $totalDeductions = array_sum($employeeDeductions) + $advanceDeductions + array_sum($otherDeductions);
+        $totalDeductions = $calculation['total_employee_contributions'] + $calculation['income_tax']
+            + $advanceDeductions + array_sum($otherDeductions);
 
-        // Calculate net salary
         $netSalary = $grossSalary - $totalDeductions;
-        $netTaxable = $grossSalary - ($employeeDeductions['cnss'] + $employeeDeductions['amo'] + $employeeDeductions['cimr']);
-
-        // Calculate employer charges
-        $employerCharges = $this->calculateEmployerCharges($baseSalary, $grossSalary);
-        $totalEmployerCharges = array_sum($employerCharges);
-
-        // Total cost to employer
+        $totalEmployerCharges = $calculation['total_employer_charges'];
         $totalCost = $grossSalary + $totalEmployerCharges;
+
+        $settingsMeta = [
+            'format' => 'configurable',
+            'settings_version_id' => $resolvedSettings['version']['id'] ?? null,
+            'settings_version' => $resolvedSettings['version']['version'] ?? null,
+            'settings_effective_date' => $resolvedSettings['version']['effective_date'] ?? null,
+            'settings_is_default' => $resolvedSettings['version']['is_default'] ?? false,
+            'currency_label' => $calculation['currency_label'],
+        ];
 
         // Create payroll record
         return PayrollRecord::on('tenant')->create([
@@ -193,26 +190,55 @@ class PayrollProcessingService
             'other_earnings' => $earnings['other'] ?? 0,
             'total_earnings' => $totalEarnings,
             'gross_salary' => $grossSalary,
-            'cnss_employee' => $employeeDeductions['cnss'],
-            'cimr_employee' => $employeeDeductions['cimr'],
-            'amo_employee' => $employeeDeductions['amo'],
-            'income_tax' => $employeeDeductions['income_tax'],
+            // Colonnes historiques : total des cotisations salariales / patronales configurées
+            'cnss_employee' => $calculation['total_employee_contributions'],
+            'cimr_employee' => 0,
+            'amo_employee' => 0,
+            'income_tax' => $calculation['income_tax'],
             'advance_deductions' => $advanceDeductions,
             'loan_deductions' => 0, // TODO: Implement loan tracking
             'other_deductions' => array_sum($otherDeductions),
             'total_deductions' => $totalDeductions,
             'net_salary' => $netSalary,
-            'net_taxable' => $netTaxable,
-            'cnss_employer' => $employerCharges['cnss'],
-            'cimr_employer' => $employerCharges['cimr'],
-            'amo_employer' => $employerCharges['amo'],
-            'professional_tax' => $employerCharges['professional_tax'],
-            'training_tax' => $employerCharges['training_tax'],
+            'net_taxable' => $calculation['taxable_income'],
+            'cnss_employer' => $calculation['total_employer_contributions'],
+            'cimr_employer' => 0,
+            'amo_employer' => 0,
+            'professional_tax' => 0,
+            'training_tax' => $calculation['total_additional_employer_charges'],
             'total_employer_charges' => $totalEmployerCharges,
             'total_cost' => $totalCost,
             'earnings_breakdown' => $earnings,
-            'deductions_breakdown' => $employeeDeductions,
-            'charges_breakdown' => $employerCharges,
+            'deductions_breakdown' => array_merge($settingsMeta, [
+                'contributions' => array_map(fn (array $line): array => [
+                    'code' => $line['code'],
+                    'label' => $line['label'],
+                    'base' => $line['base'],
+                    'rate' => $line['employee_rate'],
+                    'amount' => $line['employee_amount'],
+                    'tax_deductible' => $line['tax_deductible'],
+                ], $calculation['contributions']),
+                'income_tax' => [
+                    'label' => $calculation['income_tax_label'],
+                    'taxable_before_allowance' => $calculation['taxable_before_allowance'],
+                    'flat_allowance_amount' => $calculation['flat_allowance_amount'],
+                    'taxable_income' => $calculation['taxable_income'],
+                    'brackets' => $calculation['income_tax_brackets'],
+                    'amount' => $calculation['income_tax'],
+                ],
+                'advances' => $advanceDeductions,
+                'other' => $otherDeductions,
+            ]),
+            'charges_breakdown' => array_merge($settingsMeta, [
+                'contributions' => array_map(fn (array $line): array => [
+                    'code' => $line['code'],
+                    'label' => $line['label'],
+                    'base' => $line['base'],
+                    'rate' => $line['employer_rate'],
+                    'amount' => $line['employer_amount'],
+                ], $calculation['contributions']),
+                'employer_charges' => $calculation['employer_charges'],
+            ]),
             'status' => 'calculated',
             'payment_status' => 'pending',
         ]);
@@ -269,44 +295,6 @@ class PayrollProcessingService
     }
 
     /**
-     * Calculate employee social deductions
-     */
-    protected function calculateEmployeeDeductions(float $grossSalary, float $baseSalary): array
-    {
-        return [
-            'cnss' => round($baseSalary * (self::CNSS_EMPLOYEE_RATE / 100), 2),
-            'amo' => round($baseSalary * (self::AMO_EMPLOYEE_RATE / 100), 2),
-            'cimr' => round($baseSalary * (self::CIMR_EMPLOYEE_RATE / 100), 2),
-            'income_tax' => $this->calculateIncomeTax($grossSalary),
-        ];
-    }
-
-    /**
-     * Calculate Moroccan income tax (IR)
-     */
-    protected function calculateIncomeTax(float $grossSalary): float
-    {
-        // Moroccan income tax brackets (2026) - simplified
-        $annualSalary = $grossSalary * 12;
-
-        if ($annualSalary <= 30000) {
-            return 0;
-        } elseif ($annualSalary <= 50000) {
-            $tax = ($annualSalary - 30000) * 0.10;
-        } elseif ($annualSalary <= 60000) {
-            $tax = 2000 + ($annualSalary - 50000) * 0.20;
-        } elseif ($annualSalary <= 80000) {
-            $tax = 4000 + ($annualSalary - 60000) * 0.30;
-        } elseif ($annualSalary <= 180000) {
-            $tax = 10000 + ($annualSalary - 80000) * 0.34;
-        } else {
-            $tax = 44000 + ($annualSalary - 180000) * 0.38;
-        }
-
-        return round($tax / 12, 2);
-    }
-
-    /**
      * Calculate advance deductions
      */
     protected function calculateAdvanceDeductions(Employee $employee, PayrollPeriod $period): float
@@ -336,20 +324,6 @@ class PayrollProcessingService
         }
 
         return $deductions;
-    }
-
-    /**
-     * Calculate employer charges
-     */
-    protected function calculateEmployerCharges(float $baseSalary, float $grossSalary): array
-    {
-        return [
-            'cnss' => round($baseSalary * (self::CNSS_EMPLOYER_RATE / 100), 2),
-            'amo' => round($baseSalary * (self::AMO_EMPLOYER_RATE / 100), 2),
-            'cimr' => round($baseSalary * (self::CIMR_EMPLOYER_RATE / 100), 2),
-            'professional_tax' => round($grossSalary * (self::PROFESSIONAL_TAX_RATE / 100), 2),
-            'training_tax' => round($grossSalary * (self::TRAINING_TAX_RATE / 100), 2),
-        ];
     }
 
     /**

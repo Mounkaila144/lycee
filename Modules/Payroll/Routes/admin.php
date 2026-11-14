@@ -5,6 +5,7 @@ use Modules\Payroll\Http\Controllers\Admin\EmployeeController;
 use Modules\Payroll\Http\Controllers\Admin\PayrollComponentController;
 use Modules\Payroll\Http\Controllers\Admin\PayrollController;
 use Modules\Payroll\Http\Controllers\Admin\PayrollReportController;
+use Modules\Payroll\Http\Controllers\Admin\PayrollSettingsController;
 use Modules\Payroll\Http\Controllers\Admin\SocialDeclarationController;
 
 // RBAC durcissement (Story Admin 12) : seuls Administrator et Manager accèdent
@@ -39,11 +40,20 @@ Route::prefix('admin/payroll')->middleware(['tenant', 'tenant.auth', 'role:Admin
     Route::get('payroll-periods/{id}/bank-transfers', [PayrollController::class, 'generateBankTransfers']);
     Route::post('payroll-periods/{id}/mark-as-paid', [PayrollController::class, 'markAsPaid']);
 
-    // Epic 4: Social Declarations (Stories 14-17)
+    // Paramètres de paie (cotisations, barème d'impôt, charges patronales) versionnés par date d'effet.
+    // Lecture + simulateur : Administrator, Manager, Comptable ; écriture : Administrator, Comptable.
+    Route::get('settings', [PayrollSettingsController::class, 'show']);
+    Route::get('settings/versions', [PayrollSettingsController::class, 'versions']);
+    Route::get('settings/defaults', [PayrollSettingsController::class, 'defaults']);
+    Route::post('settings/simulate', [PayrollSettingsController::class, 'simulate']);
+    Route::post('settings', [PayrollSettingsController::class, 'store'])->middleware('role:Administrator|Comptable,tenant');
+
+    // Epic 4: Social Declarations (Stories 14-17) — agrégées selon les paramètres de paie configurés
     Route::apiResource('declarations', SocialDeclarationController::class)->only(['index', 'show']);
-    Route::post('payroll-periods/{periodId}/declarations/cnss', [SocialDeclarationController::class, 'generateCNSS']);
+    Route::post('payroll-periods/{periodId}/declarations/social-contributions', [SocialDeclarationController::class, 'generateSocialContributions']);
+    Route::post('payroll-periods/{periodId}/declarations/cnss', [SocialDeclarationController::class, 'generateSocialContributions']);
     Route::post('payroll-periods/{periodId}/declarations/income-tax', [SocialDeclarationController::class, 'generateIncomeTax']);
-    Route::post('payroll-periods/{periodId}/declarations/amo', [SocialDeclarationController::class, 'generateAMO']);
+    Route::post('payroll-periods/{periodId}/declarations/employer-charges', [SocialDeclarationController::class, 'generateEmployerCharges']);
     Route::post('declarations/annual-summary', [SocialDeclarationController::class, 'generateAnnualSummary']);
     Route::post('declarations/{id}/validate', [SocialDeclarationController::class, 'validateDeclaration']);
     Route::post('declarations/{id}/submit', [SocialDeclarationController::class, 'submit']);

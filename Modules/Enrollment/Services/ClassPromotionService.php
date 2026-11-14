@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use Modules\Enrollment\Entities\ClassEnrollment;
 use Modules\Enrollment\Entities\ReenrollmentCampaign;
 use Modules\Enrollment\Entities\ReenrollmentIntention;
+use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Exceptions\ClassPromotionException;
 use Modules\NotesEvaluations\Services\Lycee\LyceeGradeCalculator;
 use Modules\StructureAcademique\Entities\AcademicYear;
@@ -42,12 +43,25 @@ class ClassPromotionService
      */
     public const DEPART_REASONS = ['Abandon', 'Transfert', 'Exclusion', 'Diplôme'];
 
+    /**
+     * Statut de l'élève (students.status) correspondant à chaque motif de départ.
+     */
+    public const DEPART_STUDENT_STATUSES = [
+        'Abandon' => 'Abandon',
+        'Transfert' => 'Transféré',
+        'Exclusion' => 'Exclu',
+        'Diplôme' => 'Diplômé',
+    ];
+
     private const ASSIGNMENT_TYPES = [
         self::DECISION_PASSAGE => 'Passage',
         self::DECISION_REDOUBLEMENT => 'Redoublement',
     ];
 
-    public function __construct(private LyceeGradeCalculator $calculator) {}
+    public function __construct(
+        private LyceeGradeCalculator $calculator,
+        private StudentStatusService $statusService,
+    ) {}
 
     /**
      * Niveau immédiatement supérieur (ordre de la table des niveaux), null pour le dernier niveau.
@@ -237,11 +251,17 @@ class ClassPromotionService
         $this->ensureNotAlreadyEnrolled($studentId, $targetYear);
 
         if ($decision === self::DECISION_DEPART) {
-            $sourceEnrollment->update([
-                'status' => 'Terminé',
-                'final_decision' => in_array($departReason, self::DEPART_REASONS, true) ? $departReason : 'Abandon',
-                'final_decision_at' => now()->toDateString(),
-            ]);
+            $reason = in_array($departReason, self::DEPART_REASONS, true) ? $departReason : 'Abandon';
+
+            DB::connection('tenant')->transaction(function () use ($sourceEnrollment, $reason, $source, $targetYear): void {
+                $sourceEnrollment->update([
+                    'status' => 'Terminé',
+                    'final_decision' => $reason,
+                    'final_decision_at' => now()->toDateString(),
+                ]);
+
+                $this->markStudentAsLeft($sourceEnrollment->student_id, $reason, $source, $targetYear);
+            });
 
             return [
                 'student_id' => $studentId,
@@ -276,6 +296,33 @@ class ClassPromotionService
                 'target_classe_id' => $target->id,
             ];
         });
+    }
+
+    /**
+     * Départ : passe l'élève au statut de sortie correspondant au motif (journalisé dans
+     * student_status_histories) et désactive son compte (et celui des parents sans autre enfant scolarisé).
+     */
+    private function markStudentAsLeft(int $studentId, string $reason, Classe $source, AcademicYear $targetYear): void
+    {
+        $student = Student::query()->find($studentId);
+
+        if (! $student) {
+            return;
+        }
+
+        $exitStatus = self::DEPART_STUDENT_STATUSES[$reason];
+
+        if ($this->statusService->isTransitionAllowed((string) $student->status, $exitStatus)) {
+            $this->statusService->changeStatus(
+                $student,
+                $exitStatus,
+                "Passage de classe : départ ({$reason}) à l'issue de la classe {$source->name}, avant l'année {$targetYear->name}."
+            );
+
+            return;
+        }
+
+        $this->statusService->deactivateAccountsAfterDeparture($student);
     }
 
     /**

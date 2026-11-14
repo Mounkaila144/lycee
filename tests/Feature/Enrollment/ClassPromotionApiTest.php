@@ -162,6 +162,99 @@ class ClassPromotionApiTest extends TestCase
     }
 
     #[Test]
+    public function a_departure_sets_the_matching_exit_status_and_logs_it(): void
+    {
+        $this->validateDecisions([
+            ['student_id' => $this->students['A']->id, 'decision' => 'depart', 'depart_reason' => 'Transfert'],
+            ['student_id' => $this->students['B']->id, 'decision' => 'depart', 'depart_reason' => 'Exclusion'],
+            ['student_id' => $this->students['C']->id, 'decision' => 'depart', 'depart_reason' => 'Diplôme'],
+            ['student_id' => $this->students['D']->id, 'decision' => 'depart'],
+        ])->assertOk()->assertJsonCount(4, 'data.processed');
+
+        $this->assertSame('Transféré', $this->students['A']->fresh()->status);
+        $this->assertSame('Exclu', $this->students['B']->fresh()->status);
+        $this->assertSame('Diplômé', $this->students['C']->fresh()->status);
+        $this->assertSame('Abandon', $this->students['D']->fresh()->status);
+
+        $this->assertDatabaseHas('student_status_histories', [
+            'student_id' => $this->students['A']->id,
+            'old_status' => 'Actif',
+            'new_status' => 'Transféré',
+            'changed_by' => $this->admin->id,
+        ], 'tenant');
+    }
+
+    #[Test]
+    public function a_departure_deactivates_the_student_account_and_revokes_its_tokens(): void
+    {
+        $studentUser = $this->studentUser('C');
+        $studentUser->createToken('session');
+
+        $this->validateDecisions([
+            ['student_id' => $this->students['C']->id, 'decision' => 'depart', 'depart_reason' => 'Abandon'],
+        ])->assertOk();
+
+        $this->assertFalse($studentUser->fresh()->is_active);
+        $this->assertSame(0, $studentUser->tokens()->count());
+        $this->assertTrue($this->studentUser('A')->fresh()->is_active);
+    }
+
+    #[Test]
+    public function a_parent_keeps_access_while_another_child_is_still_enrolled(): void
+    {
+        $sharedParent = $this->parentOf($this->students['C'], $this->students['A']);
+        $onlyChildParent = $this->parentOf($this->students['C']);
+
+        $this->validateDecisions([
+            ['student_id' => $this->students['C']->id, 'decision' => 'depart', 'depart_reason' => 'Transfert'],
+        ])->assertOk();
+
+        $this->assertTrue($sharedParent->fresh()->is_active);
+        $this->assertFalse($onlyChildParent->fresh()->is_active);
+    }
+
+    #[Test]
+    public function a_parent_who_is_also_staff_is_never_deactivated(): void
+    {
+        $staffParent = $this->parentOf($this->students['C']);
+        $this->assignRole($staffParent, 'Caissier');
+
+        $this->validateDecisions([
+            ['student_id' => $this->students['C']->id, 'decision' => 'depart', 'depart_reason' => 'Abandon'],
+        ])->assertOk();
+
+        $this->assertTrue($staffParent->fresh()->is_active);
+    }
+
+    #[Test]
+    public function a_departure_of_an_already_left_student_keeps_his_status_and_disables_his_account(): void
+    {
+        $this->students['C']->update(['status' => 'Transféré']);
+
+        $this->validateDecisions([
+            ['student_id' => $this->students['C']->id, 'decision' => 'depart', 'depart_reason' => 'Abandon'],
+        ])->assertOk()->assertJsonCount(1, 'data.processed');
+
+        $this->assertSame('Transféré', $this->students['C']->fresh()->status);
+        $this->assertSame('Abandon', $this->sourceEnrollment($this->students['C'])->final_decision);
+        $this->assertFalse($this->studentUser('C')->fresh()->is_active);
+    }
+
+    #[Test]
+    public function promotion_and_repeat_keep_the_student_active(): void
+    {
+        $this->validateDecisions([
+            ['student_id' => $this->students['A']->id, 'decision' => 'passage', 'target_classe_id' => $this->promotionClasse->id],
+            ['student_id' => $this->students['B']->id, 'decision' => 'redoublement', 'target_classe_id' => $this->repeatClasse->id],
+        ])->assertOk();
+
+        $this->assertSame('Actif', $this->students['A']->fresh()->status);
+        $this->assertSame('Actif', $this->students['B']->fresh()->status);
+        $this->assertTrue($this->studentUser('A')->fresh()->is_active);
+        $this->assertTrue($this->studentUser('B')->fresh()->is_active);
+    }
+
+    #[Test]
     public function it_refuses_a_promotion_into_a_class_of_the_wrong_level(): void
     {
         $response = $this->validateDecisions([

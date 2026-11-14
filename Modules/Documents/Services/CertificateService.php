@@ -9,6 +9,7 @@ use Modules\Documents\Entities\Document;
 use Modules\Documents\Entities\DocumentRequest;
 use Modules\Documents\Entities\DocumentTemplate;
 use Modules\Enrollment\Entities\Student;
+use Modules\Settings\Services\SchoolProfileService;
 use Modules\StructureAcademique\Entities\AcademicYear;
 
 /**
@@ -24,7 +25,8 @@ use Modules\StructureAcademique\Entities\AcademicYear;
 class CertificateService
 {
     public function __construct(
-        private DocumentVerificationService $verificationService
+        private DocumentVerificationService $verificationService,
+        private SchoolProfileService $schoolProfile
     ) {}
 
     /**
@@ -411,9 +413,8 @@ class CertificateService
         $qrCodePath = $qrCode['path'];
 
         $html = $template->renderTemplate($data + [
-            'school_name' => $this->getSchoolName(),
             'qr_code_data_uri' => $qrCode['data_uri'],
-        ]);
+        ] + $this->schoolProfile->templateVariables(), $this->schoolProfile->templateHtmlVariables());
 
         $pdfPath = $this->generatePdf($html, $documentNumber, $template);
 
@@ -458,13 +459,6 @@ class CertificateService
             'programme_name' => $className,
             'level' => $className,
         ];
-    }
-
-    private function getSchoolName(): string
-    {
-        $tenant = function_exists('tenant') ? tenant() : null;
-
-        return (string) ($tenant?->company_name ?: config('app.name'));
     }
 
     /**

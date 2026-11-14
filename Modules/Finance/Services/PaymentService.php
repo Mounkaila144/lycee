@@ -104,8 +104,25 @@ class PaymentService
                 throw new \Exception('Le montant du remboursement doit être supérieur à zéro');
             }
 
-            if ($refundAmount > $payment->amount) {
-                throw new \Exception('Le montant du remboursement ne peut pas dépasser le montant du paiement');
+            if ((float) $payment->amount <= 0) {
+                throw new \Exception('Un remboursement ne peut pas être remboursé');
+            }
+
+            $alreadyRefunded = abs((float) Payment::on('tenant')
+                ->where('invoice_id', $payment->invoice_id)
+                ->where('reference_number', 'REFUND-'.$payment->receipt_number)
+                ->where('amount', '<', 0)
+                ->lockForUpdate()
+                ->sum('amount'));
+
+            $refundableAmount = round((float) $payment->amount - $alreadyRefunded, 2);
+
+            if ($refundableAmount <= 0) {
+                throw new \Exception('Ce paiement a déjà été entièrement remboursé');
+            }
+
+            if (round($refundAmount, 2) > $refundableAmount) {
+                throw new \Exception('Le montant du remboursement ne peut pas dépasser le montant restant remboursable ('.number_format($refundableAmount, 0, ',', ' ').')');
             }
 
             $invoice = $payment->invoice;

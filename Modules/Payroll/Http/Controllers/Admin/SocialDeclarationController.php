@@ -59,22 +59,22 @@ class SocialDeclarationController extends Controller
     }
 
     /**
-     * Story 14: Generate CNSS declaration
+     * Story 14: Déclaration des cotisations sociales (agrégées par code de cotisation configuré)
      */
-    public function generateCNSS(int $periodId): JsonResponse
+    public function generateSocialContributions(int $periodId): JsonResponse
     {
         $period = PayrollPeriod::on('tenant')->findOrFail($periodId);
 
-        $declaration = $this->declarationService->generateCNSSDeclaration($period);
+        $declaration = $this->declarationService->generateSocialContributionsDeclaration($period);
 
         return response()->json([
-            'message' => 'Déclaration CNSS générée avec succès',
+            'message' => 'Déclaration des cotisations sociales générée avec succès',
             'data' => $declaration,
         ], 201);
     }
 
     /**
-     * Story 15: Generate tax declaration
+     * Story 15: Déclaration de l'impôt sur salaires retenu à la source
      */
     public function generateIncomeTax(int $periodId): JsonResponse
     {
@@ -83,22 +83,22 @@ class SocialDeclarationController extends Controller
         $declaration = $this->declarationService->generateIncomeTaxDeclaration($period);
 
         return response()->json([
-            'message' => 'Déclaration IR générée avec succès',
+            'message' => "Déclaration de l'impôt sur salaires générée avec succès",
             'data' => $declaration,
         ], 201);
     }
 
     /**
-     * Generate AMO declaration
+     * Déclaration des charges patronales additionnelles (agrégées par code configuré)
      */
-    public function generateAMO(int $periodId): JsonResponse
+    public function generateEmployerCharges(int $periodId): JsonResponse
     {
         $period = PayrollPeriod::on('tenant')->findOrFail($periodId);
 
-        $declaration = $this->declarationService->generateAMODeclaration($period);
+        $declaration = $this->declarationService->generateEmployerChargesDeclaration($period);
 
         return response()->json([
-            'message' => 'Déclaration AMO générée avec succès',
+            'message' => 'Déclaration des charges patronales générée avec succès',
             'data' => $declaration,
         ], 201);
     }

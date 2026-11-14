@@ -6,7 +6,9 @@ use Illuminate\Support\Facades\Event;
 use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Entities\StudentStatusHistory;
 use Modules\Enrollment\Events\StudentStatusChanged;
+use Modules\PortailParent\Entities\ParentModel;
 use Modules\UsersGuard\Entities\TenantUser as User;
+use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Tests\Concerns\InteractsWithTenancy;
 use Tests\TestCase;
@@ -510,5 +512,95 @@ class StudentStatusApiTest extends TestCase
         Event::assertDispatched(StudentStatusChanged::class, function ($event) {
             return $event->isReactivation() === true;
         });
+    }
+
+    // ==================== EXIT STATUS → ACCOUNTS ====================
+
+    #[Test]
+    public function an_exit_status_deactivates_the_student_account_and_revokes_its_tokens(): void
+    {
+        $studentUser = $this->familyUser('Élève');
+        $studentUser->createToken('session');
+        $student = Student::factory()->create(['status' => 'Actif', 'user_id' => $studentUser->id]);
+
+        $this->authPostJson("/api/admin/enrollment/students/{$student->id}/status", [
+            'status' => 'Transféré',
+            'reason' => 'Transfert vers un autre lycée en cours d\'année',
+        ])->assertOk();
+
+        $this->assertFalse($studentUser->fresh()->is_active);
+        $this->assertSame(0, $studentUser->tokens()->count());
+    }
+
+    #[Test]
+    public function an_exit_status_deactivates_parents_without_other_enrolled_child_only(): void
+    {
+        $leaving = Student::factory()->create(['status' => 'Actif']);
+        $sibling = Student::factory()->create(['status' => 'Actif']);
+        $alreadyLeftSibling = Student::factory()->create(['status' => 'Diplômé']);
+
+        $sharedParent = $this->parentOf($leaving, $sibling);
+        $onlyChildParent = $this->parentOf($leaving, $alreadyLeftSibling);
+
+        $this->authPostJson("/api/admin/enrollment/students/{$leaving->id}/status", [
+            'status' => 'Exclu',
+            'reason' => 'Exclusion définitive prononcée par le conseil de discipline',
+        ])->assertOk();
+
+        $this->assertTrue($sharedParent->fresh()->is_active);
+        $this->assertFalse($onlyChildParent->fresh()->is_active);
+    }
+
+    #[Test]
+    public function a_suspension_keeps_the_family_accounts_active(): void
+    {
+        $studentUser = $this->familyUser('Élève');
+        $student = Student::factory()->create(['status' => 'Actif', 'user_id' => $studentUser->id]);
+        $parentUser = $this->parentOf($student);
+
+        $this->authPostJson("/api/admin/enrollment/students/{$student->id}/status", [
+            'status' => 'Suspendu',
+            'reason' => 'Suspension temporaire pour raisons disciplinaires',
+        ])->assertOk();
+
+        $this->assertTrue($studentUser->fresh()->is_active);
+        $this->assertTrue($parentUser->fresh()->is_active);
+    }
+
+    #[Test]
+    public function an_exit_status_never_deactivates_a_staff_account(): void
+    {
+        $staffParent = $this->familyUser('Parent');
+        $this->assignRole($staffParent, 'Professeur');
+        $student = Student::factory()->create(['status' => 'Actif']);
+        ParentModel::factory()->create(['user_id' => $staffParent->id])
+            ->students()->attach($student->id, ['is_primary_contact' => true, 'is_financial_responsible' => true]);
+
+        $this->authPostJson("/api/admin/enrollment/students/{$student->id}/status", [
+            'status' => 'Abandon',
+            'reason' => 'Abandon signalé par la famille en cours d\'année',
+        ])->assertOk();
+
+        $this->assertTrue($staffParent->fresh()->is_active);
+    }
+
+    private function familyUser(string $role): User
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $this->assignRole($user, $role);
+
+        return $user;
+    }
+
+    private function parentOf(Student ...$children): User
+    {
+        $user = $this->familyUser('Parent');
+        $parent = ParentModel::factory()->create(['user_id' => $user->id]);
+
+        foreach ($children as $child) {
+            $parent->students()->attach($child->id, ['is_primary_contact' => true, 'is_financial_responsible' => true]);
+        }
+
+        return $user;
     }
 }

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <title>Carte Étudiant - {{ $student->matricule }}</title>
+    <title>Carte scolaire - {{ $student->matricule }}</title>
     <style>
         @page {
             size: 85.6mm 53.98mm;
@@ -233,8 +233,11 @@
 
         {{-- Header --}}
         <div class="card-header">
-            <div class="institution-name">{{ $institutionName ?? 'Université / Institut' }}</div>
-            <div class="card-title">CARTE D'ÉTUDIANT</div>
+            @if(! empty($schoolLogo))
+                <img src="{{ $schoolLogo }}" alt="" style="float:right;max-height:8mm;max-width:12mm;background:#fff;padding:0.4mm;">
+            @endif
+            <div class="institution-name">{{ $institutionName ?? 'Établissement scolaire' }}</div>
+            <div class="card-title">CARTE SCOLAIRE</div>
         </div>
 
         {{-- Body --}}

@@ -11,7 +11,8 @@ use Modules\StructureAcademique\Entities\Classe;
 
 /**
  * Droits des notes lycée :
- *  - Administrator / Manager : tout ;
+ *  - Administrator / Manager : tout, sauf la publication (et la modification d'une évaluation
+ *    publiée) réservée à l'Administrator ;
  *  - Professeur : uniquement les (classe, matière) de ses affectations pour l'année de la classe ;
  *    le professeur principal (classes.head_teacher_id) voit toute sa classe ;
  *  - Élève : lui-même ; Parent : ses enfants (notes publiées uniquement).
@@ -23,6 +24,11 @@ class LyceeGradeAccessService
      */
     public const SUPERVISOR_ROLES = ['Administrator', 'Manager'];
 
+    /**
+     * @var list<string>
+     */
+    public const PUBLISHER_ROLES = ['Administrator'];
+
     public function hasAnyRole(?Authenticatable $user, array $roles): bool
     {
         return $user !== null
@@ -33,6 +39,14 @@ class LyceeGradeAccessService
     public function isSupervisor(?Authenticatable $user): bool
     {
         return $this->hasAnyRole($user, self::SUPERVISOR_ROLES);
+    }
+
+    /**
+     * Seul l'Administrator publie/dépublie les notes et modifie une évaluation publiée.
+     */
+    public function canPublish(?Authenticatable $user): bool
+    {
+        return $this->hasAnyRole($user, self::PUBLISHER_ROLES);
     }
 
     public function isTeacher(?Authenticatable $user): bool

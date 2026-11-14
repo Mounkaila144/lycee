@@ -72,11 +72,19 @@ class DocumentTemplate extends Model
      * Non-scalar values (arrays of grades, history...) are ignored and any
      * placeholder left unresolved is removed.
      *
+     * $html contient des fragments HTML de confiance insérés sans échappement
+     * (ex. {{school_header}} : en-tête de l'établissement).
+     *
      * @param  array<string, mixed>  $data
+     * @param  array<string, string>  $html
      */
-    public function renderTemplate(array $data): string
+    public function renderTemplate(array $data, array $html = []): string
     {
         $template = (string) $this->content_template;
+
+        foreach ($html as $key => $fragment) {
+            $template = str_replace('{{'.$key.'}}', $fragment, $template);
+        }
 
         foreach ($data as $key => $value) {
             if ($value !== null && ! is_scalar($value)) {

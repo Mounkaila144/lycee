@@ -4,11 +4,12 @@ namespace Modules\NotesEvaluations\Services\Lycee;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
+use Modules\Attendance\Entities\AttendanceRecord;
 use Modules\Enrollment\Entities\ClassEnrollment;
 use Modules\Enrollment\Entities\Student;
 use Modules\NotesEvaluations\Entities\ClassEvaluation;
 use Modules\NotesEvaluations\Entities\ReportCardComment;
-use Modules\Settings\Entities\TenantSetting;
+use Modules\Settings\Services\SchoolProfileService;
 use Modules\StructureAcademique\Entities\Classe;
 use Modules\StructureAcademique\Entities\Semester;
 
@@ -18,11 +19,21 @@ use Modules\StructureAcademique\Entities\Semester;
 class LyceeReportService
 {
     /**
-     * Clés de paramètres possibles pour le nom de l'établissement (en-tête des bulletins).
+     * Libellés des décisions de fin d'année (class_enrollments.final_decision).
      */
-    private const ESTABLISHMENT_NAME_KEYS = ['school_name', 'establishment_name', 'etablissement_nom', 'institution_name', 'app_name'];
+    private const COUNCIL_DECISION_LABELS = [
+        'Passage' => 'Admis(e) en classe supérieure',
+        'Redoublement' => 'Redouble la classe',
+        'Exclusion' => 'Exclu(e)',
+        'Diplôme' => 'Fin de cycle',
+        'Abandon' => 'Abandon',
+        'Transfert' => 'Transféré(e)',
+    ];
 
-    public function __construct(private LyceeGradeCalculator $calculator) {}
+    public function __construct(
+        private LyceeGradeCalculator $calculator,
+        private SchoolProfileService $schoolProfile
+    ) {}
 
     public function calculator(): LyceeGradeCalculator
     {
@@ -178,7 +189,13 @@ class LyceeReportService
             ? $this->calculator->classAnnualResults($classe, $publishedOnly, [$student->id])
             : null;
 
-        return $this->studentReportFromResults($student, $classe, $semester, $results, $annual, $this->commentsFor([$student->id], $semester)[$student->id] ?? [], $visibleSubjectIds);
+        return $this->studentReportFromResults(
+            $student, $classe, $semester, $results, $annual,
+            $this->commentsFor([$student->id], $semester)[$student->id] ?? [],
+            $visibleSubjectIds,
+            $this->absencesFor(collect([$student]), $semester)[$student->id] ?? null,
+            $annual !== null ? ($this->councilDecisionsFor([$student->id], $classe)[$student->id] ?? null) : null,
+        );
     }
 
     /**
@@ -192,10 +209,16 @@ class LyceeReportService
         $annual = $this->calculator->isLastSemesterOfYear($semester)
             ? $this->calculator->classAnnualResults($classe, $publishedOnly)
             : null;
-        $comments = $this->commentsFor($results['students']->pluck('id')->all(), $semester);
+        $studentIds = $results['students']->pluck('id')->all();
+        $comments = $this->commentsFor($studentIds, $semester);
+        $absences = $this->absencesFor($results['students'], $semester);
+        $decisions = $annual !== null ? $this->councilDecisionsFor($studentIds, $classe) : [];
 
         return $results['students']
-            ->map(fn (Student $student): array => $this->studentReportFromResults($student, $classe, $semester, $results, $annual, $comments[$student->id] ?? []))
+            ->map(fn (Student $student): array => $this->studentReportFromResults(
+                $student, $classe, $semester, $results, $annual, $comments[$student->id] ?? [], null,
+                $absences[$student->id] ?? null, $decisions[$student->id] ?? null,
+            ))
             ->values()
             ->all();
     }
@@ -238,28 +261,15 @@ class LyceeReportService
     }
 
     /**
-     * Informations d'en-tête des bulletins.
+     * Informations d'en-tête des bulletins (profil de l'établissement, cf. Paramètres > Établissement).
      *
-     * @return array{name: string}
+     * @return array<string, mixed>
      */
     public function establishment(): array
     {
-        $name = null;
+        $school = $this->schoolProfile->forDocuments();
 
-        if (Schema::connection('tenant')->hasTable('tenant_settings')) {
-            $name = TenantSetting::query()
-                ->whereIn('key', self::ESTABLISHMENT_NAME_KEYS)
-                ->whereNotNull('value')
-                ->where('value', '!=', '')
-                ->orderByRaw("FIELD(`key`, '".implode("','", self::ESTABLISHMENT_NAME_KEYS)."')")
-                ->value('value');
-        }
-
-        $tenant = function_exists('tenant') ? tenant() : null;
-
-        return [
-            'name' => (string) ($name ?? $tenant?->getAttribute('name') ?? config('app.name')),
-        ];
+        return ['name' => $school['display_name']] + $school;
     }
 
     /**
@@ -267,10 +277,20 @@ class LyceeReportService
      * @param  array{averages: array<int, float|null>, ranks: array<int, int|null>}|null  $annual
      * @param  array<int|string, string>  $comments  appréciations par subject_id ('general' = générale)
      * @param  list<int>|null  $visibleSubjectIds
+     * @param  array{justified_minutes: int, unjustified_minutes: int, justified_count: int, unjustified_count: int, late_count: int}|null  $absences
      * @return array<string, mixed>
      */
-    private function studentReportFromResults(Student $student, Classe $classe, Semester $semester, array $results, ?array $annual, array $comments, ?array $visibleSubjectIds = null): array
-    {
+    private function studentReportFromResults(
+        Student $student,
+        Classe $classe,
+        Semester $semester,
+        array $results,
+        ?array $annual,
+        array $comments,
+        ?array $visibleSubjectIds = null,
+        ?array $absences = null,
+        ?string $councilDecision = null,
+    ): array {
         $evaluationsBySubject = $results['evaluations']->groupBy('subject_id');
         $subjects = $this->filterSubjects($results['subjects'], $visibleSubjectIds);
 
@@ -316,7 +336,11 @@ class LyceeReportService
         $generalAverage = $results['general_averages'][$student->id] ?? null;
 
         return [
-            'student' => $this->calculator->studentSummary($student),
+            'student' => $this->calculator->studentSummary($student) + [
+                'birthdate' => $student->birthdate?->format('Y-m-d'),
+                'birthplace' => $student->birthplace,
+                'sex' => $student->sex,
+            ],
             'classe' => $this->classeSummary($classe),
             'semester' => $this->semesterSummary($semester),
             'subjects' => $subjectRows->all(),
@@ -339,6 +363,8 @@ class LyceeReportService
                 'average' => $annual['averages'][$student->id] ?? null,
                 'rank' => $annual['ranks'][$student->id] ?? null,
             ],
+            'absences' => $absences,
+            'council_decision' => $councilDecision,
         ];
     }
 
@@ -361,6 +387,8 @@ class LyceeReportService
             'distinction' => null,
             'general_appreciation' => null,
             'annual' => null,
+            'absences' => null,
+            'council_decision' => null,
         ];
     }
 
@@ -383,6 +411,91 @@ class LyceeReportService
             });
 
         return $comments;
+    }
+
+    /**
+     * Absences du semestre par élève (module Présences, attendance_records.student_id = users.id de l'élève).
+     *
+     * @param  Collection<int, Student>  $students
+     * @return array<int, array{justified_minutes: int, unjustified_minutes: int, justified_count: int, unjustified_count: int, late_count: int}> indexé par students.id
+     */
+    private function absencesFor(Collection $students, Semester $semester): array
+    {
+        $studentIdsByUser = $students
+            ->filter(fn (Student $student): bool => $student->user_id !== null)
+            ->mapWithKeys(fn (Student $student): array => [(int) $student->user_id => (int) $student->id])
+            ->all();
+
+        if ($studentIdsByUser === [] || $semester->start_date === null || $semester->end_date === null
+            || ! Schema::connection('tenant')->hasTable('attendance_records')) {
+            return [];
+        }
+
+        $summaries = array_fill_keys(array_values($studentIdsByUser), [
+            'justified_minutes' => 0,
+            'unjustified_minutes' => 0,
+            'justified_count' => 0,
+            'unjustified_count' => 0,
+            'late_count' => 0,
+        ]);
+
+        AttendanceRecord::query()
+            ->whereIn('student_id', array_keys($studentIdsByUser))
+            ->whereIn('status', ['absent', 'excused', 'late'])
+            ->whereHas('session', fn ($query) => $query->whereBetween('session_date', [
+                $semester->start_date->toDateString(),
+                $semester->end_date->toDateString(),
+            ]))
+            ->with('session:id,start_time,end_time')
+            ->get(['id', 'attendance_session_id', 'student_id', 'status'])
+            ->each(function (AttendanceRecord $record) use (&$summaries, $studentIdsByUser): void {
+                $studentId = $studentIdsByUser[(int) $record->student_id];
+
+                if ($record->status === 'late') {
+                    $summaries[$studentId]['late_count']++;
+
+                    return;
+                }
+
+                $minutes = $this->sessionMinutes($record->session?->start_time, $record->session?->end_time);
+                $kind = $record->status === 'excused' ? 'justified' : 'unjustified';
+                $summaries[$studentId][$kind.'_minutes'] += $minutes;
+                $summaries[$studentId][$kind.'_count']++;
+            });
+
+        return $summaries;
+    }
+
+    private function sessionMinutes(?string $startTime, ?string $endTime): int
+    {
+        if ($startTime === null || $endTime === null) {
+            return 60;
+        }
+
+        $minutes = (int) ((strtotime($endTime) - strtotime($startTime)) / 60);
+
+        return $minutes > 0 ? $minutes : 60;
+    }
+
+    /**
+     * Décisions de fin d'année (conseil de classe) par élève, si elles ont été enregistrées.
+     *
+     * @param  list<int>  $studentIds
+     * @return array<int, string>
+     */
+    private function councilDecisionsFor(array $studentIds, Classe $classe): array
+    {
+        if ($studentIds === []) {
+            return [];
+        }
+
+        return ClassEnrollment::query()
+            ->whereIn('student_id', $studentIds)
+            ->where('academic_year_id', $classe->academic_year_id)
+            ->whereNotNull('final_decision')
+            ->pluck('final_decision', 'student_id')
+            ->map(fn (string $decision): string => self::COUNCIL_DECISION_LABELS[$decision] ?? $decision)
+            ->all();
     }
 
     /**

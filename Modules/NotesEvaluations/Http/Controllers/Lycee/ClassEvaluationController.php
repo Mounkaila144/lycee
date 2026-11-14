@@ -253,7 +253,7 @@ class ClassEvaluationController extends Controller
     }
 
     /**
-     * POST /evaluations/{id}/publish (Admin|Manager) — draft|submitted → published.
+     * POST /evaluations/{id}/publish (Administrator) — draft|submitted → published.
      */
     public function publish(Request $request, int $id): JsonResponse
     {
@@ -274,7 +274,7 @@ class ClassEvaluationController extends Controller
     }
 
     /**
-     * POST /evaluations/{id}/unpublish (Admin|Manager) — published → submitted.
+     * POST /evaluations/{id}/unpublish (Administrator) — published → submitted.
      */
     public function unpublish(int $id): JsonResponse
     {
@@ -294,7 +294,7 @@ class ClassEvaluationController extends Controller
     }
 
     /**
-     * POST /evaluations/publish-bulk (Admin|Manager) — publie toutes les évaluations soumises du périmètre.
+     * POST /evaluations/publish-bulk (Administrator) — publie toutes les évaluations soumises du périmètre.
      */
     public function publishBulk(PublishBulkEvaluationsRequest $request): JsonResponse
     {
@@ -343,12 +343,12 @@ class ClassEvaluationController extends Controller
     }
 
     /**
-     * Une évaluation publiée n'est modifiable que par Admin/Manager.
+     * Une évaluation publiée n'est modifiable que par l'Administrator.
      */
     private function ensureEditable(Authenticatable $user, ClassEvaluation $evaluation): void
     {
-        if ($evaluation->isPublished() && ! $this->access->isSupervisor($user)) {
-            abort(403, "Évaluation publiée : seule l'administration peut la modifier.");
+        if ($evaluation->isPublished() && ! $this->access->canPublish($user)) {
+            abort(403, "Évaluation publiée : seul l'administrateur peut la modifier.");
         }
     }
 

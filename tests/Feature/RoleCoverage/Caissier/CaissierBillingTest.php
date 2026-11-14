@@ -84,7 +84,9 @@ class CaissierBillingTest extends TestCase
             ->getJson("/api/admin/finance/payments/{$paymentId}/receipt")
             ->assertOk()
             ->assertJsonPath('data.invoice_number', $invoice->invoice_number)
-            ->assertJsonPath('data.recorded_by', trim($this->cashier->firstname.' '.$this->cashier->lastname));
+            ->assertJsonPath('data.recorded_by', trim($this->cashier->firstname.' '.$this->cashier->lastname))
+            ->assertJsonPath('data.school.header_lines.0', 'RÉPUBLIQUE DU NIGER')
+            ->assertJsonPath('data.school.currency', 'FCFA');
     }
 
     #[Test]

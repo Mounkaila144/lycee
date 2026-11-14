@@ -1,3 +1,7 @@
+@php
+    $school = $school ?? app(\Modules\Settings\Services\SchoolProfileService::class)->forDocuments();
+    $currency = $school['currency'] ?: 'FCFA';
+@endphp
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -6,7 +10,8 @@
     <style>
         * { box-sizing: border-box; }
         body { font-family: DejaVu Sans, sans-serif; font-size: 12px; color: #222; margin: 0; padding: 24px 28px; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; border-bottom: 2px solid #1976d2; padding-bottom: 12px; }
+        .header { width: 100%; margin-bottom: 18px; border-bottom: 2px solid #1976d2; }
+        .header td { vertical-align: top; padding-bottom: 10px; }
         .header h1 { color: #1976d2; margin: 0 0 4px; font-size: 22px; }
         .header .meta { text-align: right; font-size: 11px; color: #555; }
         .header .meta strong { color: #1976d2; }
@@ -40,30 +45,36 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <div>
-            <h1>FACTURE</h1>
-            <div><strong>N° :</strong> {{ $invoice->invoice_number }}</div>
-            <div><strong>Date :</strong> {{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d/m/Y') }}</div>
-            <div><strong>Échéance :</strong> {{ \Carbon\Carbon::parse($invoice->due_date)->format('d/m/Y') }}</div>
-        </div>
-        <div class="meta">
-            <span class="status {{ $invoice->status }}">{{ strtoupper($invoice->status) }}</span>
-            <br><br>
-            <strong>Année académique</strong><br>
-            {{ $invoice->academicYear?->name ?? '—' }}
-        </div>
-    </div>
+    @include('settings::pdf.header', ['school' => $school, 'accent' => '#1976d2'])
+
+    <table class="header">
+        <tr>
+            <td>
+                <h1>FACTURE</h1>
+                <div><strong>N° :</strong> {{ $invoice->invoice_number }}</div>
+                <div><strong>Date :</strong> {{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d/m/Y') }}</div>
+                <div><strong>Échéance :</strong> {{ \Carbon\Carbon::parse($invoice->due_date)->format('d/m/Y') }}</div>
+            </td>
+            <td class="meta">
+                <span class="status {{ $invoice->status }}">{{ strtoupper($invoice->status) }}</span>
+                <br><br>
+                <strong>Année scolaire</strong><br>
+                {{ $invoice->academicYear?->name ?? '—' }}
+            </td>
+        </tr>
+    </table>
 
     <table class="blocks">
         <tr>
             <td>
                 <h3>Émetteur</h3>
-                <p><strong>{{ config('app.name', 'Établissement') }}</strong></p>
-                <p>Système de gestion scolaire</p>
+                <p><strong>{{ $school['display_name'] }}</strong></p>
+                @if(! empty($school['contact_line']))
+                    <p>{{ $school['contact_line'] }}</p>
+                @endif
             </td>
             <td>
-                <h3>Étudiant</h3>
+                <h3>Élève</h3>
                 <p><strong>{{ $invoice->student?->firstname }} {{ $invoice->student?->lastname }}</strong></p>
                 <p>Matricule : {{ $invoice->student?->matricule ?? '—' }}</p>
                 @if($invoice->student?->email)
@@ -90,8 +101,8 @@
                 <tr>
                     <td>{{ $item->description }}</td>
                     <td class="right">{{ $item->quantity }}</td>
-                    <td class="right">{{ number_format((float) $item->unit_price, 0, ',', ' ') }} XOF</td>
-                    <td class="right">{{ number_format((float) $item->amount, 0, ',', ' ') }} XOF</td>
+                    <td class="right">{{ number_format((float) $item->unit_price, 0, ',', ' ') }} {{ $currency }}</td>
+                    <td class="right">{{ number_format((float) $item->amount, 0, ',', ' ') }} {{ $currency }}</td>
                 </tr>
             @empty
                 <tr>
@@ -104,15 +115,15 @@
     <table class="totals">
         <tr>
             <td class="label">Montant total</td>
-            <td class="value">{{ number_format((float) $invoice->total_amount, 0, ',', ' ') }} XOF</td>
+            <td class="value">{{ number_format((float) $invoice->total_amount, 0, ',', ' ') }} {{ $currency }}</td>
         </tr>
         <tr class="paid">
             <td class="label">Total payé</td>
-            <td class="value">{{ number_format($totalPaid, 0, ',', ' ') }} XOF</td>
+            <td class="value">{{ number_format($totalPaid, 0, ',', ' ') }} {{ $currency }}</td>
         </tr>
         <tr class="remaining">
             <td class="label">Restant dû</td>
-            <td class="value">{{ number_format($remaining, 0, ',', ' ') }} XOF</td>
+            <td class="value">{{ number_format($remaining, 0, ',', ' ') }} {{ $currency }}</td>
         </tr>
     </table>
 
@@ -135,7 +146,7 @@
                             <td>{{ $payment->payment_date ? \Carbon\Carbon::parse($payment->payment_date)->format('d/m/Y') : '—' }}</td>
                             <td>{{ $payment->payment_method ?? '—' }}</td>
                             <td>{{ $payment->reference_number ?? '—' }}</td>
-                            <td>{{ number_format((float) $payment->amount, 0, ',', ' ') }} XOF</td>
+                            <td>{{ number_format((float) $payment->amount, 0, ',', ' ') }} {{ $currency }}</td>
                             <td>{{ $payment->status ?? 'completed' }}</td>
                         </tr>
                     @endforeach
@@ -151,7 +162,7 @@
     @endif
 
     <div class="footer">
-        Facture générée le {{ $generatedAt->format('d/m/Y à H:i') }} — {{ config('app.name') }}
+        Facture générée le {{ $generatedAt->format('d/m/Y à H:i') }} — {{ $school['display_name'] }}
     </div>
 </body>
 </html>

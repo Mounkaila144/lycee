@@ -227,15 +227,14 @@ class LyceeEvaluationsApiTest extends TestCase
     }
 
     #[Test]
-    public function admin_and_manager_publish_and_unpublish(): void
+    public function only_admin_publishes_and_unpublishes(): void
     {
         $evaluation = $this->draft();
-        $manager = $this->userWithRole('Manager');
 
-        $this->postAs($manager, self::BASE."/{$evaluation->id}/publish")
+        $this->postAs($this->admin, self::BASE."/{$evaluation->id}/publish")
             ->assertOk()
             ->assertJsonPath('data.status', 'published');
-        $this->assertSame($manager->id, (int) $evaluation->fresh()->published_by);
+        $this->assertSame($this->admin->id, (int) $evaluation->fresh()->published_by);
         $this->postAs($this->admin, self::BASE."/{$evaluation->id}/publish")->assertUnprocessable();
 
         $this->postAs($this->admin, self::BASE."/{$evaluation->id}/unpublish")
@@ -243,6 +242,31 @@ class LyceeEvaluationsApiTest extends TestCase
             ->assertJsonPath('data.status', 'submitted');
         $this->assertNull($evaluation->fresh()->published_at);
         $this->postAs($this->admin, self::BASE."/{$evaluation->id}/unpublish")->assertUnprocessable();
+    }
+
+    #[Test]
+    public function manager_cannot_publish_unpublish_or_edit_a_published_evaluation(): void
+    {
+        $manager = $this->userWithRole('Manager');
+        $draft = $this->draft();
+
+        $this->postAs($manager, self::BASE."/{$draft->id}/publish")->assertForbidden();
+        $this->postAs($manager, self::BASE.'/publish-bulk', ['semester_id' => $this->s1->id])->assertForbidden();
+        $this->assertSame(ClassEvaluation::STATUS_DRAFT, $draft->fresh()->status);
+
+        $published = $this->evaluation($this->maths, ['A' => 12]);
+        $this->postAs($manager, self::BASE."/{$published->id}/unpublish")->assertForbidden();
+        $this->putAs($manager, self::BASE."/{$published->id}", ['title' => 'Modifié'])->assertForbidden();
+        $this->putAs($manager, self::BASE."/{$published->id}/grades", [
+            'grades' => [['student_id' => $this->students['A']->id, 'score' => 20]],
+        ])->assertForbidden();
+        $this->deleteAs($manager, self::BASE."/{$published->id}")->assertForbidden();
+        $this->assertTrue($published->fresh()->isPublished());
+
+        $this->getAs($manager, self::BASE."/{$published->id}")->assertOk();
+        $this->putAs($manager, self::BASE."/{$draft->id}/grades", [
+            'grades' => [['student_id' => $this->students['A']->id, 'score' => 11]],
+        ])->assertOk();
     }
 
     #[Test]

@@ -11,35 +11,44 @@ use Modules\Payroll\Exceptions\PayrollException;
 /**
  * Epic 4: Déclarations Sociales (Stories 14-17)
  *
- * Story 14: Generate CNSS declaration
- * Story 15: Generate tax declaration
- * Story 16: Generate monthly declarations
- * Story 17: Generate annual tax summary
+ * Les montants sont agrégés à partir des bulletins calculés, par code de
+ * cotisation / charge configuré dans les paramètres de paie (aucun organisme fixe).
+ *
+ * Types stockés (colonne enum historique) :
+ * - 'cnss'         : cotisations sociales (toutes les cotisations configurées, détail par code)
+ * - 'income_tax'   : impôt sur salaires retenu à la source (barème configuré)
+ * - 'training_tax' : charges patronales additionnelles (taxes sur la masse salariale)
  */
 class SocialDeclarationService
 {
+    public const TYPE_SOCIAL_CONTRIBUTIONS = 'cnss';
+
+    public const TYPE_INCOME_TAX = 'income_tax';
+
+    public const TYPE_EMPLOYER_CHARGES = 'training_tax';
+
     /**
-     * Story 14: Generate CNSS declaration
+     * Story 14: Déclaration des cotisations sociales (agrégées par code configuré)
      */
-    public function generateCNSSDeclaration(PayrollPeriod $period): SocialDeclaration
+    public function generateSocialContributionsDeclaration(PayrollPeriod $period): SocialDeclaration
     {
-        return $this->generateDeclaration($period, 'cnss');
+        return $this->generateDeclaration($period, self::TYPE_SOCIAL_CONTRIBUTIONS);
     }
 
     /**
-     * Story 15: Generate income tax declaration
+     * Story 15: Déclaration de l'impôt sur salaires retenu
      */
     public function generateIncomeTaxDeclaration(PayrollPeriod $period): SocialDeclaration
     {
-        return $this->generateDeclaration($period, 'income_tax');
+        return $this->generateDeclaration($period, self::TYPE_INCOME_TAX);
     }
 
     /**
-     * Generate AMO declaration
+     * Déclaration des charges patronales additionnelles (agrégées par code configuré)
      */
-    public function generateAMODeclaration(PayrollPeriod $period): SocialDeclaration
+    public function generateEmployerChargesDeclaration(PayrollPeriod $period): SocialDeclaration
     {
-        return $this->generateDeclaration($period, 'amo');
+        return $this->generateDeclaration($period, self::TYPE_EMPLOYER_CHARGES);
     }
 
     /**
@@ -89,14 +98,8 @@ class SocialDeclarationService
                 'total_employee_contributions' => $totals['total_employee_contributions'],
                 'total_employer_contributions' => $totals['total_employer_contributions'],
                 'total_amount_due' => $totals['total_amount_due'],
-                'cnss_employee_rate' => $totals['cnss_employee_rate'] ?? null,
-                'cnss_employer_rate' => $totals['cnss_employer_rate'] ?? null,
                 'cnss_employee_amount' => $totals['cnss_employee_amount'] ?? 0,
                 'cnss_employer_amount' => $totals['cnss_employer_amount'] ?? 0,
-                'amo_employee_rate' => $totals['amo_employee_rate'] ?? null,
-                'amo_employer_rate' => $totals['amo_employer_rate'] ?? null,
-                'amo_employee_amount' => $totals['amo_employee_amount'] ?? 0,
-                'amo_employer_amount' => $totals['amo_employer_amount'] ?? 0,
                 'income_tax_withheld' => $totals['income_tax_withheld'] ?? 0,
                 'professional_tax_amount' => $totals['professional_tax_amount'] ?? 0,
                 'training_tax_amount' => $totals['training_tax_amount'] ?? 0,
@@ -110,7 +113,7 @@ class SocialDeclarationService
     }
 
     /**
-     * Story 17: Generate annual tax summary (État 9421)
+     * Story 17: Generate annual tax summary (récapitulatif annuel des salaires et de l'impôt retenu)
      */
     public function generateAnnualTaxSummary(int $year): SocialDeclaration
     {
@@ -228,7 +231,9 @@ class SocialDeclarationService
     }
 
     /**
-     * Calculate declaration totals based on type
+     * Calculate declaration totals based on type (agrégation par code configuré).
+     *
+     * @return array<string, mixed>
      */
     protected function calculateDeclarationTotals($records, string $type): array
     {
@@ -244,54 +249,164 @@ class SocialDeclarationService
         ];
 
         switch ($type) {
-            case 'cnss':
-                $totals['cnss_employee_rate'] = 4.48;
-                $totals['cnss_employer_rate'] = 12.89;
-                $totals['cnss_employee_amount'] = $records->sum('cnss_employee');
-                $totals['cnss_employer_amount'] = $records->sum('cnss_employer');
-                $totals['total_employee_contributions'] = $totals['cnss_employee_amount'];
-                $totals['total_employer_contributions'] = $totals['cnss_employer_amount'];
-                $totals['total_amount_due'] = $totals['cnss_employee_amount'] + $totals['cnss_employer_amount'];
+            case self::TYPE_SOCIAL_CONTRIBUTIONS:
+                $lines = $this->aggregateContributionLines($records);
+                $employeeTotal = array_sum(array_column($lines, 'employee_amount'));
+                $employerTotal = array_sum(array_column($lines, 'employer_amount'));
+
+                $totals['cnss_employee_amount'] = $employeeTotal;
+                $totals['cnss_employer_amount'] = $employerTotal;
+                $totals['total_employee_contributions'] = $employeeTotal;
+                $totals['total_employer_contributions'] = $employerTotal;
+                $totals['total_amount_due'] = $employeeTotal + $employerTotal;
+                $totals['calculation_details'] = [
+                    'label' => 'Cotisations sociales',
+                    'lines' => $lines,
+                    'settings_versions' => $this->settingsVersionsUsed($records),
+                ];
                 break;
 
-            case 'amo':
-                $totals['amo_employee_rate'] = 2.26;
-                $totals['amo_employer_rate'] = 3.96;
-                $totals['amo_employee_amount'] = $records->sum('amo_employee');
-                $totals['amo_employer_amount'] = $records->sum('amo_employer');
-                $totals['total_employee_contributions'] = $totals['amo_employee_amount'];
-                $totals['total_employer_contributions'] = $totals['amo_employer_amount'];
-                $totals['total_amount_due'] = $totals['amo_employee_amount'] + $totals['amo_employer_amount'];
-                break;
-
-            case 'income_tax':
+            case self::TYPE_INCOME_TAX:
                 $totals['income_tax_withheld'] = $records->sum('income_tax');
                 $totals['total_amount_due'] = $totals['income_tax_withheld'];
+                $totals['calculation_details'] = [
+                    'label' => $this->incomeTaxLabel($records),
+                    'total_taxable_income' => $records->sum('net_taxable'),
+                    'settings_versions' => $this->settingsVersionsUsed($records),
+                ];
                 break;
 
-            case 'professional_tax':
-                $totals['professional_tax_amount'] = $records->sum('professional_tax');
-                $totals['total_amount_due'] = $totals['professional_tax_amount'];
-                break;
+            case self::TYPE_EMPLOYER_CHARGES:
+                $lines = $this->aggregateEmployerChargeLines($records);
+                $total = array_sum(array_column($lines, 'amount'));
 
-            case 'training_tax':
-                $totals['training_tax_amount'] = $records->sum('training_tax');
-                $totals['total_amount_due'] = $totals['training_tax_amount'];
+                $totals['training_tax_amount'] = $total;
+                $totals['total_employer_contributions'] = $total;
+                $totals['total_amount_due'] = $total;
+                $totals['calculation_details'] = [
+                    'label' => 'Charges patronales additionnelles',
+                    'lines' => $lines,
+                    'settings_versions' => $this->settingsVersionsUsed($records),
+                ];
                 break;
         }
 
         // Build employee details
         foreach ($records as $record) {
-            $totals['employee_details'][] = [
+            $detail = [
                 'employee_code' => $record->employee->employee_code,
                 'full_name' => $record->employee->full_name,
                 'cnss_number' => $record->employee->cnss_number,
                 'base_salary' => $record->base_salary,
                 'gross_salary' => $record->gross_salary,
             ];
+
+            if ($type === self::TYPE_SOCIAL_CONTRIBUTIONS) {
+                $detail['contributions'] = array_map(fn (array $line): array => [
+                    'code' => $line['code'],
+                    'base' => $line['base'],
+                    'employee_amount' => $line['employee_amount'],
+                    'employer_amount' => $line['employer_amount'],
+                ], $record->contributionLines());
+            } elseif ($type === self::TYPE_INCOME_TAX) {
+                $detail['taxable_income'] = $record->net_taxable;
+                $detail['income_tax'] = $record->income_tax;
+            } elseif ($type === self::TYPE_EMPLOYER_CHARGES) {
+                $detail['employer_charges'] = $record->additionalEmployerChargeLines();
+            }
+
+            $totals['employee_details'][] = $detail;
         }
 
         return $totals;
+    }
+
+    /**
+     * Somme des cotisations par code sur l'ensemble des bulletins.
+     *
+     * @return array<int, array{code: string, label: string, employee_rate: float|null, employer_rate: float|null, base_total: float, employee_amount: float, employer_amount: float, total: float}>
+     */
+    public function aggregateContributionLines($records): array
+    {
+        $byCode = [];
+
+        foreach ($records as $record) {
+            foreach ($record->contributionLines() as $line) {
+                $code = $line['code'];
+
+                if (! isset($byCode[$code])) {
+                    $byCode[$code] = [
+                        'code' => $code,
+                        'label' => $line['label'],
+                        'employee_rate' => $line['employee_rate'],
+                        'employer_rate' => $line['employer_rate'],
+                        'base_total' => 0.0,
+                        'employee_amount' => 0.0,
+                        'employer_amount' => 0.0,
+                        'total' => 0.0,
+                    ];
+                }
+
+                $byCode[$code]['base_total'] += $line['base'];
+                $byCode[$code]['employee_amount'] += $line['employee_amount'];
+                $byCode[$code]['employer_amount'] += $line['employer_amount'];
+                $byCode[$code]['total'] += $line['employee_amount'] + $line['employer_amount'];
+            }
+        }
+
+        return array_values(array_map(fn (array $line): array => array_merge($line, [
+            'base_total' => round($line['base_total'], 2),
+            'employee_amount' => round($line['employee_amount'], 2),
+            'employer_amount' => round($line['employer_amount'], 2),
+            'total' => round($line['total'], 2),
+        ]), $byCode));
+    }
+
+    /**
+     * Somme des charges patronales additionnelles par code.
+     *
+     * @return array<int, array{code: string, label: string, rate: float|null, amount: float}>
+     */
+    public function aggregateEmployerChargeLines($records): array
+    {
+        $byCode = [];
+
+        foreach ($records as $record) {
+            foreach ($record->additionalEmployerChargeLines() as $line) {
+                $code = $line['code'];
+                $byCode[$code] ??= ['code' => $code, 'label' => $line['label'], 'rate' => $line['rate'], 'amount' => 0.0];
+                $byCode[$code]['amount'] = round($byCode[$code]['amount'] + $line['amount'], 2);
+            }
+        }
+
+        return array_values($byCode);
+    }
+
+    /**
+     * Versions de paramètres utilisées par les bulletins (traçabilité).
+     *
+     * @return array<int, int|null>
+     */
+    protected function settingsVersionsUsed($records): array
+    {
+        return $records
+            ->map(fn ($record) => $record->deductions_breakdown['settings_version'] ?? null)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    protected function incomeTaxLabel($records): string
+    {
+        foreach ($records as $record) {
+            $label = $record->deductions_breakdown['income_tax']['label'] ?? null;
+
+            if (is_string($label) && $label !== '') {
+                return $label;
+            }
+        }
+
+        return 'Impôt sur salaires';
     }
 
     /**
@@ -343,15 +458,8 @@ class SocialDeclarationService
      */
     protected function calculateDueDate(string $type, PayrollPeriod $period): Carbon
     {
-        // Moroccan due dates (simplified)
-        $dueDate = $period->end_date->copy();
-
-        return match ($type) {
-            'cnss', 'amo' => $dueDate->addDays(10), // 10 days after month end
-            'income_tax' => $dueDate->addMonths(1)->endOfMonth(), // End of next month
-            'professional_tax', 'training_tax' => $dueDate->addDays(15), // 15 days after month end
-            default => $dueDate->addMonth(),
-        };
+        // Échéances indicatives (à adapter au calendrier des organismes) : le 15 du mois suivant.
+        return $period->end_date->copy()->addDays(15);
     }
 
     /**
@@ -359,7 +467,12 @@ class SocialDeclarationService
      */
     protected function generateDeclarationNumber(string $type, PayrollPeriod $period): string
     {
-        $prefix = strtoupper(substr($type, 0, 4));
+        $prefix = match ($type) {
+            self::TYPE_SOCIAL_CONTRIBUTIONS => 'COTIS',
+            self::TYPE_INCOME_TAX => 'IMPOT',
+            self::TYPE_EMPLOYER_CHARGES => 'CHPAT',
+            default => strtoupper(substr($type, 0, 5)),
+        };
         $yearMonth = $period->period_code;
 
         $count = SocialDeclaration::on('tenant')

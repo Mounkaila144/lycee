@@ -106,6 +106,6 @@ class SuperAdmin extends Authenticatable
      */
     public function updateLastLogin(): void
     {
-        $this->update(['lastlogin' => now()]);
+        $this->forceFill(['lastlogin' => now()])->save();
     }
 }

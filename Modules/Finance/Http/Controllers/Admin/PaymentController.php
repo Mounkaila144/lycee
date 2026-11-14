@@ -12,6 +12,7 @@ use Modules\Finance\Entities\Invoice;
 use Modules\Finance\Entities\Payment;
 use Modules\Finance\Services\BillingService;
 use Modules\Finance\Services\PaymentService;
+use Modules\Settings\Services\SchoolProfileService;
 
 /**
  * Payment Controller
@@ -200,6 +201,15 @@ class PaymentController extends Controller
             ->findOrFail($id);
 
         $receiptData = $this->paymentService->generateReceiptData($payment);
+        $school = app(SchoolProfileService::class)->forDocuments();
+        $receiptData['school'] = [
+            'name' => $school['display_name'],
+            'header_lines' => $school['header_lines'],
+            'contact_line' => $school['contact_line'],
+            'city' => $school['city'],
+            'currency' => $school['currency'],
+            'logo_data_uri' => $school['logo_data_uri'],
+        ];
 
         return response()->json(['data' => $receiptData]);
     }

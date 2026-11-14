@@ -16,6 +16,10 @@ use Modules\Payroll\Entities\SocialDeclaration;
  */
 class PayrollReportService
 {
+    public function __construct(
+        protected SocialDeclarationService $declarationService
+    ) {}
+
     /**
      * Story 18: Generate payroll journal
      */
@@ -64,9 +68,7 @@ class PayrollReportService
                 ],
                 'gross_salary' => $record->gross_salary,
                 'deductions' => [
-                    'cnss' => $record->cnss_employee,
-                    'amo' => $record->amo_employee,
-                    'cimr' => $record->cimr_employee,
+                    'social_contributions' => $record->cnss_employee + $record->amo_employee + $record->cimr_employee,
                     'income_tax' => $record->income_tax,
                     'advances' => $record->advance_deductions,
                     'other' => $record->other_deductions,
@@ -74,13 +76,11 @@ class PayrollReportService
                 ],
                 'net_salary' => $record->net_salary,
                 'employer_charges' => [
-                    'cnss' => $record->cnss_employer,
-                    'amo' => $record->amo_employer,
-                    'cimr' => $record->cimr_employer,
-                    'professional_tax' => $record->professional_tax,
-                    'training_tax' => $record->training_tax,
+                    'social_contributions' => $record->cnss_employer + $record->amo_employer + $record->cimr_employer,
+                    'additional_charges' => $record->professional_tax + $record->training_tax,
                     'total' => $record->total_employer_charges,
                 ],
+                'contributions' => $record->contributionLines(),
                 'total_cost' => $record->total_cost,
             ];
         }
@@ -95,6 +95,13 @@ class PayrollReportService
     {
         $records = $period->payrollRecords;
 
+        $contributions = $this->declarationService->aggregateContributionLines($records);
+        $employerCharges = $this->declarationService->aggregateEmployerChargeLines($records);
+        $employeeContributions = round(array_sum(array_column($contributions, 'employee_amount')), 2);
+        $employerContributions = round(array_sum(array_column($contributions, 'employer_amount')), 2);
+        $additionalCharges = round(array_sum(array_column($employerCharges, 'amount')), 2);
+        $incomeTax = round((float) $records->sum('income_tax'), 2);
+
         $report = [
             'period' => [
                 'code' => $period->period_code,
@@ -102,38 +109,19 @@ class PayrollReportService
                 'year' => $period->year,
                 'month' => $period->month,
             ],
-            'cnss' => [
-                'employee_contributions' => $records->sum('cnss_employee'),
-                'employer_contributions' => $records->sum('cnss_employer'),
-                'total' => $records->sum('cnss_employee') + $records->sum('cnss_employer'),
-                'employee_rate' => 4.48,
-                'employer_rate' => 12.89,
-            ],
-            'amo' => [
-                'employee_contributions' => $records->sum('amo_employee'),
-                'employer_contributions' => $records->sum('amo_employer'),
-                'total' => $records->sum('amo_employee') + $records->sum('amo_employer'),
-                'employee_rate' => 2.26,
-                'employer_rate' => 3.96,
-            ],
-            'cimr' => [
-                'employee_contributions' => $records->sum('cimr_employee'),
-                'employer_contributions' => $records->sum('cimr_employer'),
-                'total' => $records->sum('cimr_employee') + $records->sum('cimr_employer'),
-                'employee_rate' => 3.0,
-                'employer_rate' => 6.0,
-            ],
+            'contributions' => $contributions,
+            'employer_charges' => $employerCharges,
             'taxes' => [
-                'income_tax' => $records->sum('income_tax'),
-                'professional_tax' => $records->sum('professional_tax'),
-                'training_tax' => $records->sum('training_tax'),
-                'total' => $records->sum('income_tax') + $records->sum('professional_tax') + $records->sum('training_tax'),
+                'income_tax' => $incomeTax,
+                'employer_charges' => $additionalCharges,
+                'total' => round($incomeTax + $additionalCharges, 2),
             ],
             'summary' => [
-                'total_employee_contributions' => $records->sum('cnss_employee') + $records->sum('amo_employee') + $records->sum('cimr_employee'),
-                'total_employer_contributions' => $records->sum('cnss_employer') + $records->sum('amo_employer') + $records->sum('cimr_employer') + $records->sum('professional_tax') + $records->sum('training_tax'),
-                'total_taxes' => $records->sum('income_tax'),
-                'grand_total' => $records->sum('total_deductions') + $period->total_employer_charges,
+                'total_employee_contributions' => $employeeContributions,
+                'total_employer_contributions' => $employerContributions,
+                'total_additional_employer_charges' => $additionalCharges,
+                'total_taxes' => $incomeTax,
+                'grand_total' => round($employeeContributions + $employerContributions + $additionalCharges + $incomeTax, 2),
             ],
             'declarations' => $this->getDeclarationsSummary($period),
         ];
@@ -232,44 +220,48 @@ class PayrollReportService
     }
 
     /**
-     * Generate accounting entries for payroll
+     * Écritures comptables de la paie (plan SYSCOHADA, comptes indicatifs).
      */
     protected function generateAccountingEntries(PayrollPeriod $period, Collection $records): array
     {
+        $socialContributions = $records->sum(fn ($record) => (float) $record->cnss_employee + (float) $record->amo_employee + (float) $record->cimr_employee
+            + (float) $record->cnss_employer + (float) $record->amo_employer + (float) $record->cimr_employer);
+        $additionalCharges = $records->sum(fn ($record) => (float) $record->professional_tax + (float) $record->training_tax);
+
         return [
             [
-                'account' => '6411', // Salaires bruts
-                'label' => 'Salaires et traitements',
+                'account' => '661',
+                'label' => 'Rémunérations directes versées au personnel',
                 'debit' => $period->total_gross_salary,
                 'credit' => 0,
             ],
             [
-                'account' => '6171', // Charges sociales patronales
-                'label' => 'Charges sociales patronales',
+                'account' => '664',
+                'label' => 'Charges sociales et taxes patronales',
                 'debit' => $period->total_employer_charges,
                 'credit' => 0,
             ],
             [
-                'account' => '4432', // CNSS à payer
-                'label' => 'CNSS - Cotisations à payer',
+                'account' => '431',
+                'label' => 'Sécurité sociale — cotisations à payer',
                 'debit' => 0,
-                'credit' => $records->sum('cnss_employee') + $records->sum('cnss_employer'),
+                'credit' => $socialContributions,
             ],
             [
-                'account' => '4434', // AMO à payer
-                'label' => 'AMO - Cotisations à payer',
-                'debit' => 0,
-                'credit' => $records->sum('amo_employee') + $records->sum('amo_employer'),
-            ],
-            [
-                'account' => '4441', // IR à payer
-                'label' => 'Impôt sur le revenu à payer',
+                'account' => '447',
+                'label' => 'État — impôt sur salaires retenu à la source',
                 'debit' => 0,
                 'credit' => $records->sum('income_tax'),
             ],
             [
-                'account' => '4425', // Salaires nets à payer
-                'label' => 'Personnel - Rémunérations dues',
+                'account' => '447',
+                'label' => 'État — taxes patronales sur salaires',
+                'debit' => 0,
+                'credit' => $additionalCharges,
+            ],
+            [
+                'account' => '422',
+                'label' => 'Personnel — rémunérations dues',
                 'debit' => 0,
                 'credit' => $period->total_net_salary,
             ],
