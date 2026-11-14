@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Enrollment\Http\Controllers\Admin\ClassPromotionController;
 use Modules\Enrollment\Http\Controllers\Admin\EnrollmentController;
 use Modules\Enrollment\Http\Controllers\Admin\EnrollmentStatisticsController;
 use Modules\Enrollment\Http\Controllers\Admin\EnrollmentValidationController;
@@ -351,34 +352,33 @@ Route::prefix('admin/enrollment')
                 ->name('admin.enrollment.reenrollment-campaigns.eligible-students');
         });
 
-        // Reenrollments (Réinscriptions)
+        // Reenrollments (Réinscriptions) — historique universitaire en lecture / rejet.
+        // La validation des réinscriptions passe désormais par les passages de classe (class-promotions).
         Route::prefix('reenrollments')->group(function () {
             Route::get('/', [ReenrollmentController::class, 'index'])
                 ->name('admin.enrollment.reenrollments.index');
-            Route::post('/', [ReenrollmentController::class, 'store'])
-                ->name('admin.enrollment.reenrollments.store')
-                ->middleware('role:Administrator|Manager,tenant');
-
-            // Must be before /{reenrollment}
-            Route::post('/check-eligibility', [ReenrollmentController::class, 'checkEligibility'])
-                ->name('admin.enrollment.reenrollments.check-eligibility');
-            Route::post('/batch-validate', [ReenrollmentController::class, 'batchValidate'])
-                ->name('admin.enrollment.reenrollments.batch-validate')
-                ->middleware('role:Administrator|Manager,tenant');
             Route::get('/statistics', [ReenrollmentController::class, 'statistics'])
                 ->name('admin.enrollment.reenrollments.statistics');
 
             Route::get('/{reenrollment}', [ReenrollmentController::class, 'show'])
                 ->name('admin.enrollment.reenrollments.show');
-            Route::post('/{reenrollment}/validate', [ReenrollmentController::class, 'validate'])
-                ->name('admin.enrollment.reenrollments.validate')
-                ->middleware('role:Administrator|Manager,tenant');
             Route::post('/{reenrollment}/reject', [ReenrollmentController::class, 'reject'])
                 ->name('admin.enrollment.reenrollments.reject')
                 ->middleware('role:Administrator|Manager,tenant');
             Route::get('/{reenrollment}/confirmation', [ReenrollmentController::class, 'downloadConfirmation'])
                 ->name('admin.enrollment.reenrollments.download-confirmation');
         });
+
+        // Passages de classe de fin d'année (lycée) : passage, redoublement, départ.
+        Route::prefix('class-promotions')
+            ->middleware('role:Administrator|Manager,tenant')
+            ->group(function () {
+                Route::get('/classes/{classeId}/prepare', [ClassPromotionController::class, 'prepare'])
+                    ->whereNumber('classeId')
+                    ->name('admin.enrollment.class-promotions.prepare');
+                Route::post('/validate', [ClassPromotionController::class, 'validateBatch'])
+                    ->name('admin.enrollment.class-promotions.validate');
+            });
 
         // Transfers (Transferts)
         Route::prefix('transfers')->group(function () {

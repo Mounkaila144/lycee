@@ -35,14 +35,30 @@ class AttendanceMonitoringService
     }
 
     /**
-     * Créer une alerte (Story 09)
+     * Créer une alerte (Story 09).
+     *
+     * Une alerte encore active (pending / notified) de l'élève pour le semestre est mise à jour
+     * plutôt que dupliquée ; aucune nouvelle alerte n'est créée si une alerte du même type a déjà
+     * été traitée sans nouvelle absence depuis.
      */
     private function createAlert(
         int $studentId,
         int $semesterId,
         string $alertType,
         array $stats
-    ): AttendanceAlert {
+    ): ?AttendanceAlert {
+        $acknowledgedWithoutNewAbsence = AttendanceAlert::query()
+            ->where('student_id', $studentId)
+            ->where('semester_id', $semesterId)
+            ->where('alert_type', $alertType)
+            ->where('status', 'acknowledged')
+            ->where('absence_count', '>=', $stats['absent_count'])
+            ->exists();
+
+        if ($acknowledgedWithoutNewAbsence) {
+            return null;
+        }
+
         $threshold = $alertType === 'threshold_critical'
             ? config('attendance.critical_threshold', 20)
             : config('attendance.warning_threshold', 10);
@@ -55,16 +71,46 @@ class AttendanceMonitoringService
             $stats['total_sessions']
         );
 
-        return AttendanceAlert::create([
-            'student_id' => $studentId,
-            'semester_id' => $semesterId,
+        $attributes = [
             'alert_type' => $alertType,
             'absence_count' => $stats['absent_count'],
             'absence_rate' => $stats['absence_rate'],
             'threshold_value' => $threshold,
             'message' => $message,
+        ];
+
+        $activeAlert = AttendanceAlert::query()
+            ->where('student_id', $studentId)
+            ->where('semester_id', $semesterId)
+            ->whereIn('status', ['pending', 'notified'])
+            ->latest('id')
+            ->first();
+
+        if ($activeAlert) {
+            $activeAlert->update($attributes);
+
+            return $activeAlert;
+        }
+
+        return AttendanceAlert::create(array_merge($attributes, [
+            'student_id' => $studentId,
+            'semester_id' => $semesterId,
             'status' => 'pending',
+        ]));
+    }
+
+    /**
+     * Marquer une alerte comme traitée.
+     */
+    public function acknowledgeAlert(AttendanceAlert $alert, int $userId): AttendanceAlert
+    {
+        $alert->update([
+            'status' => 'acknowledged',
+            'acknowledged_at' => now(),
+            'acknowledged_by' => $userId,
         ]);
+
+        return $alert->fresh(['student']);
     }
 
     /**
@@ -164,16 +210,35 @@ class AttendanceMonitoringService
     }
 
     /**
-     * Obtenir alertes actives
+     * Comptes utilisateurs (users.id) des élèves inscrits (actifs) dans une classe.
      *
-     * @param  list<int>|null  $studentIds
+     * @return list<int>
      */
-    public function getActiveAlerts(int $semesterId, ?array $studentIds = null): Collection
+    public function studentUserIdsForClasse(int $classeId): array
+    {
+        return Student::query()
+            ->whereNotNull('user_id')
+            ->whereHas('classEnrollments', fn (Builder $query) => $query->where('classe_id', $classeId)->where('status', 'Actif'))
+            ->pluck('user_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Obtenir les alertes du semestre.
+     *
+     * @param  list<int>|null  $studentIds  élèves visibles (null = tous)
+     * @param  'active'|'acknowledged'|'all'  $status
+     */
+    public function getActiveAlerts(int $semesterId, ?array $studentIds = null, string $status = 'active'): Collection
     {
         return AttendanceAlert::with(['student'])
             ->where('semester_id', $semesterId)
             ->when($studentIds !== null, fn ($query) => $query->whereIn('student_id', $studentIds))
-            ->whereIn('status', ['pending', 'notified'])
+            ->when($status === 'active', fn ($query) => $query->whereIn('status', ['pending', 'notified']))
+            ->when($status === 'acknowledged', fn ($query) => $query->where('status', 'acknowledged'))
             ->orderBy('absence_rate', 'desc')
             ->get();
     }

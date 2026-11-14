@@ -7,6 +7,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\Exams\Entities\ExamRoomAssignment;
 use Modules\Exams\Entities\ExamSession;
+use Modules\StructureAcademique\Entities\Classe;
+use Modules\StructureAcademique\Entities\Semester;
 use Modules\Timetable\Entities\Room;
 
 /**
@@ -35,15 +37,64 @@ class ExamPlanningService
                 $data['duration_minutes'] = $start->diffInMinutes($end);
             }
 
+            $roomIds = $data['room_ids'] ?? [];
+            unset($data['room_ids']);
+
+            $data = $this->resolveLyceeTarget($data);
+
             $session = ExamSession::create($data);
+
+            if (! empty($roomIds)) {
+                $this->assignMultipleRooms($session, array_map(fn ($roomId): array => ['room_id' => (int) $roomId], $roomIds));
+            }
 
             DB::connection('tenant')->commit();
 
-            return $session;
+            return $session->fresh();
         } catch (\Exception $e) {
             DB::connection('tenant')->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Complète la cible lycée d'une session : une session de classe hérite du niveau et de
+     * l'année de la classe ; le semestre est déduit de la date de l'épreuve s'il n'est pas fourni.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public function resolveLyceeTarget(array $data): array
+    {
+        if (! ExamSession::hasLyceeColumns()) {
+            return $data;
+        }
+
+        if (! empty($data['classe_id'])) {
+            $classe = Classe::query()->findOrFail($data['classe_id']);
+            $data['level_id'] = $classe->level_id;
+            $data['academic_year_id'] = $classe->academic_year_id;
+        }
+
+        if (empty($data['semester_id']) && ! empty($data['academic_year_id']) && ! empty($data['exam_date'])) {
+            $data['semester_id'] = $this->findSemesterForDate((int) $data['academic_year_id'], (string) $data['exam_date'])?->id;
+        }
+
+        return $data;
+    }
+
+    /**
+     * Semestre de l'année scolaire contenant la date donnée.
+     */
+    public function findSemesterForDate(int $academicYearId, string $date): ?Semester
+    {
+        $day = Carbon::parse($date)->toDateString();
+
+        return Semester::query()
+            ->where('academic_year_id', $academicYearId)
+            ->whereDate('start_date', '<=', $day)
+            ->whereDate('end_date', '>=', $day)
+            ->first();
     }
 
     /**
@@ -61,7 +112,22 @@ class ExamPlanningService
                 $data['duration_minutes'] = $start->diffInMinutes($end);
             }
 
-            $session->update($data);
+            if (array_key_exists('classe_id', $data) || array_key_exists('level_id', $data)) {
+                if (! empty($data['classe_id'])) {
+                    $data['level_id'] = null;
+                } elseif (! empty($data['level_id'])) {
+                    $data['classe_id'] = null;
+                }
+
+                $data['academic_year_id'] ??= $session->academic_year_id;
+            }
+
+            if (isset($data['exam_date']) && ! array_key_exists('semester_id', $data)) {
+                $data['semester_id'] = null;
+                $data['academic_year_id'] ??= $session->academic_year_id;
+            }
+
+            $session->update($this->resolveLyceeTarget($data));
 
             DB::connection('tenant')->commit();
 
@@ -140,6 +206,11 @@ class ExamPlanningService
             ));
         }
 
+        // Lycée : une classe ne peut pas composer deux épreuves en même temps
+        if (! empty($data['classe_id']) || ! empty($data['level_id'])) {
+            $conflicts = array_merge($conflicts, $this->checkClassConflicts($data, $excludeSessionId));
+        }
+
         // Check for module conflicts (same module at same time)
         if (isset($data['module_id'])) {
             $moduleConflicts = $this->checkModuleConflicts(
@@ -210,6 +281,72 @@ class ExamPlanningService
     }
 
     /**
+     * Story 03 (lycée) : sessions qui se chevauchent pour la même classe ou le même niveau.
+     * Une session de classe porte aussi le level_id de sa classe : comparer le niveau
+     * couvre donc les épreuves de niveau et celles des autres classes du niveau ;
+     * pour une session de classe, seules la même classe et les épreuves de niveau sont en conflit.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<int, array<string, mixed>>
+     */
+    private function checkClassConflicts(array $data, ?int $excludeSessionId = null): array
+    {
+        if (! ExamSession::hasLyceeColumns()) {
+            return [];
+        }
+
+        $classeId = $data['classe_id'] ?? null;
+        $levelId = $data['level_id'] ?? null;
+        $academicYearId = $data['academic_year_id'] ?? null;
+
+        if ($classeId) {
+            $classe = Classe::query()->find($classeId);
+            $levelId = $classe?->level_id;
+            $academicYearId = $classe?->academic_year_id;
+        }
+
+        $query = ExamSession::query()
+            ->with(['classe', 'level', 'subject'])
+            ->whereDate('exam_date', Carbon::parse($data['exam_date'])->toDateString())
+            ->where('status', '!=', 'cancelled')
+            ->where('start_time', '<', $data['end_time'])
+            ->where('end_time', '>', $data['start_time'])
+            ->where(function ($target) use ($classeId, $levelId, $academicYearId) {
+                if ($classeId) {
+                    $target->where('classe_id', $classeId);
+                }
+
+                if ($levelId) {
+                    $method = $classeId ? 'orWhere' : 'where';
+                    $target->{$method}(function ($levelQuery) use ($classeId, $levelId, $academicYearId) {
+                        $levelQuery->where('level_id', $levelId);
+
+                        if ($academicYearId) {
+                            $levelQuery->where('academic_year_id', $academicYearId);
+                        }
+
+                        if ($classeId) {
+                            $levelQuery->whereNull('classe_id');
+                        }
+                    });
+                }
+            });
+
+        if ($excludeSessionId) {
+            $query->where('id', '!=', $excludeSessionId);
+        }
+
+        return $query->get()->map(fn (ExamSession $session): array => [
+            'type' => 'class_conflict',
+            'classe' => $session->classe?->name ?? $session->level?->name,
+            'subject' => $session->subject?->name,
+            'conflicting_session' => $session->title,
+            'date' => $session->exam_date?->toDateString(),
+            'time' => $session->getRawOriginal('start_time').' - '.$session->getRawOriginal('end_time'),
+        ])->values()->all();
+    }
+
+    /**
      * Story 03: Check module conflicts (same module scheduled multiple times)
      */
     private function checkModuleConflicts(
@@ -252,7 +389,7 @@ class ExamPlanningService
 
         try {
             $newSessionData = array_merge(
-                $session->only([
+                $session->only(array_merge([
                     'module_id',
                     'evaluation_period_id',
                     'academic_year_id',
@@ -260,7 +397,7 @@ class ExamPlanningService
                     'duration_minutes',
                     'instructions',
                     'allowed_materials',
-                ]),
+                ], ExamSession::hasLyceeColumns() ? ['subject_id', 'classe_id', 'level_id', 'semester_id'] : [])),
                 [
                     'title' => $overrides['title'] ?? $session->title.' (Copie)',
                     'description' => $overrides['description'] ?? $session->description,
@@ -315,10 +452,23 @@ class ExamPlanningService
      */
     public function cancelSession(ExamSession $session, ?string $reason = null): ExamSession
     {
-        $session->update([
-            'status' => 'cancelled',
-            'notes' => $reason,
-        ]);
+        $attributes = ['status' => 'cancelled'];
+
+        if (ExamSession::hasLyceeColumns()) {
+            $attributes['cancellation_reason'] = $reason;
+        }
+
+        $session->update($attributes);
+
+        return $session;
+    }
+
+    /**
+     * Passage d'une session au statut « en cours » ou « terminée ».
+     */
+    public function changeStatus(ExamSession $session, string $status): ExamSession
+    {
+        $session->update(['status' => $status]);
 
         return $session;
     }

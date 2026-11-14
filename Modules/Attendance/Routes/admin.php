@@ -51,6 +51,7 @@ Route::prefix('admin')
             Route::post('/check-thresholds', [AttendanceMonitoringController::class, 'checkThresholds'])->name('check-thresholds');
             Route::post('/trigger-alerts', [AttendanceMonitoringController::class, 'triggerAlerts'])->name('trigger-alerts');
             Route::get('/alerts', [AttendanceMonitoringController::class, 'getActiveAlerts'])->name('alerts');
+            Route::post('/alerts/{alertId}/acknowledge', [AttendanceMonitoringController::class, 'acknowledgeAlert'])->whereNumber('alertId')->name('alerts.acknowledge');
             Route::get('/students/{studentId}/history', [AttendanceMonitoringController::class, 'getStudentHistory'])->name('student-history');
             Route::get('/students/{studentId}/stats', [AttendanceMonitoringController::class, 'getStudentStats'])->name('student-stats');
         });

@@ -5,8 +5,11 @@ namespace Modules\Enrollment\Http\Controllers\Frontend;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Modules\Enrollment\Entities\ReenrollmentCampaign;
 use Modules\Enrollment\Entities\Student;
+use Modules\Enrollment\Http\Requests\StoreReenrollmentIntentionRequest;
 use Modules\Enrollment\Http\Resources\StudentResource;
+use Modules\Enrollment\Services\ReenrollmentService;
 use Modules\Enrollment\Services\StudentPortalService;
 
 /**
@@ -190,6 +193,50 @@ class StudentDashboardController extends Controller
 
         return response()->json([
             'data' => $this->portal->reenrollment($student),
+        ]);
+    }
+
+    /**
+     * L'élève exprime son intention de se réinscrire (oui / non) pour une campagne ouverte.
+     */
+    public function storeReenrollmentIntention(StoreReenrollmentIntentionRequest $request, ReenrollmentService $reenrollmentService): JsonResponse
+    {
+        $student = $this->requireStudent($request);
+        if ($student instanceof JsonResponse) {
+            return $student;
+        }
+
+        if (! $reenrollmentService->intentionsAvailable()) {
+            return response()->json(['message' => 'La réinscription en ligne n\'est pas encore disponible.'], 422);
+        }
+
+        $campaign = ReenrollmentCampaign::query()->findOrFail($request->integer('campaign_id'));
+
+        if (! $campaign->isOpen()) {
+            return response()->json(['message' => 'La campagne de réinscription n\'est pas ouverte.'], 422);
+        }
+
+        if (! $reenrollmentService->checkEligibility($student, $campaign)['has_previous_enrollment']) {
+            return response()->json(['message' => 'Vous n\'êtes pas concerné(e) par cette campagne de réinscription.'], 422);
+        }
+
+        $intention = $reenrollmentService->recordIntention(
+            $student,
+            $campaign,
+            $request->boolean('wants_to_reenroll'),
+            $request->validated('comment'),
+        );
+
+        return response()->json([
+            'message' => $intention->wants_to_reenroll
+                ? 'Votre souhait de réinscription a été enregistré.'
+                : 'Votre décision de ne pas vous réinscrire a été enregistrée.',
+            'data' => [
+                'campaign_id' => $intention->campaign_id,
+                'wants_to_reenroll' => $intention->wants_to_reenroll,
+                'comment' => $intention->comment,
+                'responded_at' => $intention->responded_at?->toIso8601String(),
+            ],
         ]);
     }
 

@@ -12,6 +12,7 @@ Route::prefix('admin/exams')->middleware(['tenant', 'tenant.auth', 'role:Adminis
     Route::prefix('sessions')->group(function () {
         Route::get('/', 'ExamSessionController@index');
         Route::get('/available-rooms', 'ExamSessionController@availableRooms');
+        Route::get('/options', 'ExamSessionController@options');
         Route::post('/validate-schedule', 'ExamSessionController@validateSchedule');
         Route::get('/{session}', 'ExamSessionController@show')->whereNumber('session');
 
@@ -22,6 +23,8 @@ Route::prefix('admin/exams')->middleware(['tenant', 'tenant.auth', 'role:Adminis
             Route::post('/{session}/publish', 'ExamSessionController@publish')->whereNumber('session');
             Route::post('/{session}/cancel', 'ExamSessionController@cancel')->whereNumber('session');
             Route::post('/{session}/duplicate', 'ExamSessionController@duplicate')->whereNumber('session');
+            Route::put('/{session}/status', 'ExamSessionController@changeStatus')->whereNumber('session');
+            Route::post('/{session}/create-evaluations', 'ExamSessionController@createEvaluations')->whereNumber('session');
 
             // Room assignments
             Route::post('/{session}/rooms', 'ExamRoomController@assign')->whereNumber('session');

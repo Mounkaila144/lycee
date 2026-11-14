@@ -2,7 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Enrollment\Http\Controllers\Frontend\MyCardController;
-use Modules\Enrollment\Http\Controllers\Frontend\ReenrollmentController;
 use Modules\Enrollment\Http\Controllers\Frontend\StudentGroupController;
 
 /*
@@ -39,44 +38,6 @@ Route::prefix('frontend/enrollment')
 
         Route::get('/my-card/qr-code', [MyCardController::class, 'qrCode'])
             ->name('frontend.enrollment.my-card-qrcode');
-
-        // =====================================================================
-        // Reenrollment - Réinscription (Story 11)
-        // =====================================================================
-        Route::prefix('reenrollment')->group(function () {
-            // Campagnes ouvertes
-            Route::get('/campaigns', [ReenrollmentController::class, 'campaigns'])
-                ->name('frontend.enrollment.reenrollment-campaigns');
-
-            // Vérifier éligibilité
-            Route::post('/check-eligibility', [ReenrollmentController::class, 'checkEligibility'])
-                ->name('frontend.enrollment.reenrollment-check-eligibility');
-
-            // Créer une réinscription
-            Route::post('/', [ReenrollmentController::class, 'create'])
-                ->name('frontend.enrollment.reenrollment-create');
-
-            // Mettre à jour ma réinscription
-            Route::put('/{reenrollment}', [ReenrollmentController::class, 'update'])
-                ->name('frontend.enrollment.reenrollment-update');
-
-            // Soumettre ma réinscription
-            Route::post('/{reenrollment}/submit', [ReenrollmentController::class, 'submit'])
-                ->name('frontend.enrollment.reenrollment-submit');
-
-            // Mon statut de réinscription
-            Route::get('/my-status', [ReenrollmentController::class, 'myStatus'])
-                ->name('frontend.enrollment.reenrollment-my-status');
-
-            // Détails de ma réinscription
-            Route::get('/{reenrollment}', [ReenrollmentController::class, 'show'])
-                ->name('frontend.enrollment.reenrollment-show');
-
-            // Télécharger ma confirmation
-            Route::get('/{reenrollment}/confirmation', [ReenrollmentController::class, 'downloadConfirmation'])
-                ->name('frontend.enrollment.reenrollment-confirmation');
-        });
-
     });
 
 /*
@@ -111,4 +72,5 @@ Route::prefix('frontend/student')
 
         // Story Étudiant 08 — Réinscription
         Route::get('/reenrollment', [$controller, 'reenrollment'])->name('frontend.student.reenrollment');
+        Route::post('/reenrollment/intention', [$controller, 'storeReenrollmentIntention'])->name('frontend.student.reenrollment-intention');
     });

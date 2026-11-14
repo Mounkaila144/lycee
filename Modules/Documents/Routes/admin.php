@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Modules\Documents\Http\Controllers\Admin\CardController;
 use Modules\Documents\Http\Controllers\Admin\CertificateController;
 use Modules\Documents\Http\Controllers\Admin\DiplomaController;
 use Modules\Documents\Http\Controllers\Admin\DocumentController;
@@ -54,19 +53,9 @@ Route::prefix('admin/documents')->middleware(['tenant', 'tenant.auth', 'role:Adm
         Route::post('/requests/{request}/reject', 'rejectRequest'); // Story 16
     });
 
-    // Epic 4: Cards (Stories 19-20)
-    Route::prefix('cards')->controller(CardController::class)->group(function () {
-        Route::get('/', 'index');
-        Route::post('/student-card', 'generateStudentCard'); // Story 19
-        Route::post('/access-badge', 'generateAccessBadge'); // Story 20
-        Route::post('/batch', 'batchGenerateCards');
-        Route::post('/{card}/replace', 'replaceCard');
-        Route::post('/{card}/print', 'printCard');
-        Route::post('/batch-print', 'batchPrintCards');
-        Route::patch('/{card}/access-permissions', 'updateAccessPermissions');
-        Route::post('/{card}/suspend', 'suspendCard');
-        Route::post('/{card}/activate', 'activateCard');
-    });
+    // Epic 4 (cartes) : les cartes scolaires sont gérées par le module Enrollment
+    // (admin/enrollment/student-cards). L'ancien CardController (badges / table student_cards
+    // au schéma universitaire) a été retiré car il faisait doublon et provoquait des erreurs SQL.
 
     // Epic 5: Verification & Archive (Stories 21-24)
     Route::prefix('verification')->controller(VerificationController::class)->group(function () {

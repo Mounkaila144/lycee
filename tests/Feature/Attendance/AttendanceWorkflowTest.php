@@ -5,6 +5,7 @@ namespace Tests\Feature\Attendance;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schema;
 use Modules\Attendance\Entities\AbsenceJustification;
+use Modules\Attendance\Entities\AttendanceAlert;
 use Modules\Attendance\Entities\AttendanceRecord;
 use Modules\Attendance\Entities\AttendanceSession;
 use Modules\Enrollment\Entities\ClassEnrollment;
@@ -399,6 +400,124 @@ class AttendanceWorkflowTest extends TestCase
             ->assertOk()->assertJsonPath('absent_count', 1);
         $this->withUserToken($this->teacher)->getJson("/api/admin/attendance/monitoring/students/{$this->otherChildUser->id}/history?semester_id={$semesterId}")
             ->assertForbidden();
+    }
+
+    #[Test]
+    public function reports_can_be_filtered_by_classe_and_period(): void
+    {
+        $this->openSession($this->teacher, $this->teacherClasse);
+        $this->openSession($this->otherTeacher, $this->otherClasse);
+        $semesterId = $this->semester->id;
+        $classeId = $this->teacherClasse->id;
+        $tomorrow = now()->addDay()->toDateString();
+        $today = now()->toDateString();
+
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/reports/rates?semester_id={$semesterId}")
+            ->assertOk()->assertJsonPath('total_sessions', 2);
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/reports/rates?semester_id={$semesterId}&classe_id={$classeId}")
+            ->assertOk()->assertJsonPath('total_sessions', 1)->assertJsonPath('absence_rate', 100);
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/reports/rates?semester_id={$semesterId}&date_from={$tomorrow}")
+            ->assertOk()->assertJsonPath('total_sessions', 0);
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/reports/rates?semester_id={$semesterId}&date_from={$today}&date_to={$today}")
+            ->assertOk()->assertJsonPath('total_sessions', 2);
+
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/reports/absentees?semester_id={$semesterId}&classe_id={$classeId}")
+            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.student_id', $this->childUser->id)
+            ->assertJsonPath('0.statistics.absent_count', 1);
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/reports/statistics?semester_id={$semesterId}&classe_id={$classeId}")
+            ->assertOk()->assertJsonPath('global.total_sessions', 1)->assertJsonCount(1, 'by_classe')
+            ->assertJsonPath('by_classe.0.classe_id', $classeId)->assertJsonCount(1, 'by_day');
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/reports/export?semester_id={$semesterId}&type=students&classe_id={$classeId}")
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.student_id', $this->childUser->id)
+            ->assertJsonPath('data.0.absent_count', 1);
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/reports/export?semester_id={$semesterId}&type=students&date_from={$tomorrow}")
+            ->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('data.0.total_sessions', 0);
+
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/reports/rates?semester_id={$semesterId}&date_from={$tomorrow}&date_to={$today}")
+            ->assertUnprocessable()->assertJsonValidationErrors(['date_to']);
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/reports/export?semester_id={$semesterId}")
+            ->assertUnprocessable()->assertJsonValidationErrors(['type']);
+        $this->withUserToken($this->admin)->getJson('/api/admin/attendance/reports/rates')
+            ->assertUnprocessable()->assertJsonValidationErrors(['semester_id']);
+    }
+
+    #[Test]
+    public function teacher_reports_and_alerts_are_limited_to_own_classes(): void
+    {
+        $this->openSession($this->teacher, $this->teacherClasse);
+        $this->openSession($this->otherTeacher, $this->otherClasse);
+        $semesterId = $this->semester->id;
+        $otherClasseId = $this->otherClasse->id;
+
+        $this->withUserToken($this->teacher)->getJson("/api/admin/attendance/reports/rates?semester_id={$semesterId}")
+            ->assertOk()->assertJsonPath('total_sessions', 1);
+        $this->withUserToken($this->teacher)->getJson("/api/admin/attendance/reports/absentees?semester_id={$semesterId}")
+            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.student_id', $this->childUser->id);
+        $this->withUserToken($this->teacher)->getJson("/api/admin/attendance/reports/export?semester_id={$semesterId}&type=students")
+            ->assertOk()->assertJsonCount(1, 'data');
+        $this->withUserToken($this->teacher)->getJson("/api/admin/attendance/reports/statistics?semester_id={$semesterId}")
+            ->assertOk()->assertJsonPath('global.total_sessions', 1);
+
+        foreach (['reports/rates', 'reports/absentees', 'reports/statistics', 'monitoring/alerts'] as $endpoint) {
+            $this->withUserToken($this->teacher)
+                ->getJson("/api/admin/attendance/{$endpoint}?semester_id={$semesterId}&classe_id={$otherClasseId}")
+                ->assertForbidden();
+        }
+        $this->withUserToken($this->teacher)
+            ->getJson("/api/admin/attendance/reports/export?semester_id={$semesterId}&type=students&classe_id={$otherClasseId}")
+            ->assertForbidden();
+    }
+
+    #[Test]
+    public function alerts_are_not_duplicated_and_can_be_acknowledged(): void
+    {
+        $this->openSession($this->teacher, $this->teacherClasse);
+        $this->openSession($this->otherTeacher, $this->otherClasse);
+        $semesterId = $this->semester->id;
+
+        $this->withUserToken($this->teacher)->postJson('/api/admin/attendance/monitoring/trigger-alerts', ['semester_id' => $semesterId])
+            ->assertForbidden();
+        $this->withUserToken($this->admin)->postJson('/api/admin/attendance/monitoring/trigger-alerts', ['semester_id' => $semesterId])
+            ->assertOk()->assertJsonCount(2, 'alerts');
+        $this->withUserToken($this->admin)->postJson('/api/admin/attendance/monitoring/trigger-alerts', ['semester_id' => $semesterId])
+            ->assertOk()->assertJsonCount(2, 'alerts');
+        $this->assertSame(2, AttendanceAlert::query()->where('semester_id', $semesterId)->count());
+
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/monitoring/alerts?semester_id={$semesterId}")
+            ->assertOk()->assertJsonCount(2);
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/monitoring/alerts?semester_id={$semesterId}&classe_id={$this->teacherClasse->id}")
+            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.student_id', $this->childUser->id);
+        $this->withUserToken($this->teacher)->getJson("/api/admin/attendance/monitoring/alerts?semester_id={$semesterId}")
+            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.student.id', $this->childUser->id);
+
+        $ownAlert = AttendanceAlert::query()->where('student_id', $this->childUser->id)->firstOrFail();
+        $otherAlert = AttendanceAlert::query()->where('student_id', $this->otherChildUser->id)->firstOrFail();
+
+        $this->withUserToken($this->teacher)->postJson("/api/admin/attendance/monitoring/alerts/{$otherAlert->id}/acknowledge")
+            ->assertForbidden();
+        $this->withUserToken($this->teacher)->postJson("/api/admin/attendance/monitoring/alerts/{$ownAlert->id}/acknowledge")
+            ->assertOk()
+            ->assertJsonPath('alert.status', 'acknowledged')
+            ->assertJsonPath('alert.acknowledged_by', $this->teacher->id);
+        $this->withUserToken($this->admin)->postJson('/api/admin/attendance/monitoring/alerts/999999/acknowledge')
+            ->assertNotFound();
+
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/monitoring/alerts?semester_id={$semesterId}")
+            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.student_id', $this->otherChildUser->id);
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/monitoring/alerts?semester_id={$semesterId}&status=acknowledged")
+            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.student_id', $this->childUser->id);
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/monitoring/alerts?semester_id={$semesterId}&status=all")
+            ->assertOk()->assertJsonCount(2);
+
+        // Pas de nouvelle absence depuis le traitement : aucune nouvelle alerte pour cet élève.
+        $this->withUserToken($this->admin)->postJson('/api/admin/attendance/monitoring/trigger-alerts', ['semester_id' => $semesterId])
+            ->assertOk()->assertJsonCount(1, 'alerts');
+        $this->assertSame(2, AttendanceAlert::query()->where('semester_id', $semesterId)->count());
+
+        $this->withUserToken($this->admin)->getJson("/api/admin/attendance/monitoring/students/{$this->childUser->id}/history?semester_id={$semesterId}")
+            ->assertOk()
+            ->assertJsonPath('statistics.absent_count', 1)
+            ->assertJsonPath('records.0.session.classe.id', $this->teacherClasse->id);
     }
 
     #[Test]

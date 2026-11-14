@@ -30,9 +30,17 @@ class ExamSupervisionController extends Controller
         return response()->json($supervisors, 201);
     }
 
-    public function markPresent(int $supervisor): JsonResponse
+    /**
+     * Un professeur ne pointe que sa propre présence ; Administrator/Manager pointent tout surveillant.
+     */
+    public function markPresent(Request $request, int $supervisor): JsonResponse
     {
         $supervisor = ExamSupervisor::query()->findOrFail($supervisor);
+        $user = $request->user();
+
+        if (! $user->hasAnyRole(['Administrator', 'Manager']) && (int) $supervisor->teacher_id !== (int) $user->id) {
+            return response()->json(['message' => 'Vous ne pouvez pointer que votre propre présence.'], 403);
+        }
         $supervisor = $this->supervisionService->markSupervisorPresent($supervisor);
 
         return response()->json($supervisor);

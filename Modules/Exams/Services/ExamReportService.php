@@ -28,6 +28,8 @@ class ExamReportService
                 'id' => $session->id,
                 'title' => $session->title,
                 'module' => $session->module?->name,
+                'subject' => $session->subject?->name,
+                'classe' => $session->classe?->name ?? $session->level?->name,
                 'date' => $session->exam_date,
                 'time' => $session->start_time.' - '.$session->end_time,
             ],
@@ -109,10 +111,15 @@ class ExamReportService
 
     /**
      * Story 13: Generate exam statistics for a period
+     *
+     * @param  array<string, mixed>  $lyceeFilters  subject_id, classe_id, level_id, academic_year_id
      */
-    public function generateExamStatistics(?string $startDate = null, ?string $endDate = null, ?int $moduleId = null): array
+    public function generateExamStatistics(?string $startDate = null, ?string $endDate = null, ?int $moduleId = null, array $lyceeFilters = []): array
     {
-        $query = ExamSession::query()->with(['module', 'academicYear']);
+        $hasLyceeColumns = ExamSession::hasLyceeColumns();
+        $query = ExamSession::query()->with($hasLyceeColumns
+            ? ['module', 'academicYear', 'subject', 'classe', 'level']
+            : ['module', 'academicYear']);
 
         if ($startDate && $endDate) {
             $query->whereBetween('exam_date', [$startDate, $endDate]);
@@ -120,6 +127,14 @@ class ExamReportService
 
         if ($moduleId) {
             $query->where('module_id', $moduleId);
+        }
+
+        if ($hasLyceeColumns) {
+            foreach (['subject_id', 'classe_id', 'level_id', 'academic_year_id'] as $filter) {
+                if (! empty($lyceeFilters[$filter])) {
+                    $query->where($filter, $lyceeFilters[$filter]);
+                }
+            }
         }
 
         $sessions = $query->get();
@@ -178,7 +193,28 @@ class ExamReportService
                     ->groupBy('severity')
                     ->pluck('count', 'severity'),
             ],
-            'by_module' => $sessions->groupBy('module_id')->map(function ($moduleSessions) {
+            'by_subject' => $hasLyceeColumns ? $sessions->whereNotNull('subject_id')->groupBy('subject_id')->map(function ($subjectSessions) {
+                return [
+                    'subject_id' => $subjectSessions->first()->subject_id,
+                    'subject_name' => $subjectSessions->first()->subject?->name,
+                    'total_sessions' => $subjectSessions->count(),
+                    'total_students' => DB::connection('tenant')
+                        ->table('exam_attendance_sheets')
+                        ->whereIn('exam_session_id', $subjectSessions->pluck('id'))
+                        ->distinct('student_id')
+                        ->count(),
+                    'absent' => DB::connection('tenant')
+                        ->table('exam_attendance_sheets')
+                        ->whereIn('exam_session_id', $subjectSessions->pluck('id'))
+                        ->where('status', 'absent')
+                        ->count(),
+                    'incidents' => DB::connection('tenant')
+                        ->table('exam_incidents')
+                        ->whereIn('exam_session_id', $subjectSessions->pluck('id'))
+                        ->count(),
+                ];
+            })->values() : [],
+            'by_module' => $sessions->whereNotNull('module_id')->groupBy('module_id')->map(function ($moduleSessions) {
                 $module = $moduleSessions->first()->module;
 
                 return [

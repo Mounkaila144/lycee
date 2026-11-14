@@ -8,10 +8,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
 use Modules\Enrollment\Entities\Reenrollment;
 use Modules\Enrollment\Entities\ReenrollmentCampaign;
-use Modules\Enrollment\Entities\Student;
-use Modules\Enrollment\Http\Requests\CreateReenrollmentRequest;
 use Modules\Enrollment\Http\Requests\RejectReenrollmentRequest;
-use Modules\Enrollment\Http\Resources\EligibilityCheckResource;
 use Modules\Enrollment\Http\Resources\ReenrollmentResource;
 use Modules\Enrollment\Services\ReenrollmentService;
 
@@ -45,32 +42,6 @@ class ReenrollmentController extends Controller
     }
 
     /**
-     * Créer une réinscription (admin)
-     */
-    public function store(CreateReenrollmentRequest $request): JsonResponse
-    {
-        $student = Student::on('tenant')->findOrFail($request->student_id);
-        $campaign = ReenrollmentCampaign::on('tenant')->findOrFail($request->campaign_id);
-
-        try {
-            $reenrollment = $this->reenrollmentService->createReenrollment(
-                $student,
-                $campaign,
-                $request->validated()
-            );
-
-            return response()->json([
-                'message' => 'Réinscription créée avec succès.',
-                'data' => new ReenrollmentResource($reenrollment->load(['student', 'campaign', 'targetProgram'])),
-            ], 201);
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => $e->getMessage(),
-            ], 422);
-        }
-    }
-
-    /**
      * Détails d'une réinscription
      */
     public function show(int $id): JsonResponse
@@ -82,50 +53,6 @@ class ReenrollmentController extends Controller
         return response()->json([
             'data' => new ReenrollmentResource($reenrollment),
         ]);
-    }
-
-    /**
-     * Vérifier l'éligibilité d'un étudiant
-     */
-    public function checkEligibility(Request $request): JsonResponse
-    {
-        $request->validate([
-            'student_id' => ['required', 'integer'],
-            'campaign_id' => ['required', 'integer'],
-        ]);
-
-        $student = Student::on('tenant')->findOrFail($request->student_id);
-        $campaign = ReenrollmentCampaign::on('tenant')->findOrFail($request->campaign_id);
-
-        $eligibility = $this->reenrollmentService->checkEligibility($student, $campaign);
-
-        return response()->json([
-            'data' => new EligibilityCheckResource($eligibility),
-        ]);
-    }
-
-    /**
-     * Valider une réinscription
-     */
-    public function validate(int $id): JsonResponse
-    {
-        $reenrollment = Reenrollment::on('tenant')->findOrFail($id);
-
-        try {
-            $reenrollment = $this->reenrollmentService->validateReenrollment(
-                $reenrollment,
-                request()->user()
-            );
-
-            return response()->json([
-                'message' => 'Réinscription validée avec succès.',
-                'data' => new ReenrollmentResource($reenrollment->load(['student', 'campaign', 'newEnrollment'])),
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => $e->getMessage(),
-            ], 422);
-        }
     }
 
     /**
@@ -151,45 +78,6 @@ class ReenrollmentController extends Controller
                 'message' => $e->getMessage(),
             ], 422);
         }
-    }
-
-    /**
-     * Validation en masse
-     */
-    public function batchValidate(Request $request): JsonResponse
-    {
-        $request->validate([
-            'reenrollment_ids' => ['required', 'array', 'min:1'],
-            'reenrollment_ids.*' => ['integer'],
-        ]);
-
-        $validated = [];
-        $errors = [];
-
-        foreach ($request->reenrollment_ids as $id) {
-            $reenrollment = Reenrollment::on('tenant')->find($id);
-
-            if (! $reenrollment) {
-                $errors[] = "Réinscription {$id} non trouvée";
-
-                continue;
-            }
-
-            try {
-                $this->reenrollmentService->validateReenrollment($reenrollment, $request->user());
-                $validated[] = $id;
-            } catch (\Exception $e) {
-                $errors[] = "Réinscription {$id}: {$e->getMessage()}";
-            }
-        }
-
-        return response()->json([
-            'message' => count($validated).' réinscription(s) validée(s)',
-            'data' => [
-                'validated' => $validated,
-                'errors' => $errors,
-            ],
-        ]);
     }
 
     /**

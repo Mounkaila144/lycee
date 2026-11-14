@@ -385,6 +385,18 @@ class DocumentGenerationAndAccessTest extends TestCase
     }
 
     #[Test]
+    public function legacy_documents_card_endpoints_are_removed_in_favour_of_enrollment_student_cards(): void
+    {
+        $this->withToken($this->adminToken)->getJson('/api/admin/documents/cards')->assertNotFound();
+        $this->withToken($this->adminToken)->postJson('/api/admin/documents/cards/student-card', [])->assertNotFound();
+
+        $this->withToken($this->adminToken)
+            ->getJson('/api/admin/enrollment/student-cards')
+            ->assertOk()
+            ->assertJsonStructure(['data', 'meta' => ['current_page', 'last_page', 'per_page', 'total']]);
+    }
+
+    #[Test]
     public function parent_and_student_cannot_generate_documents(): void
     {
         [$student, $studentToken] = $this->studentWithAccount();

@@ -5,6 +5,8 @@ namespace Modules\Attendance\Http\Controllers\Admin;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Modules\Attendance\Entities\AttendanceAlert;
+use Modules\Attendance\Http\Requests\AttendanceReportRequest;
 use Modules\Attendance\Services\AttendanceAccessService;
 use Modules\Attendance\Services\AttendanceMonitoringService;
 
@@ -60,20 +62,52 @@ class AttendanceMonitoringController extends Controller
     }
 
     /**
-     * Obtenir alertes actives
+     * Alertes du semestre (actives par défaut), filtrables par classe.
      */
-    public function getActiveAlerts(Request $request): JsonResponse
+    public function getActiveAlerts(AttendanceReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'semester_id' => 'required|integer|exists:tenant.semesters,id',
-        ]);
+        $user = $request->user();
+        $studentIds = $this->accessService->visibleStudentUserIds($user);
+        $classeId = $request->sessionFilters()['classe_id'];
+
+        if ($classeId !== null) {
+            if (! $this->accessService->isSupervisor($user)
+                && ! in_array($classeId, $this->accessService->teacherClasseIds($user), true)) {
+                abort(403, 'Vous ne pouvez consulter que les alertes de vos classes.');
+            }
+
+            $classeStudentIds = $this->monitoringService->studentUserIdsForClasse($classeId);
+            $studentIds = $studentIds === null
+                ? $classeStudentIds
+                : array_values(array_intersect($studentIds, $classeStudentIds));
+        }
 
         $alerts = $this->monitoringService->getActiveAlerts(
-            $validated['semester_id'],
-            $this->accessService->visibleStudentUserIds($request->user())
+            $request->integer('semester_id'),
+            $studentIds,
+            (string) ($request->validated('status') ?? 'active')
         );
 
         return response()->json($alerts);
+    }
+
+    /**
+     * Marquer une alerte comme traitée.
+     */
+    public function acknowledgeAlert(Request $request, int $alertId): JsonResponse
+    {
+        $alert = AttendanceAlert::query()->findOrFail($alertId);
+
+        $this->ensureCanViewStudent($request, (int) $alert->student_id);
+
+        if ($alert->status === 'acknowledged') {
+            return response()->json(['message' => 'Alerte déjà traitée.', 'alert' => $alert->load('student')]);
+        }
+
+        return response()->json([
+            'message' => 'Alerte marquée comme traitée.',
+            'alert' => $this->monitoringService->acknowledgeAlert($alert, (int) $request->user()->getAuthIdentifier()),
+        ]);
     }
 
     /**

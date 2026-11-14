@@ -85,6 +85,11 @@ class ReenrollmentCampaign extends Model
         return $this->hasMany(Reenrollment::class, 'campaign_id');
     }
 
+    public function intentions(): HasMany
+    {
+        return $this->hasMany(ReenrollmentIntention::class, 'campaign_id');
+    }
+
     /**
      * Scopes
      */

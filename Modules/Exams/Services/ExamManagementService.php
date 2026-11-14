@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Modules\Enrollment\Entities\ClassEnrollment;
 use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Entities\StudentModuleEnrollment;
 use Modules\Exams\Entities\ExamAttendanceSheet;
@@ -29,6 +30,8 @@ class ExamManagementService
 
         try {
             $sheets = collect();
+            $alreadyAssigned = $session->attendanceSheets()->pluck('student_id')->map(fn ($id): int => (int) $id)->all();
+            $studentIds = array_values(array_diff(array_map('intval', $studentIds), $alreadyAssigned));
             $roomAssignments = $session->roomAssignments()
                 ->orderBy('id')
                 ->get();
@@ -83,7 +86,7 @@ class ExamManagementService
     }
 
     /**
-     * Story 06: Auto-assign students from module enrollment
+     * Story 06: Auto-assign eligible students (élèves inscrits actifs des classes de la session)
      */
     public function autoAssignStudentsFromModule(ExamSession $session): Collection
     {
@@ -236,7 +239,7 @@ class ExamManagementService
     }
 
     /**
-     * Get students eligible for an exam (enrolled in the module)
+     * Élèves éligibles non encore affectés à la session.
      */
     public function getEligibleStudents(ExamSession $session): Collection
     {
@@ -244,26 +247,53 @@ class ExamManagementService
     }
 
     /**
-     * Élèves inscrits au module de la session (année académique de la session)
-     * et pas encore affectés à cette session.
+     * Élèves éligibles : inscrits actifs (class_enrollments « Actif ») dans la classe
+     * de la session, ou dans les classes du niveau pour un examen commun.
+     * Sessions héritées sans classe ni niveau : inscription au module universitaire.
+     * Les élèves déjà affectés à la session sont exclus.
      */
     private function eligibleStudentsQuery(ExamSession $session): Builder
     {
-        $enrolledStudentIds = StudentModuleEnrollment::query()
-            ->where('module_id', $session->module_id)
-            ->whereHas('semester', function ($query) use ($session) {
-                $query->where('academic_year_id', $session->academic_year_id);
-            })
-            ->select('student_id');
-
         $alreadyAssignedStudentIds = ExamAttendanceSheet::query()
             ->where('exam_session_id', $session->id)
             ->select('student_id');
 
-        return Student::query()
+        $classeIds = $session->targetClasseIds();
+
+        if (! empty($classeIds)) {
+            $enrolledStudentIds = ClassEnrollment::query()
+                ->whereIn('classe_id', $classeIds)
+                ->where('status', 'Actif')
+                ->select('student_id');
+        } elseif ($session->module_id) {
+            $enrolledStudentIds = StudentModuleEnrollment::query()
+                ->where('module_id', $session->module_id)
+                ->whereHas('semester', function ($query) use ($session) {
+                    $query->where('academic_year_id', $session->academic_year_id);
+                })
+                ->select('student_id');
+        } else {
+            return Student::query()->whereRaw('1 = 0');
+        }
+
+        $query = Student::query()
+            ->select('students.*')
             ->whereIn('id', $enrolledStudentIds)
             ->whereNotIn('id', $alreadyAssignedStudentIds)
             ->orderBy('lastname')
             ->orderBy('firstname');
+
+        if (! empty($classeIds)) {
+            $query->addSelect(['classe_name' => ClassEnrollment::query()
+                ->join('classes', 'classes.id', '=', 'class_enrollments.classe_id')
+                ->whereColumn('class_enrollments.student_id', 'students.id')
+                ->whereIn('class_enrollments.classe_id', $classeIds)
+                ->where('class_enrollments.status', 'Actif')
+                ->select('classes.name')
+                ->limit(1),
+            ]);
+        }
+
+        return $query;
     }
 }

@@ -53,7 +53,8 @@ class ExamReportController extends Controller
         $stats = $this->reportService->generateExamStatistics(
             $request->input('start_date'),
             $request->input('end_date'),
-            $request->input('module_id')
+            $request->filled('module_id') ? $request->integer('module_id') : null,
+            $request->only(['subject_id', 'classe_id', 'level_id', 'academic_year_id'])
         );
 
         return response()->json($stats);

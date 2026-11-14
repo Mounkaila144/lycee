@@ -4,11 +4,13 @@ namespace Modules\Enrollment\Services;
 
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Modules\Attendance\Entities\AttendanceRecord;
 use Modules\Documents\Entities\Document;
 use Modules\Documents\Entities\StudentCard;
 use Modules\Enrollment\Entities\ClassEnrollment;
 use Modules\Enrollment\Entities\ReenrollmentCampaign;
+use Modules\Enrollment\Entities\ReenrollmentIntention;
 use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Http\Resources\ReenrollmentCampaignResource;
 use Modules\Finance\Entities\Invoice;
@@ -390,7 +392,7 @@ class StudentPortalService
     }
 
     /**
-     * Campagnes de réinscription ouvertes.
+     * Campagnes de réinscription ouvertes, avec l'intention (oui / non) déjà exprimée par l'élève.
      *
      * @return array<string, mixed>
      */
@@ -401,10 +403,39 @@ class StudentPortalService
             ->with(['fromAcademicYear', 'toAcademicYear'])
             ->get();
 
+        $intentionsAvailable = Schema::connection('tenant')->hasTable('reenrollment_intentions');
+        $intentions = $intentionsAvailable && $campaigns->isNotEmpty()
+            ? ReenrollmentIntention::query()
+                ->where('student_id', $student->id)
+                ->whereIn('campaign_id', $campaigns->pluck('id'))
+                ->get()
+                ->keyBy('campaign_id')
+            : collect();
+        $enrolledYearIds = ClassEnrollment::query()
+            ->where('student_id', $student->id)
+            ->whereIn('status', ['Actif', 'Terminé'])
+            ->pluck('academic_year_id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+
+        $openCampaigns = $campaigns->map(function (ReenrollmentCampaign $campaign) use ($intentions, $enrolledYearIds, $intentionsAvailable): array {
+            $intention = $intentions->get($campaign->id);
+
+            return (new ReenrollmentCampaignResource($campaign))->resolve() + [
+                'can_respond' => $intentionsAvailable && in_array((int) $campaign->from_academic_year_id, $enrolledYearIds, true),
+                'my_intention' => $intention ? [
+                    'wants_to_reenroll' => $intention->wants_to_reenroll,
+                    'comment' => $intention->comment,
+                    'responded_at' => $intention->responded_at?->toIso8601String(),
+                ] : null,
+            ];
+        });
+
         return [
             'student_id' => $student->id,
-            'open_campaigns' => ReenrollmentCampaignResource::collection($campaigns)->resolve(),
+            'open_campaigns' => $openCampaigns->values()->all(),
             'eligible' => $campaigns->isNotEmpty(),
+            'intentions_available' => $intentionsAvailable,
         ];
     }
 

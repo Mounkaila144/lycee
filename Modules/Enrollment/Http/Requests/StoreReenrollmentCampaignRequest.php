@@ -20,20 +20,20 @@ class StoreReenrollmentCampaignRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'from_academic_year_id' => ['required', 'exists:academic_years,id'],
-            'to_academic_year_id' => ['required', 'exists:academic_years,id', 'different:from_academic_year_id'],
+            'from_academic_year_id' => ['required', 'exists:tenant.academic_years,id'],
+            'to_academic_year_id' => ['required', 'exists:tenant.academic_years,id', 'different:from_academic_year_id'],
             'name' => ['required', 'string', 'max:255'],
             'start_date' => ['required', 'date', 'after_or_equal:today'],
             'end_date' => ['required', 'date', 'after:start_date'],
             'eligible_programs' => ['nullable', 'array'],
-            'eligible_programs.*' => ['integer', 'exists:programmes,id'],
+            'eligible_programs.*' => ['integer', 'exists:tenant.programmes,id'],
             'eligible_levels' => ['nullable', 'array'],
-            'eligible_levels.*' => ['string', 'in:L1,L2,L3,M1,M2'],
+            'eligible_levels.*' => ['string', 'max:20'],
             'required_documents' => ['nullable', 'array'],
             'required_documents.*' => ['string'],
             'fees_config' => ['nullable', 'array'],
             'fees_config.*' => ['numeric', 'min:0'],
-            'min_ects_required' => ['required', 'integer', 'min:0', 'max:60'],
+            'min_ects_required' => ['sometimes', 'integer', 'min:0', 'max:60'],
             'check_financial_clearance' => ['boolean'],
             'description' => ['nullable', 'string', 'max:2000'],
         ];
@@ -53,7 +53,6 @@ class StoreReenrollmentCampaignRequest extends FormRequest
             'start_date.after_or_equal' => 'La date de début doit être aujourd\'hui ou plus tard.',
             'end_date.required' => 'La date de fin est obligatoire.',
             'end_date.after' => 'La date de fin doit être après la date de début.',
-            'min_ects_required.required' => 'Le nombre minimum d\'ECTS est obligatoire.',
         ];
     }
 }

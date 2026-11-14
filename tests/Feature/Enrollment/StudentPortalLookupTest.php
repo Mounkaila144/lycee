@@ -43,8 +43,9 @@ class StudentPortalLookupTest extends TestCase
             ->assertOk()
             ->assertJsonPath('meta.student.id', $student->id);
 
-        $this->withToken($token)->getJson('/api/frontend/enrollment/reenrollment/my-status')
-            ->assertOk();
+        $this->withToken($token)->getJson('/api/frontend/student/reenrollment')
+            ->assertOk()
+            ->assertJsonPath('data.student_id', $student->id);
 
         $this->withToken($token)->getJson('/api/frontend/enrollment/my-card/history')
             ->assertOk();
@@ -72,6 +73,8 @@ class StudentPortalLookupTest extends TestCase
             '/api/frontend/enrollment/my-enrollment/contract',
             '/api/frontend/enrollment/transfer/programs',
             '/api/frontend/enrollment/exemption/available-modules',
+            '/api/frontend/enrollment/reenrollment/campaigns',
+            '/api/frontend/enrollment/reenrollment/my-status',
         ] as $uri) {
             $this->withToken($token)->getJson($uri)->assertNotFound();
         }

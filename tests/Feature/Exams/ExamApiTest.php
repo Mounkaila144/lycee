@@ -4,13 +4,21 @@ namespace Tests\Feature\Exams;
 
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Testing\TestResponse;
+use Modules\Enrollment\Entities\ClassEnrollment;
 use Modules\Enrollment\Entities\Student;
 use Modules\Exams\Entities\ExamAttendanceSheet;
 use Modules\Exams\Entities\ExamRoomAssignment;
 use Modules\Exams\Entities\ExamSession;
 use Modules\Exams\Entities\ExamSupervisor;
+use Modules\NotesEvaluations\Entities\ClassEvaluation;
+use Modules\NotesEvaluations\Entities\ClassEvaluationGrade;
+use Modules\NotesEvaluations\Entities\TeacherAssignment;
 use Modules\StructureAcademique\Entities\AcademicYear;
+use Modules\StructureAcademique\Entities\Classe;
+use Modules\StructureAcademique\Entities\Level;
 use Modules\StructureAcademique\Entities\Module as AcademicModule;
+use Modules\StructureAcademique\Entities\Semester;
+use Modules\StructureAcademique\Entities\Subject;
 use Modules\Timetable\Entities\Room;
 use Modules\UsersGuard\Entities\TenantUser;
 use PHPUnit\Framework\Attributes\Test;
@@ -38,6 +46,14 @@ class ExamApiTest extends TestCase
 
     private AcademicYear $academicYear;
 
+    private Level $level;
+
+    private Classe $classe;
+
+    private Subject $subject;
+
+    private Semester $semester;
+
     public static function setUpBeforeClass(): void
     {
         parent::setUpBeforeClass();
@@ -50,6 +66,7 @@ class ExamApiTest extends TestCase
         $this->setUpTenant();
         $this->withoutMiddleware(InitializeTenancyByDomain::class);
         $this->seedRolesAndPermissions();
+        ExamSession::flushLyceeColumnsCache();
 
         $this->admin = $this->userWithRole('Administrator');
         $this->adminToken = $this->admin->createToken('test-token')->plainTextToken;
@@ -66,6 +83,19 @@ class ExamApiTest extends TestCase
             'hours_cm' => 10,
             'hours_td' => 10,
             'hours_tp' => 0,
+        ]);
+
+        $this->level = Level::factory()->create();
+        $this->classe = Classe::factory()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'level_id' => $this->level->id,
+        ]);
+        $this->subject = Subject::factory()->create(['name' => 'Mathématiques']);
+        $this->semester = Semester::factory()->create([
+            'academic_year_id' => $this->academicYear->id,
+            'name' => 'S1',
+            'start_date' => '2026-10-01',
+            'end_date' => '2027-01-31',
         ]);
     }
 
@@ -86,7 +116,15 @@ class ExamApiTest extends TestCase
             return;
         }
 
-        foreach (['Modules/Timetable/Database/Migrations/tenant', 'Modules/Exams/Database/Migrations/tenant'] as $path) {
+        $paths = [
+            'Modules/Timetable/Database/Migrations/tenant',
+            'Modules/NotesEvaluations/Database/Migrations/tenant/2026_11_14_000001_create_teacher_assignments_table.php',
+            'Modules/NotesEvaluations/Database/Migrations/tenant/2026_11_14_000002_create_class_evaluations_table.php',
+            'Modules/NotesEvaluations/Database/Migrations/tenant/2026_11_14_000003_create_class_evaluation_grades_table.php',
+            'Modules/Exams/Database/Migrations/tenant',
+        ];
+
+        foreach ($paths as $path) {
             Artisan::call('migrate', [
                 '--database' => 'mysql',
                 '--path' => base_path($path),
@@ -135,6 +173,10 @@ class ExamApiTest extends TestCase
     {
         return ExamSession::query()->create(array_merge([
             'module_id' => $this->module->id,
+            'subject_id' => $this->subject->id,
+            'classe_id' => $this->classe->id,
+            'level_id' => $this->level->id,
+            'semester_id' => $this->semester->id,
             'academic_year_id' => $this->academicYear->id,
             'title' => 'Composition de mathématiques',
             'type' => 'normal',
@@ -144,6 +186,22 @@ class ExamApiTest extends TestCase
             'duration_minutes' => 120,
             'status' => 'draft',
         ], $overrides));
+    }
+
+    private function enrollStudent(Classe $classe, string $status = 'Actif'): Student
+    {
+        $student = Student::factory()->create();
+
+        ClassEnrollment::query()->create([
+            'student_id' => $student->id,
+            'classe_id' => $classe->id,
+            'academic_year_id' => $classe->academic_year_id,
+            'enrolled_at' => '2026-10-01',
+            'assignment_type' => 'Nouvelle inscription',
+            'status' => $status,
+        ]);
+
+        return $student;
     }
 
     private function createRoomAssignment(ExamSession $session, int $capacity = 30): ExamRoomAssignment
@@ -220,24 +278,54 @@ class ExamApiTest extends TestCase
     }
 
     #[Test]
-    public function admin_can_create_a_session(): void
+    public function admin_can_create_a_class_session_without_module(): void
     {
+        $room = Room::factory()->create(['capacity' => 35]);
+
         $response = $this->authPostJson('/api/admin/exams/sessions', [
-            'module_id' => $this->module->id,
-            'academic_year_id' => $this->academicYear->id,
-            'title' => 'Bac blanc',
+            'subject_id' => $this->subject->id,
+            'classe_id' => $this->classe->id,
+            'title' => 'Composition du 1er semestre',
             'type' => 'normal',
             'exam_date' => '2026-12-15',
             'start_time' => '08:00',
             'end_time' => '11:00',
+            'room_ids' => [$room->id],
         ]);
 
-        $response->assertCreated()->assertJsonPath('title', 'Bac blanc');
+        $response->assertCreated()
+            ->assertJsonPath('title', 'Composition du 1er semestre')
+            ->assertJsonPath('subject.name', 'Mathématiques')
+            ->assertJsonPath('classe.id', $this->classe->id)
+            ->assertJsonPath('semester.id', $this->semester->id)
+            ->assertJsonPath('module_id', null)
+            ->assertJsonPath('total_capacity', 35)
+            ->assertJsonCount(1, 'room_assignments');
+
         $this->assertDatabaseHas('exam_sessions', [
-            'title' => 'Bac blanc',
+            'title' => 'Composition du 1er semestre',
             'duration_minutes' => 180,
             'created_by' => $this->admin->id,
+            'level_id' => $this->level->id,
+            'academic_year_id' => $this->academicYear->id,
         ], 'tenant');
+    }
+
+    #[Test]
+    public function admin_can_create_a_level_session(): void
+    {
+        $this->authPostJson('/api/admin/exams/sessions', [
+            'subject_id' => $this->subject->id,
+            'level_id' => $this->level->id,
+            'academic_year_id' => $this->academicYear->id,
+            'title' => 'Bac blanc',
+            'type' => 'special',
+            'exam_date' => '2026-12-16',
+            'start_time' => '08:00',
+            'end_time' => '12:00',
+        ])->assertCreated()
+            ->assertJsonPath('level.id', $this->level->id)
+            ->assertJsonPath('classe_id', null);
     }
 
     #[Test]
@@ -245,7 +333,221 @@ class ExamApiTest extends TestCase
     {
         $this->authPostJson('/api/admin/exams/sessions', ['type' => 'unknown'])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['module_id', 'academic_year_id', 'title', 'type', 'exam_date']);
+            ->assertJsonValidationErrors(['subject_id', 'classe_id', 'level_id', 'title', 'type', 'exam_date', 'start_time']);
+
+        $this->authPostJson('/api/admin/exams/sessions', [
+            'subject_id' => $this->subject->id,
+            'level_id' => $this->level->id,
+            'title' => 'Bac blanc',
+            'type' => 'normal',
+            'exam_date' => '2026-12-16',
+            'start_time' => '10:00',
+            'end_time' => '09:00',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['academic_year_id', 'end_time']);
+    }
+
+    #[Test]
+    public function options_endpoint_returns_referentials(): void
+    {
+        $this->academicYear->update(['is_active' => true]);
+        Room::factory()->create(['is_active' => true]);
+        $this->userWithRole('Professeur');
+
+        $this->authGetJson('/api/admin/exams/sessions/options?academic_year_id='.$this->academicYear->id)
+            ->assertOk()
+            ->assertJsonPath('data.lycee_ready', true)
+            ->assertJsonPath('data.grades_link_available', true)
+            ->assertJsonPath('data.classes.0.id', $this->classe->id)
+            ->assertJsonPath('data.semesters.0.id', $this->semester->id)
+            ->assertJsonCount(1, 'data.rooms')
+            ->assertJsonCount(1, 'data.teachers');
+    }
+
+    #[Test]
+    public function listing_can_be_filtered_by_classe_and_subject(): void
+    {
+        $this->createSession();
+        $otherClasse = Classe::factory()->create(['academic_year_id' => $this->academicYear->id, 'level_id' => $this->level->id]);
+        $this->createSession(['classe_id' => $otherClasse->id, 'title' => 'Autre classe']);
+
+        $this->authGetJson("/api/admin/exams/sessions?classe_id={$this->classe->id}&subject_id={$this->subject->id}")
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.classe.id', $this->classe->id)
+            ->assertJsonPath('data.0.attendance_sheets_count', 0);
+    }
+
+    #[Test]
+    public function schedule_validation_detects_class_conflicts(): void
+    {
+        $this->createSession(['exam_date' => '2026-12-10', 'start_time' => '08:00', 'end_time' => '10:00']);
+
+        $this->authPostJson('/api/admin/exams/sessions/validate-schedule', [
+            'exam_date' => '2026-12-10',
+            'start_time' => '09:00',
+            'end_time' => '11:00',
+            'classe_id' => $this->classe->id,
+        ])->assertOk()
+            ->assertJsonPath('valid', false)
+            ->assertJsonPath('conflicts.0.type', 'class_conflict');
+
+        $this->authPostJson('/api/admin/exams/sessions/validate-schedule', [
+            'exam_date' => '2026-12-10',
+            'start_time' => '10:00',
+            'end_time' => '12:00',
+            'classe_id' => $this->classe->id,
+        ])->assertOk()->assertJsonPath('valid', true);
+
+        $this->authPostJson('/api/admin/exams/sessions/validate-schedule', [
+            'exam_date' => '2026-12-10',
+            'start_time' => '09:00',
+            'end_time' => '11:00',
+            'level_id' => $this->level->id,
+            'academic_year_id' => $this->academicYear->id,
+        ])->assertOk()->assertJsonPath('valid', false);
+    }
+
+    #[Test]
+    public function eligible_students_are_active_class_enrollments(): void
+    {
+        $session = $this->createSession();
+        $active = $this->enrollStudent($this->classe);
+        $this->enrollStudent($this->classe, 'Transféré');
+        $otherClasse = Classe::factory()->create(['academic_year_id' => $this->academicYear->id, 'level_id' => $this->level->id]);
+        $otherStudent = $this->enrollStudent($otherClasse);
+
+        $this->authGetJson("/api/admin/exams/management/sessions/{$session->id}/eligible-students")
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.id', $active->id)
+            ->assertJsonPath('0.classe_name', $this->classe->name);
+
+        $levelSession = $this->createSession(['classe_id' => null, 'title' => 'Bac blanc']);
+
+        $ids = collect($this->authGetJson("/api/admin/exams/management/sessions/{$levelSession->id}/eligible-students")->assertOk()->json())->pluck('id');
+        $this->assertEqualsCanonicalizing([$active->id, $otherStudent->id], $ids->all());
+    }
+
+    #[Test]
+    public function auto_assign_places_active_students_in_rooms_once(): void
+    {
+        $session = $this->createSession();
+        $this->enrollStudent($this->classe);
+        $this->enrollStudent($this->classe);
+        $assignment = $this->createRoomAssignment($session, 30);
+
+        $this->authPostJson("/api/admin/exams/management/sessions/{$session->id}/students/auto-assign")
+            ->assertCreated()
+            ->assertJsonCount(2);
+
+        $this->authPostJson("/api/admin/exams/management/sessions/{$session->id}/students/auto-assign")
+            ->assertCreated()
+            ->assertJsonCount(0);
+
+        $this->assertSame(2, $assignment->fresh()->assigned_students);
+        $this->authGetJson("/api/admin/exams/sessions/{$session->id}")
+            ->assertOk()
+            ->assertJsonCount(2, 'attendance_sheets')
+            ->assertJsonStructure(['attendance_sheets' => [['student' => ['id', 'firstname', 'lastname']]]]);
+    }
+
+    #[Test]
+    public function session_status_can_move_to_ongoing_and_completed(): void
+    {
+        $draft = $this->createSession();
+
+        $this->authPutJson("/api/admin/exams/sessions/{$draft->id}/status", ['status' => 'completed'])
+            ->assertUnprocessable();
+
+        $draft->update(['status' => 'planned', 'is_published' => true]);
+
+        $this->authPutJson("/api/admin/exams/sessions/{$draft->id}/status", ['status' => 'ongoing'])
+            ->assertOk()->assertJsonPath('status', 'ongoing');
+        $this->authPutJson("/api/admin/exams/sessions/{$draft->id}/status", ['status' => 'completed'])
+            ->assertOk()->assertJsonPath('status', 'completed');
+        $this->authPutJson("/api/admin/exams/sessions/{$draft->id}/status", ['status' => 'draft'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['status']);
+
+        $this->authPutJson("/api/admin/exams/sessions/{$draft->id}/status", ['status' => 'completed'], $this->tokenFor('Professeur'))
+            ->assertForbidden();
+    }
+
+    #[Test]
+    public function completed_session_creates_draft_compositions_with_absences(): void
+    {
+        $teacher = $this->userWithRole('Professeur');
+        TeacherAssignment::query()->create([
+            'teacher_id' => $teacher->id,
+            'classe_id' => $this->classe->id,
+            'subject_id' => $this->subject->id,
+            'academic_year_id' => $this->academicYear->id,
+        ]);
+        $session = $this->createSession(['status' => 'planned']);
+        $absent = $this->enrollStudent($this->classe);
+        $present = $this->enrollStudent($this->classe);
+        $room = $this->createRoomAssignment($session);
+        foreach ([[$absent, 'absent'], [$present, 'present']] as [$student, $status]) {
+            ExamAttendanceSheet::query()->create([
+                'exam_session_id' => $session->id,
+                'exam_room_assignment_id' => $room->id,
+                'student_id' => $student->id,
+                'status' => $status,
+            ]);
+        }
+
+        $this->authPostJson("/api/admin/exams/sessions/{$session->id}/create-evaluations")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['session']);
+
+        $session->update(['status' => 'completed']);
+
+        $response = $this->authPostJson("/api/admin/exams/sessions/{$session->id}/create-evaluations");
+
+        $response->assertCreated()->assertJsonCount(1, 'data')->assertJsonPath('data.0.type', 'composition');
+
+        $evaluation = ClassEvaluation::query()->findOrFail($response->json('data.0.id'));
+        $this->assertSame('draft', $evaluation->status);
+        $this->assertSame($teacher->id, (int) $evaluation->teacher_id);
+        $this->assertSame($this->semester->id, (int) $evaluation->semester_id);
+        $this->assertSame('2026-12-10', $evaluation->evaluation_date->toDateString());
+        $this->assertEquals(2, (float) $evaluation->weight);
+
+        $grades = ClassEvaluationGrade::query()->where('class_evaluation_id', $evaluation->id)->get();
+        $this->assertCount(1, $grades);
+        $this->assertSame($absent->id, (int) $grades->first()->student_id);
+        $this->assertTrue((bool) $grades->first()->is_absent);
+
+        $this->assertSame([$evaluation->id], $session->fresh()->class_evaluation_ids);
+
+        $this->authPostJson("/api/admin/exams/sessions/{$session->id}/create-evaluations")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['session']);
+    }
+
+    #[Test]
+    public function level_session_creates_one_composition_per_class(): void
+    {
+        Classe::factory()->create(['academic_year_id' => $this->academicYear->id, 'level_id' => $this->level->id]);
+        $session = $this->createSession(['classe_id' => null, 'status' => 'completed']);
+
+        $this->authPostJson("/api/admin/exams/sessions/{$session->id}/create-evaluations")
+            ->assertCreated()
+            ->assertJsonCount(2, 'data');
+
+        $this->assertSame(2, ClassEvaluation::query()->where('subject_id', $this->subject->id)->count());
+    }
+
+    #[Test]
+    public function create_evaluations_requires_a_matching_semester(): void
+    {
+        $session = $this->createSession(['status' => 'completed', 'semester_id' => null, 'exam_date' => '2027-08-01']);
+
+        $this->authPostJson("/api/admin/exams/sessions/{$session->id}/create-evaluations")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['semester_id']);
+
+        $this->authPostJson("/api/admin/exams/sessions/{$session->id}/create-evaluations", ['semester_id' => $this->semester->id])
+            ->assertCreated();
     }
 
     #[Test]
@@ -271,7 +573,8 @@ class ExamApiTest extends TestCase
 
         $this->authPostJson("/api/admin/exams/sessions/{$session->id}/cancel", ['reason' => 'Grève'])
             ->assertOk()
-            ->assertJsonPath('status', 'cancelled');
+            ->assertJsonPath('status', 'cancelled')
+            ->assertJsonPath('cancellation_reason', 'Grève');
 
         $this->authDeleteJson("/api/admin/exams/sessions/{$session->id}")->assertNoContent();
         $this->assertSoftDeleted('exam_sessions', ['id' => $session->id], 'tenant');
@@ -371,6 +674,25 @@ class ExamApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('0.teacher_id', $teacher->id)
             ->assertJsonPath('0.total_supervisions', 1);
+    }
+
+    #[Test]
+    public function professeur_cannot_mark_another_supervisor_present(): void
+    {
+        $session = $this->createSession();
+        $supervisor = ExamSupervisor::query()->create([
+            'exam_session_id' => $session->id,
+            'teacher_id' => $this->userWithRole('Professeur')->id,
+            'role' => 'principal',
+            'status' => 'assigned',
+        ]);
+
+        $this->authPutJson("/api/admin/exams/supervision/supervisors/{$supervisor->id}/present", [], $this->tokenFor('Professeur'))
+            ->assertForbidden();
+
+        $this->authPutJson("/api/admin/exams/supervision/supervisors/{$supervisor->id}/present")
+            ->assertOk()
+            ->assertJsonPath('status', 'present');
     }
 
     #[Test]
@@ -478,7 +800,8 @@ class ExamApiTest extends TestCase
         $this->authGetJson('/api/admin/exams/reports/statistics')
             ->assertOk()
             ->assertJsonPath('overview.total_sessions', 1)
-            ->assertJsonPath('by_module.0.module_name', 'Mathématiques');
+            ->assertJsonPath('by_module.0.module_name', 'Mathématiques')
+            ->assertJsonPath('by_subject.0.subject_name', 'Mathématiques');
 
         $this->authGetJson('/api/admin/exams/reports/room-utilization')
             ->assertOk()
