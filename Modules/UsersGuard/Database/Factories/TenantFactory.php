@@ -9,19 +9,17 @@ class TenantFactory extends Factory
 {
     protected $model = Tenant::class;
 
+    /**
+     * company_name / is_active are virtual columns stored in the "data" JSON.
+     *
+     * @return array<string, mixed>
+     */
     public function definition(): array
     {
-        $companyName = fake()->company();
-        $domain = fake()->unique()->domainName();
-        $database = 'tenant_'.fake()->unique()->slug();
-
         return [
-            'data' => [
-                'company_name' => $companyName,
-                'domain' => $domain,
-                'database' => $database,
-                'is_active' => true,
-            ],
+            'id' => fake()->unique()->slug(2),
+            'company_name' => fake()->company(),
+            'is_active' => true,
         ];
     }
 }

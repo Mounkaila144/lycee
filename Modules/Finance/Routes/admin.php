@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Finance\Http\Controllers\Admin\BankReconciliationController;
+use Modules\Finance\Http\Controllers\Admin\BulkBillingController;
 use Modules\Finance\Http\Controllers\Admin\CashierCloseController;
 use Modules\Finance\Http\Controllers\Admin\CollectionController;
 use Modules\Finance\Http\Controllers\Admin\FinanceReportController;
@@ -58,8 +59,22 @@ Route::prefix('admin/finance')
                     ->name('admin.finance.fee-types.store');
                 Route::put('/{id}', [InvoiceController::class, 'updateFeeType'])
                     ->name('admin.finance.fee-types.update');
+                Route::patch('/{id}/status', [InvoiceController::class, 'updateFeeTypeStatus'])
+                    ->name('admin.finance.fee-types.status');
             });
         });
+
+        // Facturation en masse (classe / niveau / année) : Administrator & Comptable
+        Route::prefix('bulk-billing')
+            ->middleware('role:Administrator|Comptable,tenant')
+            ->group(function () {
+                Route::get('/targets', [BulkBillingController::class, 'targets'])
+                    ->name('admin.finance.bulk-billing.targets');
+                Route::post('/preview', [BulkBillingController::class, 'preview'])
+                    ->name('admin.finance.bulk-billing.preview');
+                Route::post('/generate', [BulkBillingController::class, 'generate'])
+                    ->name('admin.finance.bulk-billing.generate');
+            });
 
         // Invoices (Stories Agent Comptable 02, 03, 04 + Comptable read)
         Route::prefix('invoices')->group(function () {

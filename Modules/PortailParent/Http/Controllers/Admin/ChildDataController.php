@@ -12,6 +12,8 @@ use Modules\Documents\Entities\Document;
 use Modules\Enrollment\Entities\Student;
 use Modules\Finance\Entities\Invoice;
 use Modules\Finance\Entities\Payment;
+use Modules\Messaging\Http\Resources\AnnouncementResource;
+use Modules\Messaging\Services\AnnouncementAudienceService;
 use Modules\NotesEvaluations\Services\Lycee\LyceeReportService;
 use Modules\Timetable\Services\TimetableViewService;
 
@@ -203,21 +205,22 @@ class ChildDataController extends Controller
     }
 
     /**
-     * Story Parent 08 — Annonces générales de l'école (non liées à un enfant spécifique).
+     * Story Parent 08 — Annonces de l'établissement visibles par le parent
+     * (audiences « tous » / « parents », générales ou ciblant la classe d'un de ses enfants).
      *
      * Permission requise : `view announcements` (sans ChildPolicy car non-ownership).
      */
-    public function announcements(Request $request): JsonResponse
+    public function announcements(Request $request, AnnouncementAudienceService $audienceService): JsonResponse
     {
         if (! $request->user()->hasPermissionTo('view announcements')) {
             throw new AuthorizationException('This action is unauthorized.');
         }
 
+        $announcements = $audienceService->feedFor($request->user(), 50);
+
         return response()->json([
-            'data' => [],
-            'meta' => [
-                'note' => 'Scaffold — annonces générales à câbler avec un module Communication (V2).',
-            ],
+            'data' => AnnouncementResource::collection($announcements)->resolve(),
+            'meta' => ['total' => $announcements->count()],
         ]);
     }
 

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Enrollment\Http\Controllers\Admin\ClassEnrollmentController;
 use Modules\Enrollment\Http\Controllers\Admin\ClassPromotionController;
 use Modules\Enrollment\Http\Controllers\Admin\EnrollmentController;
 use Modules\Enrollment\Http\Controllers\Admin\EnrollmentStatisticsController;
@@ -10,10 +11,12 @@ use Modules\Enrollment\Http\Controllers\Admin\ExemptionController;
 use Modules\Enrollment\Http\Controllers\Admin\GroupController;
 use Modules\Enrollment\Http\Controllers\Admin\GroupExportController;
 use Modules\Enrollment\Http\Controllers\Admin\OptionController;
+use Modules\Enrollment\Http\Controllers\Admin\PortalAccountController;
 use Modules\Enrollment\Http\Controllers\Admin\ReenrollmentCampaignController;
 use Modules\Enrollment\Http\Controllers\Admin\ReenrollmentController;
 use Modules\Enrollment\Http\Controllers\Admin\StudentCardController;
 use Modules\Enrollment\Http\Controllers\Admin\StudentController;
+use Modules\Enrollment\Http\Controllers\Admin\StudentParentController;
 use Modules\Enrollment\Http\Controllers\Admin\TransferController;
 
 /*
@@ -523,5 +526,59 @@ Route::prefix('admin/enrollment')
                 ->name('admin.enrollment.group-exports.csv');
             Route::get('/{group}/attendance-sheet', [GroupExportController::class, 'attendanceSheet'])
                 ->name('admin.enrollment.group-exports.attendance-sheet');
+        });
+    });
+
+/*
+ * Gestion de l'élève par l'administration (Admin | Manager) :
+ * inscription en classe / changement de classe, parents, comptes de connexion élève et parent.
+ */
+Route::prefix('admin/enrollment')
+    ->middleware(['tenant', 'tenant.auth', 'role:Administrator|Manager,tenant'])
+    ->group(function () {
+        Route::prefix('students/{studentId}')->whereNumber('studentId')->group(function () {
+            Route::get('/class-enrollments', [ClassEnrollmentController::class, 'studentIndex'])
+                ->name('admin.enrollment.students.class-enrollments.index');
+            Route::post('/class-enrollments', [ClassEnrollmentController::class, 'store'])
+                ->name('admin.enrollment.students.class-enrollments.store');
+            Route::post('/change-class', [ClassEnrollmentController::class, 'changeClass'])
+                ->name('admin.enrollment.students.change-class');
+
+            Route::get('/parents', [StudentParentController::class, 'index'])
+                ->name('admin.enrollment.students.parents.index');
+            Route::post('/parents', [StudentParentController::class, 'store'])
+                ->name('admin.enrollment.students.parents.store');
+            Route::post('/parents/link', [StudentParentController::class, 'link'])
+                ->name('admin.enrollment.students.parents.link');
+            Route::delete('/parents/{parentId}', [StudentParentController::class, 'unlink'])
+                ->whereNumber('parentId')
+                ->name('admin.enrollment.students.parents.unlink');
+
+            Route::get('/account', [PortalAccountController::class, 'showForStudent'])
+                ->name('admin.enrollment.students.account.show');
+            Route::post('/account', [PortalAccountController::class, 'storeForStudent'])
+                ->name('admin.enrollment.students.account.store');
+            Route::post('/account/reset-password', [PortalAccountController::class, 'resetStudentPassword'])
+                ->name('admin.enrollment.students.account.reset-password');
+            Route::patch('/account/status', [PortalAccountController::class, 'updateStudentStatus'])
+                ->name('admin.enrollment.students.account.status');
+        });
+
+        Route::post('class-enrollments/{enrollmentId}/cancel', [ClassEnrollmentController::class, 'cancel'])
+            ->whereNumber('enrollmentId')
+            ->name('admin.enrollment.class-enrollments.cancel');
+        Route::get('classes/{classeId}/class-enrollments', [ClassEnrollmentController::class, 'classIndex'])
+            ->whereNumber('classeId')
+            ->name('admin.enrollment.classes.class-enrollments.index');
+
+        Route::get('parents', [StudentParentController::class, 'search'])
+            ->name('admin.enrollment.parents.search');
+        Route::prefix('parents/{parentId}')->whereNumber('parentId')->group(function () {
+            Route::post('/account', [PortalAccountController::class, 'storeForParent'])
+                ->name('admin.enrollment.parents.account.store');
+            Route::post('/account/reset-password', [PortalAccountController::class, 'resetParentPassword'])
+                ->name('admin.enrollment.parents.account.reset-password');
+            Route::patch('/account/status', [PortalAccountController::class, 'updateParentStatus'])
+                ->name('admin.enrollment.parents.account.status');
         });
     });

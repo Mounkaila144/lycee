@@ -3,6 +3,7 @@
 namespace App\Http\Requests\UsersGuard;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateTenantRequest extends FormRequest
 {
@@ -20,7 +21,12 @@ class UpdateTenantRequest extends FormRequest
             'company_address' => ['nullable', 'string'],
             'is_active' => ['nullable', 'boolean'],
             'domains' => ['sometimes', 'array', 'min:1'],
-            'domains.*.domain' => ['required_with:domains', 'string', 'max:255', 'unique:domains,domain'],
+            'domains.*.domain' => [
+                'required_with:domains',
+                'string',
+                'max:255',
+                Rule::unique('domains', 'domain')->ignore((string) $this->route('tenant'), 'tenant_id'),
+            ],
         ];
     }
 

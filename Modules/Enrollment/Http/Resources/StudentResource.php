@@ -38,6 +38,14 @@ class StudentResource extends JsonResource
             'emergency_contact_name' => $this->emergency_contact_name,
             'emergency_contact_phone' => $this->emergency_contact_phone,
 
+            'user_id' => $this->user_id,
+            'current_class' => $this->whenLoaded('currentClassEnrollment', fn () => $this->currentClassEnrollment ? [
+                'class_enrollment_id' => $this->currentClassEnrollment->id,
+                'classe_id' => $this->currentClassEnrollment->classe_id,
+                'classe_name' => $this->currentClassEnrollment->classe?->name,
+                'academic_year_id' => $this->currentClassEnrollment->academic_year_id,
+            ] : null),
+
             'documents' => StudentDocumentResource::collection($this->whenLoaded('documents')),
             'class_enrollment' => $this->whenPivotLoaded('class_enrollments', fn () => [
                 'id' => $this->pivot->id,

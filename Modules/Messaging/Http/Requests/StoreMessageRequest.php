@@ -53,21 +53,22 @@ class StoreMessageRequest extends FormRequest
 
     /**
      * Rôles que l'utilisateur courant peut contacter (Story Parent 07).
+     * La direction (Administrator, Manager) écrit à tous et peut être contactée par tous.
      *
      * @return array<int, string>
      */
     public static function allowedRecipientRoles(TenantUser $user): array
     {
-        if ($user->hasRole('Administrator')) {
+        if ($user->hasAnyRole(['Administrator', 'Manager'])) {
             return ['Parent', 'Professeur', 'Administrator', 'Manager'];
         }
 
         if ($user->hasRole('Professeur')) {
-            return ['Parent', 'Administrator'];
+            return ['Parent', 'Administrator', 'Manager'];
         }
 
         if ($user->hasRole('Parent')) {
-            return ['Professeur', 'Administrator'];
+            return ['Professeur', 'Administrator', 'Manager'];
         }
 
         return [];

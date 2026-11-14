@@ -44,7 +44,7 @@ class InvoiceItem extends Model
      */
     public function feeType(): BelongsTo
     {
-        return $this->belongsTo(FeeType::class);
+        return $this->belongsTo(FeeType::class)->withTrashed();
     }
 
     /**

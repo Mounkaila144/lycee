@@ -386,6 +386,99 @@ class MessagingTest extends TestCase
     }
 
     #[Test]
+    public function manager_can_send_message_to_parent_and_read_inbox(): void
+    {
+        [$manager, $managerToken] = $this->userWithRole('Manager');
+        [$parent, $parentToken] = $this->userWithRole('Parent');
+
+        $this->withToken($managerToken)
+            ->postJson('/api/admin/messages', [
+                'recipient_id' => $parent->id,
+                'subject' => 'Convocation',
+                'body' => 'Merci de passer au secrétariat.',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.sender_id', $manager->id)
+            ->assertJsonPath('data.recipient_id', $parent->id);
+
+        $this->withToken($managerToken)
+            ->getJson('/api/admin/messages')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.direction', 'sent');
+
+        $this->withToken($parentToken)
+            ->getJson('/api/admin/messages')
+            ->assertOk()
+            ->assertJsonPath('meta.unread_count', 1)
+            ->assertJsonPath('data.0.sender.id', $manager->id);
+    }
+
+    #[Test]
+    public function manager_receives_messages_from_parents_and_teachers(): void
+    {
+        [$manager, $managerToken] = $this->userWithRole('Manager');
+        [, $parentToken] = $this->userWithRole('Parent');
+        [, $teacherToken] = $this->userWithRole('Professeur');
+
+        foreach ([$parentToken, $teacherToken] as $token) {
+            $this->withToken($token)
+                ->postJson('/api/admin/messages', [
+                    'recipient_id' => $manager->id,
+                    'subject' => 'Question',
+                    'body' => '...',
+                ])
+                ->assertCreated();
+        }
+
+        $response = $this->withToken($managerToken)->getJson('/api/admin/messages');
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.unread_count', 2);
+
+        $this->withToken($managerToken)
+            ->getJson('/api/admin/messages/'.$response->json('data.0.id'))
+            ->assertOk()
+            ->assertJsonPath('data.direction', 'received');
+    }
+
+    #[Test]
+    public function manager_recipients_match_administrator_rules(): void
+    {
+        [, $managerToken] = $this->userWithRole('Manager');
+        $this->userWithRole('Parent');
+        $this->userWithRole('Professeur');
+        $this->userWithRole('Administrator');
+        $this->userWithRole('Caissier');
+        $this->userWithRole('Élève');
+
+        $roles = collect($this->withToken($managerToken)->getJson('/api/admin/messages/recipients?limit=50')
+            ->assertOk()->json('data'))->pluck('role')->unique()->sort()->values()->all();
+
+        $this->assertSame(['Administrator', 'Parent', 'Professeur'], $roles);
+    }
+
+    #[Test]
+    public function manager_cannot_send_message_to_cashier_or_student(): void
+    {
+        [, $managerToken] = $this->userWithRole('Manager');
+        [$cashier] = $this->userWithRole('Caissier');
+        [$student] = $this->userWithRole('Élève');
+
+        foreach ([$cashier, $student] as $recipient) {
+            $this->withToken($managerToken)
+                ->postJson('/api/admin/messages', [
+                    'recipient_id' => $recipient->id,
+                    'subject' => 'Bonjour',
+                    'body' => '...',
+                ])
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('recipient_id');
+        }
+    }
+
+    #[Test]
     public function messaging_requires_authentication(): void
     {
         $this->getJson('/api/admin/messages')->assertUnauthorized();

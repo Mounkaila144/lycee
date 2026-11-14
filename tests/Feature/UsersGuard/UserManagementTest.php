@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\UsersGuard;
 
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Modules\UsersGuard\Entities\TenantUser;
 use PHPUnit\Framework\Attributes\Test;
@@ -147,6 +148,35 @@ class UserManagementTest extends TestCase
 
         $this->authPutJson("/api/admin/users/{$admin->id}", ['password' => 'hijacked123'])
             ->assertForbidden();
+    }
+
+    #[Test]
+    public function administrator_can_reset_a_user_password_from_the_users_screen(): void
+    {
+        $this->actAs('Administrator');
+
+        $teacher = TenantUser::factory()->create();
+        $this->assignRole($teacher, 'Professeur');
+
+        $this->authPutJson("/api/admin/users/{$teacher->id}", ['password' => 'NouveauMdp2026'])
+            ->assertOk();
+
+        $this->assertTrue(Hash::check('NouveauMdp2026', $teacher->fresh()->password));
+    }
+
+    #[Test]
+    public function password_reset_requires_at_least_eight_characters(): void
+    {
+        $this->actAs('Administrator');
+
+        $teacher = TenantUser::factory()->create();
+        $originalHash = $teacher->password;
+
+        $this->authPutJson("/api/admin/users/{$teacher->id}", ['password' => 'court'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('password');
+
+        $this->assertSame($originalHash, $teacher->fresh()->password);
     }
 
     #[Test]

@@ -35,7 +35,7 @@ class StudentController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Student::on('tenant')->with('documents');
+        $query = Student::on('tenant')->with(['documents', 'currentClassEnrollment.classe:id,name']);
 
         // Search
         if ($search = $request->input('search')) {
@@ -132,7 +132,7 @@ class StudentController extends Controller
     public function show(int $id): JsonResponse
     {
         $student = Student::on('tenant')
-            ->with(['documents', 'documents.validator'])
+            ->with(['documents', 'documents.validator', 'currentClassEnrollment.classe:id,name'])
             ->findOrFail($id);
 
         return response()->json([

@@ -27,6 +27,11 @@ class FeeType extends Model
         'academic_year_id',
     ];
 
+    /**
+     * @var list<string>
+     */
+    protected $appends = ['is_active'];
+
     protected function casts(): array
     {
         return [
@@ -34,6 +39,66 @@ class FeeType extends Model
             'is_mandatory' => 'boolean',
             'applies_to' => 'array',
         ];
+    }
+
+    /**
+     * Un type de frais désactivé est archivé (soft delete) : il n'est plus
+     * proposé à la facturation mais reste lié aux factures existantes.
+     */
+    public function getIsActiveAttribute(): bool
+    {
+        return $this->deleted_at === null;
+    }
+
+    /**
+     * Codes de niveau (levels.code) auxquels le frais s'applique ; vide = tous.
+     *
+     * @return list<string>
+     */
+    public function applicableLevelCodes(): array
+    {
+        return array_values(array_filter((array) ($this->applies_to['levels'] ?? [])));
+    }
+
+    /**
+     * Montants spécifiques par code de niveau.
+     *
+     * @return array<string, float>
+     */
+    public function levelAmounts(): array
+    {
+        $amounts = (array) ($this->applies_to['level_amounts'] ?? []);
+
+        return array_map(fn ($amount): float => (float) $amount, array_filter(
+            $amounts,
+            fn ($amount): bool => $amount !== null && $amount !== '' && is_numeric($amount)
+        ));
+    }
+
+    public function appliesToLevel(?string $levelCode): bool
+    {
+        $levels = $this->applicableLevelCodes();
+
+        return $levels === [] || ($levelCode !== null && in_array($levelCode, $levels, true));
+    }
+
+    public function appliesToAcademicYear(int $academicYearId): bool
+    {
+        return $this->academic_year_id === null || (int) $this->academic_year_id === $academicYearId;
+    }
+
+    /**
+     * Montant applicable pour un niveau (montant du niveau, sinon montant par défaut).
+     */
+    public function amountForLevel(?string $levelCode): float
+    {
+        $levelAmounts = $this->levelAmounts();
+
+        if ($levelCode !== null && array_key_exists($levelCode, $levelAmounts)) {
+            return $levelAmounts[$levelCode];
+        }
+
+        return (float) $this->default_amount;
     }
 
     /**

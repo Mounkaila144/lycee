@@ -9,8 +9,10 @@ use App\Http\Resources\UsersGuard\TenantResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Modules\UsersGuard\Entities\Tenant;
+use Throwable;
 
 class TenantController extends Controller
 {
@@ -27,8 +29,8 @@ class TenantController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('id', 'like', "%{$search}%")
-                    ->orWhereJsonContains('data->company_name', $search)
-                    ->orWhereJsonContains('data->company_email', $search);
+                    ->orWhere('data->company_name', 'like', "%{$search}%")
+                    ->orWhere('data->company_email', 'like', "%{$search}%");
             });
         }
 
@@ -49,13 +51,11 @@ class TenantController extends Controller
 
             $tenant = Tenant::create([
                 'id' => $data['id'],
-                'data' => [
-                    'company_name' => $data['company_name'],
-                    'company_email' => $data['company_email'] ?? null,
-                    'company_phone' => $data['company_phone'] ?? null,
-                    'company_address' => $data['company_address'] ?? null,
-                    'is_active' => $data['is_active'] ?? true,
-                ],
+                'company_name' => $data['company_name'],
+                'company_email' => $data['company_email'] ?? null,
+                'company_phone' => $data['company_phone'] ?? null,
+                'company_address' => $data['company_address'] ?? null,
+                'is_active' => (bool) ($data['is_active'] ?? true),
             ]);
 
             if (isset($data['domains']) && is_array($data['domains'])) {
@@ -102,25 +102,17 @@ class TenantController extends Controller
             $tenant = Tenant::findOrFail($id);
             $data = $request->validated();
 
-            $tenantData = $tenant->data ?? [];
+            foreach (['company_name', 'company_email', 'company_phone', 'company_address'] as $field) {
+                if (array_key_exists($field, $data)) {
+                    $tenant->setAttribute($field, $data[$field]);
+                }
+            }
 
-            if (isset($data['company_name'])) {
-                $tenantData['company_name'] = $data['company_name'];
-            }
-            if (isset($data['company_email'])) {
-                $tenantData['company_email'] = $data['company_email'];
-            }
-            if (isset($data['company_phone'])) {
-                $tenantData['company_phone'] = $data['company_phone'];
-            }
-            if (isset($data['company_address'])) {
-                $tenantData['company_address'] = $data['company_address'];
-            }
             if (isset($data['is_active'])) {
-                $tenantData['is_active'] = $data['is_active'];
+                $tenant->setAttribute('is_active', (bool) $data['is_active']);
             }
 
-            $tenant->update(['data' => $tenantData]);
+            $tenant->save();
 
             if (isset($data['domains']) && is_array($data['domains'])) {
                 $tenant->domains()->delete();
@@ -176,15 +168,63 @@ class TenantController extends Controller
     {
         $tenant = Tenant::findOrFail($id);
 
-        $tenantData = $tenant->data ?? [];
-        $isActive = ! ($tenantData['is_active'] ?? true);
-        $tenantData['is_active'] = $isActive;
-
-        $tenant->update(['data' => $tenantData]);
+        $isActive = ! $tenant->isActive();
+        $tenant->setAttribute('is_active', $isActive);
+        $tenant->save();
 
         return response()->json([
             'message' => $isActive ? 'Tenant activé avec succès.' : 'Tenant désactivé avec succès.',
             'tenant' => new TenantResource($tenant->load('domains')),
+        ]);
+    }
+
+    /**
+     * Activate a site: provision its database (create + tenant migrations) when it
+     * does not exist yet, then mark the school as active.
+     *
+     * An already provisioned database is never migrated from here: migrations of a
+     * live school follow the deployment procedure (backup first).
+     */
+    public function activate(string $id): JsonResponse
+    {
+        $tenant = Tenant::findOrFail($id);
+        $databaseName = $tenant->database()->getName();
+        $manager = $tenant->database()->manager();
+        $output = null;
+
+        if ($manager->databaseExists($databaseName)) {
+            $message = 'Base de données déjà présente : aucune migration exécutée. Site marqué actif.';
+        } else {
+            set_time_limit(600);
+
+            try {
+                $manager->createDatabase($tenant);
+
+                Artisan::call('tenants:migrate', [
+                    '--tenants' => [$tenant->getTenantKey()],
+                    '--force' => true,
+                ]);
+                $output = Artisan::output();
+            } catch (Throwable $exception) {
+                report($exception);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Échec de la création ou de la migration de la base '.$databaseName.' : '.$exception->getMessage(),
+                ], 500);
+            }
+
+            $message = 'Base de données '.$databaseName.' créée et migrée. Site activé.';
+        }
+
+        $tenant->setAttribute('is_active', true);
+        $tenant->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data' => new TenantResource($tenant->load('domains')),
+            'output' => $output,
         ]);
     }
 

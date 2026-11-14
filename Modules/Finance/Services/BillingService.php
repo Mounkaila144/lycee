@@ -3,8 +3,10 @@
 namespace Modules\Finance\Services;
 
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Modules\Enrollment\Entities\ClassEnrollment;
 use Modules\Enrollment\Entities\Student;
 use Modules\Finance\Entities\Discount;
 use Modules\Finance\Entities\FeeType;
@@ -34,64 +36,118 @@ class BillingService
         array $feeTypeIds = [],
         array $options = []
     ): Invoice {
-        return DB::connection('tenant')->transaction(function () use ($student, $academicYear, $feeTypeIds, $options) {
-            // Get applicable fee types
-            $feeTypes = $this->getApplicableFeeTypes($student, $academicYear, $feeTypeIds);
+        $levelCode = array_key_exists('level_code', $options)
+            ? $options['level_code']
+            : $this->resolveStudentLevelCode($student, $academicYear);
 
-            if ($feeTypes->isEmpty()) {
-                throw new \Exception('Aucun frais applicable trouvé pour cet étudiant');
-            }
+        $feeTypes = $this->getApplicableFeeTypes($student, $academicYear, $feeTypeIds, $levelCode);
 
-            // Create invoice
-            $invoice = Invoice::on('tenant')->create([
-                'student_id' => $student->id,
-                'academic_year_id' => $academicYear->id,
-                'invoice_number' => $this->generateInvoiceNumber($academicYear),
-                'invoice_date' => $options['invoice_date'] ?? now(),
-                'due_date' => $options['due_date'] ?? now()->addDays(config('finance.billing.default_payment_deadline', 30)),
-                'status' => 'pending',
-                'notes' => $options['notes'] ?? null,
+        if ($feeTypes->isEmpty()) {
+            throw new \DomainException('Aucun frais applicable trouvé pour cet élève');
+        }
+
+        return DB::connection('tenant')->transaction(
+            fn (): Invoice => $this->createInvoiceFromFeeTypes($student, $academicYear, $feeTypes, $levelCode, $options)
+        );
+    }
+
+    /**
+     * Crée une facture à partir d'une liste de types de frais (montant selon le niveau, remises appliquées).
+     *
+     * @param  Collection<int, FeeType>  $feeTypes
+     * @param  array{invoice_date?: mixed, due_date?: mixed, notes?: string|null, quantities?: array<int, int>}  $options
+     */
+    public function createInvoiceFromFeeTypes(
+        Student $student,
+        AcademicYear $academicYear,
+        Collection $feeTypes,
+        ?string $levelCode,
+        array $options = []
+    ): Invoice {
+        $invoice = Invoice::on('tenant')->create([
+            'student_id' => $student->id,
+            'academic_year_id' => $academicYear->id,
+            'invoice_number' => $this->generateInvoiceNumber($academicYear),
+            'invoice_date' => $options['invoice_date'] ?? now(),
+            'due_date' => $options['due_date'] ?? now()->addDays(config('finance.billing.default_payment_deadline', 30)),
+            'status' => 'pending',
+            'notes' => $options['notes'] ?? null,
+        ]);
+
+        $lines = $this->buildInvoiceLines($student, $feeTypes, $levelCode, $options['quantities'] ?? []);
+
+        foreach ($lines as $line) {
+            InvoiceItem::on('tenant')->create([
+                'invoice_id' => $invoice->id,
+                'fee_type_id' => $line['fee_type_id'],
+                'description' => $line['description'],
+                'quantity' => $line['quantity'],
+                'unit_price' => $line['unit_price'],
+                'amount' => $line['amount'],
+                'discount_amount' => $line['discount_amount'],
             ]);
+        }
 
-            // Get applicable discounts
-            $discounts = $this->getApplicableDiscounts($student);
+        $invoice->update(['total_amount' => array_sum(array_column($lines, 'net_amount'))]);
 
-            $totalAmount = 0;
+        return $invoice->fresh(['items', 'student', 'academicYear']);
+    }
 
-            // Create invoice items
-            foreach ($feeTypes as $feeType) {
-                $quantity = $options['quantities'][$feeType->id] ?? 1;
-                $unitPrice = $feeType->default_amount;
-                $amount = $unitPrice * $quantity;
+    /**
+     * Calcule les lignes de facture (montant du niveau, quantité, remise de l'élève).
+     *
+     * @param  Collection<int, FeeType>  $feeTypes
+     * @param  array<int, int>  $quantities
+     * @param  Collection<int, Discount>|null  $discounts
+     * @return list<array{fee_type_id: int, description: string, quantity: int, unit_price: float, amount: float, discount_amount: float, net_amount: float}>
+     */
+    public function buildInvoiceLines(
+        Student $student,
+        Collection $feeTypes,
+        ?string $levelCode,
+        array $quantities = [],
+        ?Collection $discounts = null
+    ): array {
+        $discounts ??= $this->getApplicableDiscounts($student);
+        $lines = [];
 
-                // Apply discount if applicable
-                $discountAmount = 0;
-                $applicableDiscount = $discounts->first(function ($discount) use ($feeType) {
-                    return $discount->fee_type_id === null || $discount->fee_type_id === $feeType->id;
-                });
+        foreach ($feeTypes as $feeType) {
+            $quantity = (int) ($quantities[$feeType->id] ?? 1);
+            $unitPrice = $feeType->amountForLevel($levelCode);
+            $amount = $unitPrice * $quantity;
 
-                if ($applicableDiscount) {
-                    $discountAmount = $applicableDiscount->calculateDiscountAmount($amount);
-                }
+            $applicableDiscount = $discounts->first(function ($discount) use ($feeType) {
+                return $discount->fee_type_id === null || (int) $discount->fee_type_id === (int) $feeType->id;
+            });
 
-                InvoiceItem::on('tenant')->create([
-                    'invoice_id' => $invoice->id,
-                    'fee_type_id' => $feeType->id,
-                    'description' => $feeType->name,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'amount' => $amount,
-                    'discount_amount' => $discountAmount,
-                ]);
+            $discountAmount = $applicableDiscount ? (float) $applicableDiscount->calculateDiscountAmount($amount) : 0.0;
 
-                $totalAmount += ($amount - $discountAmount);
-            }
+            $lines[] = [
+                'fee_type_id' => (int) $feeType->id,
+                'description' => $feeType->name,
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'amount' => $amount,
+                'discount_amount' => $discountAmount,
+                'net_amount' => $amount - $discountAmount,
+            ];
+        }
 
-            // Update invoice total
-            $invoice->update(['total_amount' => $totalAmount]);
+        return $lines;
+    }
 
-            return $invoice->fresh(['items', 'student', 'academicYear']);
-        });
+    /**
+     * Code du niveau (levels.code) de la classe de l'élève pour l'année.
+     */
+    public function resolveStudentLevelCode(Student $student, AcademicYear $academicYear): ?string
+    {
+        $enrollment = ClassEnrollment::on('tenant')
+            ->where('student_id', $student->id)
+            ->forAcademicYear($academicYear->id)
+            ->with('classe.level')
+            ->first();
+
+        return $enrollment?->classe?->level?->code;
     }
 
     /**
@@ -271,23 +327,29 @@ class BillingService
     }
 
     /**
-     * Get applicable fee types for a student
+     * Types de frais actifs applicables à l'année (sans année ou année ciblée).
+     * Sans sélection explicite, seuls les frais du niveau de l'élève sont retenus.
+     *
+     * @return Collection<int, FeeType>
      */
-    protected function getApplicableFeeTypes(Student $student, AcademicYear $academicYear, array $feeTypeIds = [])
+    protected function getApplicableFeeTypes(Student $student, AcademicYear $academicYear, array $feeTypeIds = [], ?string $levelCode = null): Collection
     {
-        $query = FeeType::on('tenant')->active();
+        $query = FeeType::on('tenant')->where(function ($yearQuery) use ($academicYear) {
+            $yearQuery->whereNull('academic_year_id')
+                ->orWhere('academic_year_id', $academicYear->id);
+        });
 
         if (! empty($feeTypeIds)) {
-            $query->whereIn('id', $feeTypeIds);
+            return $query->whereIn('id', $feeTypeIds)->get();
         }
 
-        return $query->get();
+        return $query->get()->filter(fn (FeeType $feeType): bool => $feeType->appliesToLevel($levelCode))->values();
     }
 
     /**
      * Get applicable discounts for a student
      */
-    protected function getApplicableDiscounts(Student $student)
+    public function getApplicableDiscounts(Student $student): Collection
     {
         return Discount::on('tenant')
             ->where('student_id', $student->id)
@@ -308,7 +370,9 @@ class BillingService
         // valeur produisait des numéros « INV--00001 » non uniques.
         $year = $academicYear->start_date?->year ?? (int) now()->year;
 
+        // withTrashed : l'index unique couvre aussi les factures supprimées.
         $lastInvoice = Invoice::on('tenant')
+            ->withTrashed()
             ->where('invoice_number', 'like', "INV-{$year}-%")
             ->orderBy('id', 'desc')
             ->first();

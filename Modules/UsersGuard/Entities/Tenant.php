@@ -2,6 +2,7 @@
 
 namespace Modules\UsersGuard\Entities;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -34,31 +35,26 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     protected $fillable = [
         'id',
         'data',
+        'company_name',
+        'company_email',
+        'company_phone',
+        'company_address',
+        'is_active',
     ];
 
     /**
-     * Custom attributes stored in data JSON
+     * Real columns of the tenants table (besides data/timestamps).
+     *
+     * Every other attribute (company_name, is_active, settings, site_db_*…) is a
+     * virtual column: stancl/virtual-column stores it inside the "data" JSON.
+     * Listing them here would make Eloquent try to write non-existent columns.
+     *
+     * @return array<int, string>
      */
     public static function getCustomColumns(): array
     {
         return [
             'id',
-            'site_id',
-            'site_host',
-            'site_db_name',
-            'site_db_host',
-            'site_db_port',
-            'site_db_username',
-            'site_db_password',
-            'company_name',
-            'company_email',
-            'company_phone',
-            'company_address',
-            'company_logo',
-            'is_active',
-            'settings',
-            'trial_ends_at',
-            'subscription_ends_at',
         ];
     }
 
@@ -73,19 +69,24 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     }
 
     /**
-     * Scope to get only active tenants
+     * Scope to get only active tenants (is_active absent from data = active).
      */
-    public function scopeActive($query)
+    public function scopeActive(Builder $query): Builder
     {
-        return $query->where('is_active', true);
+        return $query->where(function (Builder $query): void {
+            $query->whereNull('data->is_active')
+                ->orWhere('data->is_active', true);
+        });
     }
 
     /**
-     * Check if tenant is active
+     * Check if tenant is active (is_active never set = active).
      */
     public function isActive(): bool
     {
-        return $this->is_active;
+        $isActive = $this->getAttribute('is_active');
+
+        return $isActive === null ? true : (bool) $isActive;
     }
 
     /**

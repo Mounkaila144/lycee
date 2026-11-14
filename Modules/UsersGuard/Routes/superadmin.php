@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\UsersGuard\Http\Controllers\Superadmin\AuthController;
+use Modules\UsersGuard\Http\Controllers\Superadmin\DashboardController;
 use Modules\UsersGuard\Http\Controllers\Superadmin\IndexController;
 use Modules\UsersGuard\Http\Controllers\Superadmin\TenantController;
 use Modules\UsersGuard\Http\Controllers\Superadmin\UserController;
@@ -29,6 +30,9 @@ Route::prefix('superadmin')->middleware(['auth:sanctum'])->group(function () {
         Route::post('refresh', [AuthController::class, 'refresh']);
     });
 
+    // Tableau de bord super-admin (stats globales + par école)
+    Route::get('dashboard', [DashboardController::class, 'index']);
+
     // Users guard routes
     Route::prefix('usersguard')->group(function () {
         Route::get('/', [IndexController::class, 'index']);
@@ -45,6 +49,9 @@ Route::prefix('superadmin')->middleware(['auth:sanctum'])->group(function () {
         Route::delete('/{user}/force', [UserController::class, 'forceDelete']);
         Route::post('/{user}/toggle-active', [UserController::class, 'toggleActive']);
     });
+
+    // Activation d'un site (création + migrations de sa base si absente)
+    Route::post('sites/{tenant}/activate', [TenantController::class, 'activate']);
 
     // Tenants CRUD
     Route::prefix('tenants')->group(function () {

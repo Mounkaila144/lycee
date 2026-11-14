@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Validator;
 use Modules\Enrollment\Entities\Student;
 use Modules\Finance\Entities\FeeType;
 use Modules\Finance\Entities\Invoice;
+use Modules\Finance\Http\Requests\FeeTypeRequest;
+use Modules\Finance\Http\Requests\UpdateFeeTypeStatusRequest;
 use Modules\Finance\Services\BillingService;
 use Modules\StructureAcademique\Entities\AcademicYear;
 
@@ -108,12 +110,16 @@ class InvoiceController extends Controller
         $student = Student::on('tenant')->findOrFail($request->student_id);
         $academicYear = AcademicYear::on('tenant')->findOrFail($request->academic_year_id);
 
-        $invoice = $this->billingService->generateAutomatedInvoice(
-            $student,
-            $academicYear,
-            $request->fee_type_ids ?? [],
-            $request->only(['invoice_date', 'due_date', 'notes'])
-        );
+        try {
+            $invoice = $this->billingService->generateAutomatedInvoice(
+                $student,
+                $academicYear,
+                $request->fee_type_ids ?? [],
+                $request->only(['invoice_date', 'due_date', 'notes'])
+            );
+        } catch (\DomainException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
 
         return response()->json([
             'message' => 'Facture générée avec succès',
@@ -292,10 +298,17 @@ class InvoiceController extends Controller
 
     /**
      * Story 02: Get fee types
+     *
+     * Filtres : category, mandatory_only, active_only (année active),
+     * academic_year_id (frais de l'année ou sans année), include_inactive (désactivés inclus).
      */
     public function getFeeTypes(Request $request): JsonResponse
     {
-        $query = FeeType::on('tenant');
+        $query = FeeType::on('tenant')->with('academicYear:id,name');
+
+        if ($request->boolean('include_inactive')) {
+            $query->withTrashed();
+        }
 
         if ($category = $request->input('category')) {
             $query->byCategory($category);
@@ -309,6 +322,13 @@ class InvoiceController extends Controller
             $query->active();
         }
 
+        if ($academicYearId = $request->integer('academic_year_id')) {
+            $query->where(function ($yearQuery) use ($academicYearId) {
+                $yearQuery->whereNull('academic_year_id')
+                    ->orWhere('academic_year_id', $academicYearId);
+            });
+        }
+
         $feeTypes = $query->orderBy('name')->get();
 
         return response()->json(['data' => $feeTypes]);
@@ -317,56 +337,49 @@ class InvoiceController extends Controller
     /**
      * Story 02: Manage fee types
      */
-    public function storeFeeType(Request $request): JsonResponse
+    public function storeFeeType(FeeTypeRequest $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'code' => 'required|string|unique:tenant.fee_types,code',
-            'name' => 'required|string',
-            'description' => 'nullable|string',
-            'default_amount' => 'required|numeric|min:0',
-            'category' => 'required|in:tuition,registration,exam,library,lab,sports,insurance,card,other',
-            'is_mandatory' => 'boolean',
-            'applies_to' => 'nullable|array',
-            'academic_year_id' => 'nullable|exists:tenant.academic_years,id',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $feeType = FeeType::on('tenant')->create($request->all());
+        $feeType = FeeType::on('tenant')->create($request->feeTypeAttributes());
 
         return response()->json([
             'message' => 'Type de frais créé avec succès',
-            'data' => $feeType,
+            'data' => $feeType->fresh('academicYear:id,name'),
         ], 201);
     }
 
     /**
-     * Update fee type
+     * Update fee type (actif ou désactivé)
      */
-    public function updateFeeType(Request $request, int $id): JsonResponse
+    public function updateFeeType(FeeTypeRequest $request, int $id): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'code' => 'sometimes|string|unique:tenant.fee_types,code,'.$id,
-            'name' => 'sometimes|string',
-            'description' => 'nullable|string',
-            'default_amount' => 'sometimes|numeric|min:0',
-            'category' => 'sometimes|in:tuition,registration,exam,library,lab,sports,insurance,card,other',
-            'is_mandatory' => 'boolean',
-            'applies_to' => 'nullable|array',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $feeType = FeeType::on('tenant')->findOrFail($id);
-        $feeType->update($request->all());
+        $feeType = FeeType::on('tenant')->withTrashed()->findOrFail($id);
+        $feeType->update($request->feeTypeAttributes($feeType->applies_to));
 
         return response()->json([
             'message' => 'Type de frais mis à jour avec succès',
-            'data' => $feeType,
+            'data' => $feeType->fresh('academicYear:id,name'),
+        ]);
+    }
+
+    /**
+     * Activer / désactiver un type de frais.
+     *
+     * La désactivation archive le frais (soft delete) : il n'est plus proposé
+     * à la facturation, les factures existantes restent intactes.
+     */
+    public function updateFeeTypeStatus(UpdateFeeTypeStatusRequest $request, int $id): JsonResponse
+    {
+        $feeType = FeeType::on('tenant')->withTrashed()->findOrFail($id);
+
+        if ($request->boolean('is_active')) {
+            $feeType->restore();
+        } elseif (! $feeType->trashed()) {
+            $feeType->delete();
+        }
+
+        return response()->json([
+            'message' => $request->boolean('is_active') ? 'Type de frais activé' : 'Type de frais désactivé',
+            'data' => FeeType::on('tenant')->withTrashed()->with('academicYear:id,name')->findOrFail($id),
         ]);
     }
 }

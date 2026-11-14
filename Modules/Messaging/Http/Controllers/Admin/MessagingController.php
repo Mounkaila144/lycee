@@ -66,9 +66,9 @@ class MessagingController extends Controller
      * Liste les destinataires possibles pour l'utilisateur courant.
      *
      * Règles (Story Parent 07) :
-     *  - Parent       → peut messager Professeur, Administrator
-     *  - Professeur   → peut messager Parent, Administrator
-     *  - Administrator → peut messager tout le monde sauf lui-même
+     *  - Parent       → peut messager Professeur, Administrator, Manager
+     *  - Professeur   → peut messager Parent, Administrator, Manager
+     *  - Administrator / Manager → peuvent messager Parent, Professeur, Administrator, Manager (sauf soi-même)
      *
      * Query params :
      *  - q (optionnel) : recherche sur firstname/lastname/username/email
