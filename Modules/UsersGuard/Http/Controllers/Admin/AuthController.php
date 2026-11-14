@@ -31,7 +31,7 @@ class AuthController extends Controller
 
         if (! $user || ! $this->checkPassword($validated['password'], $user->password)) {
             throw ValidationException::withMessages([
-                'username' => ['Invalid credentials'],
+                'username' => ['Identifiant ou mot de passe incorrect.'],
             ]);
         }
 

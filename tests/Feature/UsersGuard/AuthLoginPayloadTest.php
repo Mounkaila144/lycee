@@ -177,4 +177,40 @@ class AuthLoginPayloadTest extends TestCase
         $this->assertNull($payload['primary_role']);
         $this->assertSame('/admin/dashboard', $payload['home_route']);
     }
+
+    #[Test]
+    public function wrong_password_returns_a_french_error_message(): void
+    {
+        $user = TenantUser::factory()->create([
+            'application' => 'admin',
+            'password' => bcrypt('password'),
+        ]);
+
+        $this->postJson('/api/admin/auth/login', [
+            'username' => $user->username,
+            'password' => 'mauvais-mot-de-passe',
+            'application' => 'admin',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Identifiant ou mot de passe incorrect.')
+            ->assertJsonPath('errors.username.0', 'Identifiant ou mot de passe incorrect.');
+    }
+
+    #[Test]
+    public function deactivated_account_cannot_log_in(): void
+    {
+        $user = TenantUser::factory()->create([
+            'application' => 'admin',
+            'password' => bcrypt('password'),
+            'is_active' => false,
+        ]);
+
+        $this->postJson('/api/admin/auth/login', [
+            'username' => $user->username,
+            'password' => 'password',
+            'application' => 'admin',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.username.0', 'Identifiant ou mot de passe incorrect.');
+    }
 }

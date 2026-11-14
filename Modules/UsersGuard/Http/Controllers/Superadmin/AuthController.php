@@ -26,9 +26,9 @@ class AuthController extends Controller
             ->active()
             ->first();
 
-        if (!$user || !$this->checkPassword($validated['password'], $user->password)) {
+        if (! $user || ! $this->checkPassword($validated['password'], $user->password)) {
             throw ValidationException::withMessages([
-                'username' => ['Invalid credentials'],
+                'username' => ['Identifiant ou mot de passe incorrect.'],
             ]);
         }
 
