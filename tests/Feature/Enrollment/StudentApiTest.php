@@ -260,7 +260,7 @@ class StudentApiTest extends TestCase
         $response = $this->authDeleteJson("/api/admin/enrollment/students/{$student->id}");
 
         $response->assertOk()
-            ->assertJson(['message' => 'Dossier étudiant supprimé avec succès']);
+            ->assertJson(['message' => 'Dossier élève supprimé avec succès']);
 
         $this->assertSoftDeleted('students', ['id' => $student->id], 'tenant');
     }

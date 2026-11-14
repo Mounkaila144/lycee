@@ -136,9 +136,13 @@ class Classe extends Model
         return $this->hasMany(ClassEnrollment::class, 'classe_id');
     }
 
+    /**
+     * Inscriptions actives d'élèves non supprimés (un dossier élève supprimé
+     * ne doit plus compter dans l'effectif de la classe).
+     */
     public function activeEnrollments(): HasMany
     {
-        return $this->enrollments()->where('status', 'Actif');
+        return $this->enrollments()->where('status', 'Actif')->whereHas('student');
     }
 
     public function students(): BelongsToMany

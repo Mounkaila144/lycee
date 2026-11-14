@@ -46,7 +46,7 @@ class AttendanceService
     }
 
     /**
-     * Initialiser les enregistrements (absent par défaut) pour tous les élèves concernés.
+     * Initialiser les enregistrements (présent par défaut : le professeur ne marque que les absents/retards).
      */
     private function initializeSessionRecords(AttendanceSession $session, int $userId): void
     {
@@ -57,7 +57,7 @@ class AttendanceService
                     'student_id' => $studentUserId,
                 ],
                 [
-                    'status' => 'absent',
+                    'status' => 'present',
                     'recorded_by' => $userId,
                 ]
             );
@@ -119,6 +119,35 @@ class AttendanceService
         $record->update($data);
 
         return $record;
+    }
+
+    /**
+     * Saisie en lot : applique le même statut à tous les élèves de la séance
+     * (ou aux seuls élèves indiqués), en une transaction.
+     *
+     * @param  array<int, int>|null  $studentIds  users.id des élèves ; null = toute la séance
+     */
+    public function recordAttendanceInBulk(
+        AttendanceSession $session,
+        string $status,
+        ?array $studentIds,
+        int $userId
+    ): int {
+        return DB::connection('tenant')->transaction(function () use ($session, $status, $studentIds, $userId) {
+            $query = AttendanceRecord::query()->where('attendance_session_id', $session->id);
+
+            if ($studentIds !== null) {
+                $query->whereIn('student_id', $studentIds);
+            }
+
+            return $query->update([
+                'status' => $status,
+                'arrival_time' => null,
+                'delay_minutes' => 0,
+                'recorded_by' => $userId,
+                'updated_at' => now(),
+            ]);
+        });
     }
 
     /**

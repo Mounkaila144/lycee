@@ -153,6 +153,35 @@ class StudentStatusService
         return $deactivatedUserIds;
     }
 
+    /**
+     * Suppression (soft delete) d'un dossier élève : traitée comme une sortie.
+     * Les inscriptions en classe actives passent à « Annulé » (l'élève disparaît des
+     * effectifs, appels et saisies de notes) et les comptes famille sont désactivés,
+     * puis le dossier est supprimé — le tout dans une transaction.
+     *
+     * @return array{cancelled_enrollments: int, deactivated_user_ids: list<int>}
+     */
+    public function deleteStudent(Student $student): array
+    {
+        return DB::connection('tenant')->transaction(function () use ($student): array {
+            $cancelledEnrollments = $student->classEnrollments()
+                ->where('status', 'Actif')
+                ->update([
+                    'status' => 'Annulé',
+                    'updated_at' => now(),
+                ]);
+
+            $deactivatedUserIds = $this->deactivateAccountsAfterDeparture($student);
+
+            $student->delete();
+
+            return [
+                'cancelled_enrollments' => $cancelledEnrollments,
+                'deactivated_user_ids' => $deactivatedUserIds,
+            ];
+        });
+    }
+
     private function deactivateFamilyAccount(?TenantUser $user): bool
     {
         if ($user === null || ! $user->is_active) {

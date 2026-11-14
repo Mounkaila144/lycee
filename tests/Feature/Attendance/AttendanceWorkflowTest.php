@@ -115,7 +115,77 @@ class AttendanceWorkflowTest extends TestCase
             ->assertJsonPath('created_by', $this->teacher->id)
             ->assertJsonCount(1, 'records')
             ->assertJsonPath('records.0.student_id', $this->childUser->id)
-            ->assertJsonPath('records.0.status', 'absent');
+            ->assertJsonPath('records.0.status', 'present');
+    }
+
+    #[Test]
+    public function new_session_marks_every_student_present_by_default(): void
+    {
+        $session = $this->openSession($this->teacher, $this->teacherClasse, markEveryoneAbsent: false);
+
+        $this->withUserToken($this->teacher)->getJson("/api/admin/attendance/sessions/{$session->id}/sheet")
+            ->assertOk()
+            ->assertJsonPath('summary.total', 1)
+            ->assertJsonPath('summary.present', 1)
+            ->assertJsonPath('summary.absent', 0);
+    }
+
+    #[Test]
+    public function teacher_can_mark_the_whole_session_in_a_single_bulk_call(): void
+    {
+        $secondUser = $this->enrolledStudent($this->teacherClasse, $this->teacherClasse->academicYear()->firstOrFail())[1];
+        $session = $this->openSession($this->teacher, $this->teacherClasse);
+
+        $this->withUserToken($this->teacher)->postJson("/api/admin/attendance/sessions/{$session->id}/records/bulk", [
+            'status' => 'present',
+        ])->assertOk()
+            ->assertJsonPath('updated_count', 2)
+            ->assertJsonPath('summary.present', 2)
+            ->assertJsonPath('summary.absent', 0)
+            ->assertJsonCount(2, 'records');
+
+        $this->withUserToken($this->teacher)->postJson("/api/admin/attendance/sessions/{$session->id}/records/bulk", [
+            'status' => 'absent',
+            'student_ids' => [$secondUser->id],
+        ])->assertOk()
+            ->assertJsonPath('updated_count', 1)
+            ->assertJsonPath('summary.present', 1)
+            ->assertJsonPath('summary.absent', 1);
+
+        $this->assertSame('present', AttendanceRecord::query()
+            ->where('attendance_session_id', $session->id)
+            ->where('student_id', $this->childUser->id)
+            ->value('status'));
+    }
+
+    #[Test]
+    public function bulk_attendance_respects_teacher_rights_and_validation(): void
+    {
+        $session = $this->openSession($this->otherTeacher, $this->otherClasse);
+
+        $this->withUserToken($this->teacher)->postJson("/api/admin/attendance/sessions/{$session->id}/records/bulk", [
+            'status' => 'present',
+        ])->assertForbidden();
+        $this->assertSame(0, AttendanceRecord::query()
+            ->where('attendance_session_id', $session->id)
+            ->where('status', 'present')
+            ->count());
+
+        $this->withUserToken($this->otherTeacher)->postJson("/api/admin/attendance/sessions/{$session->id}/records/bulk", [
+            'status' => 'sleeping',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['status']);
+
+        $this->withUserToken($this->admin)->postJson("/api/admin/attendance/sessions/{$session->id}/records/bulk", [
+            'status' => 'present',
+        ])->assertOk()->assertJsonPath('summary.present', 1);
+
+        $this->withUserToken($this->parentUser)->postJson("/api/admin/attendance/sessions/{$session->id}/records/bulk", [
+            'status' => 'absent',
+        ])->assertForbidden();
+
+        $this->withUserToken($this->admin)->postJson('/api/admin/attendance/sessions/999999/records/bulk', [
+            'status' => 'present',
+        ])->assertNotFound();
     }
 
     #[Test]
@@ -562,7 +632,11 @@ class AttendanceWorkflowTest extends TestCase
         return [$student, $user];
     }
 
-    private function openSession(TenantUser $teacher, Classe $classe): AttendanceSession
+    /**
+     * Ouvre une séance (élèves « présents » par défaut). Par défaut, marque ensuite
+     * tous les élèves absents pour exercer justificatifs, rapports et alertes.
+     */
+    private function openSession(TenantUser $teacher, Classe $classe, bool $markEveryoneAbsent = true): AttendanceSession
     {
         $response = $this->withUserToken($teacher)->postJson('/api/admin/attendance/sessions', [
             'classe_id' => $classe->id,
@@ -571,6 +645,12 @@ class AttendanceWorkflowTest extends TestCase
             'end_time' => '10:00',
         ]);
         $response->assertCreated();
+
+        if ($markEveryoneAbsent) {
+            AttendanceRecord::query()
+                ->where('attendance_session_id', $response->json('id'))
+                ->update(['status' => 'absent']);
+        }
 
         return AttendanceSession::query()->findOrFail($response->json('id'));
     }

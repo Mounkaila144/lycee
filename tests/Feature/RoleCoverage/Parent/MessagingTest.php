@@ -386,6 +386,41 @@ class MessagingTest extends TestCase
     }
 
     #[Test]
+    public function recipient_with_several_roles_is_listed_once_with_his_allowed_roles(): void
+    {
+        [, $parentToken] = $this->userWithRole('Parent');
+        [$teacherManager] = $this->userWithRole('Professeur');
+        $this->assignRole($teacherManager, 'Manager');
+        $this->assignRole($teacherManager, 'Caissier');
+
+        $response = $this->withToken($parentToken)->getJson('/api/admin/messages/recipients?limit=50')
+            ->assertOk()
+            ->assertJsonPath('meta.allowed_roles', ['Professeur', 'Administrator', 'Manager']);
+
+        $entries = collect($response->json('data'))->where('id', $teacherManager->id)->values();
+
+        $this->assertCount(1, $entries);
+        $this->assertSame(['Manager', 'Professeur'], $entries[0]['roles']);
+        $this->assertSame('Manager', $entries[0]['role']);
+        $this->assertSame(
+            collect($response->json('data'))->pluck('id')->unique()->count(),
+            count($response->json('data'))
+        );
+    }
+
+    #[Test]
+    public function recipients_meta_describes_roles_reachable_by_the_sender(): void
+    {
+        [, $teacherToken] = $this->userWithRole('Professeur');
+        [, $adminToken] = $this->userWithRole('Administrator');
+
+        $this->withToken($teacherToken)->getJson('/api/admin/messages/recipients')
+            ->assertOk()->assertJsonPath('meta.allowed_roles', ['Parent', 'Administrator', 'Manager']);
+        $this->withToken($adminToken)->getJson('/api/admin/messages/recipients')
+            ->assertOk()->assertJsonPath('meta.allowed_roles', ['Parent', 'Professeur', 'Administrator', 'Manager']);
+    }
+
+    #[Test]
     public function manager_can_send_message_to_parent_and_read_inbox(): void
     {
         [$manager, $managerToken] = $this->userWithRole('Manager');

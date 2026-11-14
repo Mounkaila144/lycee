@@ -30,6 +30,7 @@ Route::prefix('admin')
             Route::post('/sessions', [AttendanceController::class, 'createSession'])->name('sessions.create');
             Route::get('/sessions/{sessionId}/sheet', [AttendanceController::class, 'getAttendanceSheet'])->name('sessions.sheet');
             Route::post('/sessions/{sessionId}/complete', [AttendanceController::class, 'completeSession'])->name('sessions.complete');
+            Route::post('/sessions/{sessionId}/records/bulk', [AttendanceController::class, 'recordAttendanceInBulk'])->whereNumber('sessionId')->name('sessions.records.bulk');
 
             Route::post('/record', [AttendanceController::class, 'recordAttendance'])->name('record');
             Route::put('/records/{recordId}', [AttendanceController::class, 'modifyRecord'])->name('records.modify');

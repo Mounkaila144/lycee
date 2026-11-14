@@ -157,15 +157,17 @@ class StudentController extends Controller
     }
 
     /**
-     * Remove the specified student (soft delete)
+     * Remove the specified student (soft delete) : inscription en classe active annulée
+     * et comptes famille désactivés, comme pour une sortie.
      */
     public function destroy(int $id): JsonResponse
     {
         $student = Student::on('tenant')->findOrFail($id);
-        $student->delete();
+        $result = $this->statusService->deleteStudent($student);
 
         return response()->json([
-            'message' => 'Dossier étudiant supprimé avec succès',
+            'message' => 'Dossier élève supprimé avec succès',
+            'data' => $result,
         ]);
     }
 

@@ -9,6 +9,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Validation\Rule;
 use Modules\Attendance\Entities\AttendanceRecord;
 use Modules\Attendance\Entities\AttendanceSession;
+use Modules\Attendance\Http\Requests\BulkRecordAttendanceRequest;
 use Modules\Attendance\Http\Requests\StoreAttendanceSessionRequest;
 use Modules\Attendance\Services\AttendanceAccessService;
 use Modules\Attendance\Services\AttendanceService;
@@ -85,6 +86,28 @@ class AttendanceController extends Controller
         );
 
         return response()->json($record->load('student'));
+    }
+
+    /**
+     * Saisie en lot (« Tout présent » / « Tout absent ») : un seul appel, une transaction.
+     */
+    public function recordAttendanceInBulk(BulkRecordAttendanceRequest $request, int $sessionId): JsonResponse
+    {
+        $session = $this->findManageableSession($request, $sessionId);
+        $validated = $request->validated();
+
+        $updatedCount = $this->attendanceService->recordAttendanceInBulk(
+            $session,
+            $validated['status'],
+            isset($validated['student_ids']) ? array_map('intval', $validated['student_ids']) : null,
+            (int) $request->user()->getAuthIdentifier()
+        );
+
+        return response()->json([
+            'message' => 'Présences enregistrées',
+            'updated_count' => $updatedCount,
+            ...$this->attendanceService->getAttendanceSheet($session),
+        ]);
     }
 
     /**

@@ -3,10 +3,13 @@
 namespace Tests\Feature\Enrollment;
 
 use Illuminate\Support\Facades\Event;
+use Modules\Enrollment\Entities\ClassEnrollment;
 use Modules\Enrollment\Entities\Student;
 use Modules\Enrollment\Entities\StudentStatusHistory;
 use Modules\Enrollment\Events\StudentStatusChanged;
 use Modules\PortailParent\Entities\ParentModel;
+use Modules\StructureAcademique\Entities\AcademicYear;
+use Modules\StructureAcademique\Entities\Classe;
 use Modules\UsersGuard\Entities\TenantUser as User;
 use PHPUnit\Framework\Attributes\Test;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
@@ -582,6 +585,68 @@ class StudentStatusApiTest extends TestCase
         ])->assertOk();
 
         $this->assertTrue($staffParent->fresh()->is_active);
+    }
+
+    #[Test]
+    public function deleting_a_student_cancels_his_active_class_enrollment_and_deactivates_family_accounts(): void
+    {
+        $studentUser = $this->familyUser('Élève');
+        $studentUser->createToken('session');
+        $student = Student::factory()->create(['status' => 'Actif', 'user_id' => $studentUser->id]);
+        $sibling = Student::factory()->create(['status' => 'Actif']);
+        $onlyChildParent = $this->parentOf($student);
+        $sharedParent = $this->parentOf($student, $sibling);
+
+        $previousYear = AcademicYear::factory()->create();
+        $currentYear = AcademicYear::factory()->create();
+        $finished = $this->classEnrollment($student, $previousYear, 'Terminé');
+        $active = $this->classEnrollment($student, $currentYear, 'Actif');
+        $siblingEnrollment = $this->classEnrollment($sibling, $currentYear, 'Actif');
+
+        $this->withToken($this->token)->deleteJson("/api/admin/enrollment/students/{$student->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Dossier élève supprimé avec succès')
+            ->assertJsonPath('data.cancelled_enrollments', 1);
+
+        $this->assertSoftDeleted('students', ['id' => $student->id], 'tenant');
+        $this->assertSame('Annulé', $active->fresh()->status);
+        $this->assertSame('Terminé', $finished->fresh()->status);
+        $this->assertSame('Actif', $siblingEnrollment->fresh()->status);
+
+        $this->assertFalse($studentUser->fresh()->is_active);
+        $this->assertSame(0, $studentUser->tokens()->count());
+        $this->assertFalse($onlyChildParent->fresh()->is_active);
+        $this->assertTrue($sharedParent->fresh()->is_active);
+    }
+
+    #[Test]
+    public function deleting_a_student_never_deactivates_a_staff_account(): void
+    {
+        $staffParent = $this->familyUser('Parent');
+        $this->assignRole($staffParent, 'Professeur');
+        $student = Student::factory()->create(['status' => 'Actif']);
+        ParentModel::factory()->create(['user_id' => $staffParent->id])
+            ->students()->attach($student->id, ['is_primary_contact' => true, 'is_financial_responsible' => true]);
+
+        $this->withToken($this->token)->deleteJson("/api/admin/enrollment/students/{$student->id}")
+            ->assertOk()
+            ->assertJsonPath('data.cancelled_enrollments', 0)
+            ->assertJsonPath('data.deactivated_user_ids', []);
+
+        $this->assertTrue($staffParent->fresh()->is_active);
+        $this->withToken($this->token)->deleteJson("/api/admin/enrollment/students/{$student->id}")->assertNotFound();
+    }
+
+    private function classEnrollment(Student $student, AcademicYear $year, string $status): ClassEnrollment
+    {
+        return ClassEnrollment::on('tenant')->create([
+            'student_id' => $student->id,
+            'classe_id' => Classe::factory()->create(['academic_year_id' => $year->id])->id,
+            'academic_year_id' => $year->id,
+            'enrolled_at' => now()->toDateString(),
+            'assignment_type' => 'Nouvelle inscription',
+            'status' => $status,
+        ]);
     }
 
     private function familyUser(string $role): User

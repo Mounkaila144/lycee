@@ -126,6 +126,18 @@ class LyceeAssignmentsApiTest extends TestCase
     }
 
     #[Test]
+    public function deleted_students_are_not_counted_in_class_size(): void
+    {
+        $this->getAs($this->mathTeacher, self::BASE.'/mine')->assertOk();
+
+        reset($this->students)->delete();
+
+        $rows = collect($this->getAs($this->mathTeacher, self::BASE.'/mine')->assertOk()->json('data'))->keyBy('subject.code');
+
+        $this->assertSame(3, $rows['MATH']['students_count']);
+    }
+
+    #[Test]
     public function mine_ignores_assignments_of_inactive_years(): void
     {
         $oldYear = AcademicYear::factory()->create();

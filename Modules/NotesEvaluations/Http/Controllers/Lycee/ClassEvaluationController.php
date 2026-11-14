@@ -161,6 +161,10 @@ class ClassEvaluationController extends Controller
         $evaluation = $this->findManageable($user, $id);
         $this->ensureEditable($user, $evaluation);
 
+        if ($evaluation->isPublished()) {
+            abort(422, 'Évaluation publiée : dépubliez-la avant de la supprimer (les familles voient ses notes).');
+        }
+
         $evaluation->delete();
 
         return response()->json(['message' => 'Évaluation supprimée.']);

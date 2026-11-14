@@ -73,6 +73,9 @@ class MessagingController extends Controller
      * Query params :
      *  - q (optionnel) : recherche sur firstname/lastname/username/email
      *  - limit (optionnel, défaut 25, max 50)
+     *
+     * Chaque utilisateur n'apparaît qu'une fois, avec ses rôles autorisés (`roles`) ;
+     * `meta.allowed_roles` permet au front d'adapter le texte d'aide.
      */
     public function recipients(Request $request): JsonResponse
     {
@@ -110,19 +113,32 @@ class MessagingController extends Controller
             ->limit($limit)
             ->get(['id', 'username', 'firstname', 'lastname', 'email']);
 
-        $data = $users->map(function (TenantUser $user) {
-            $fullName = trim(($user->firstname ?? '').' '.($user->lastname ?? ''));
+        $data = $users
+            ->unique('id')
+            ->values()
+            ->map(function (TenantUser $user) use ($allowedRoles): array {
+                $fullName = trim(($user->firstname ?? '').' '.($user->lastname ?? ''));
+                $roles = $user->roles->pluck('name')
+                    ->filter(fn (string $role): bool => in_array($role, $allowedRoles, true))
+                    ->unique()
+                    ->sort()
+                    ->values()
+                    ->all();
 
-            return [
-                'id' => $user->id,
-                'username' => $user->username,
-                'full_name' => $fullName !== '' ? $fullName : $user->username,
-                'email' => $user->email,
-                'role' => $user->roles->pluck('name')->first(),
-            ];
-        });
+                return [
+                    'id' => $user->id,
+                    'username' => $user->username,
+                    'full_name' => $fullName !== '' ? $fullName : $user->username,
+                    'email' => $user->email,
+                    'role' => $roles[0] ?? null,
+                    'roles' => $roles,
+                ];
+            });
 
-        return response()->json(['data' => $data]);
+        return response()->json([
+            'data' => $data,
+            'meta' => ['allowed_roles' => $allowedRoles],
+        ]);
     }
 
     /**

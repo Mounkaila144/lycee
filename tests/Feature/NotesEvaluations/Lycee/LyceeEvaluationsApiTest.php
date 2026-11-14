@@ -284,8 +284,37 @@ class LyceeEvaluationsApiTest extends TestCase
             'grades' => [['student_id' => $this->students['A']->id, 'score' => 15]],
         ])->assertOk();
         $this->putAs($this->admin, self::BASE."/{$evaluation->id}", ['title' => 'Corrigé'])->assertOk()->assertJsonPath('data.title', 'Corrigé');
-        $this->deleteAs($this->admin, self::BASE."/{$evaluation->id}")->assertOk();
+    }
+
+    #[Test]
+    public function admin_must_unpublish_an_evaluation_before_deleting_it(): void
+    {
+        $evaluation = $this->evaluation($this->maths, ['A' => 12]);
+
+        $this->deleteAs($this->admin, self::BASE."/{$evaluation->id}")
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Évaluation publiée : dépubliez-la avant de la supprimer (les familles voient ses notes).');
+        $this->assertNotSoftDeleted('class_evaluations', ['id' => $evaluation->id], 'tenant');
+
+        $this->postAs($this->admin, self::BASE."/{$evaluation->id}/unpublish")->assertOk();
+        $this->deleteAs($this->admin, self::BASE."/{$evaluation->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Évaluation supprimée.');
         $this->assertSoftDeleted('class_evaluations', ['id' => $evaluation->id], 'tenant');
+        $this->getAs($this->admin, self::BASE."/{$evaluation->id}")->assertNotFound();
+    }
+
+    #[Test]
+    public function admin_deletes_a_draft_or_submitted_evaluation_of_any_teacher(): void
+    {
+        $draft = $this->draft();
+        $submitted = $this->draft(['status' => ClassEvaluation::STATUS_SUBMITTED, 'subject_id' => $this->french->id]);
+
+        $this->deleteAs($this->admin, self::BASE."/{$draft->id}")->assertOk();
+        $this->deleteAs($this->admin, self::BASE."/{$submitted->id}")->assertOk();
+        $this->assertSoftDeleted('class_evaluations', ['id' => $draft->id], 'tenant');
+        $this->assertSoftDeleted('class_evaluations', ['id' => $submitted->id], 'tenant');
+        $this->deleteAs($this->admin, self::BASE.'/999999')->assertNotFound();
     }
 
     #[Test]
